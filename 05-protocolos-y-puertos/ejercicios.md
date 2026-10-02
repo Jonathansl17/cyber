@@ -252,6 +252,14 @@ Necesitas: tu equipo Linux (cualquier distribución trae `ss` en el paquete `ipr
    ss -Htan state time-wait | awk '{print $4}' | sort | uniq -c | sort -rn | head
    sleep 60; ss -Htan state time-wait | wc -l
    ```
+   - `ss -Htan state time-wait` → (ver pasos 3 y 7): conexiones en TIME_WAIT sin cabecera.
+   - `awk '{print $4}'` → imprime el cuarto campo, `Peer Address:Port` (sin la columna State, los campos son Recv-Q, Send-Q, local y remoto).
+   - `sort` → ordena las líneas para que las iguales queden juntas.
+   - `uniq -c` → junta las líneas consecutivas iguales y antepone cuántas veces aparece cada una.
+   - `sort -rn` → ordena por ese número (`-n`) de mayor a menor (`-r`).
+   - `head` → muestra solo las 10 primeras líneas.
+   - `sleep 60` → espera 60 segundos; el `;` ejecuta después el siguiente comando.
+   - `wc -l` → cuenta las líneas, es decir, cuántas conexiones siguen en TIME_WAIT.
 
 ### Resultado esperado
 

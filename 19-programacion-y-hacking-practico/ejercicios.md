@@ -29,6 +29,9 @@ Crea una carpeta para los scripts y sus salidas:
 mkdir -p ~/segscripts/logs && cd ~/segscripts
 ```
 
+- `mkdir -p ~/segscripts/logs` → crea la carpeta y su subcarpeta `logs`; `-p` crea los directorios padre que falten y no falla si ya existen.
+- `&& cd ~/segscripts` → si lo anterior tuvo éxito, entra en la carpeta de trabajo.
+
 ### Pasos
 
 1. Script de integridad (Python). Copia `check_hashes.py` del README a
@@ -38,6 +41,11 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    sha256sum /etc/passwd /etc/hosts > base.txt
    python3 check_hashes.py base.txt ; echo "codigo de salida: $?"
    ```
+   - `sha256sum /etc/passwd /etc/hosts` → calcula el hash SHA-256 de cada uno de esos archivos.
+   - `> base.txt` → guarda esos hashes en el archivo de línea base.
+   - `python3 check_hashes.py base.txt` → ejecuta el script con Python 3, pasándole la línea base como argumento.
+   - `;` → separa comandos: ejecuta el siguiente ocurra lo que ocurra con el anterior.
+   - `echo "codigo de salida: $?"` → imprime el código de salida del último comando; `$?` contiene ese valor (0 = todo bien).
    Recién hecha la base, todo debe salir `OK` y el código de salida `0`. Cambia a drede
    un archivo de prueba y vuelve a correrlo: debe marcar `CHANGED` y salir con `1`.
 2. Script de puertos (Go). Copia `portcheck` del README a `~/segscripts/portcheck.go`,
@@ -46,16 +54,31 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    go build -o portcheck portcheck.go
    ./portcheck 127.0.0.1
    ```
+   - `go build` → compila el programa en Go.
+   - `-o portcheck` → nombra `portcheck` al binario de salida.
+   - `portcheck.go` → el archivo fuente a compilar.
+   - `./portcheck 127.0.0.1` → ejecuta el binario pasándole la IP a revisar como argumento.
+
    Debe listar los puertos tuyos que están escuchando. Contrástalo con la foto real:
    ```bash
    ss -tlnp
    ```
+   - `ss` → muestra sockets de red.
+   - `-t` → solo sockets TCP.
+   - `-l` → solo los que están en escucha (listening).
+   - `-n` → no resuelve nombres de servicio; muestra el número de puerto.
+   - `-p` → muestra el proceso dueño de cada socket.
+
 3. Script de 404 (JavaScript/Node). Copia `flag404.js` a `~/segscripts/flag404.js`. Si
    tienes un servidor web propio, apúntalo a su log; si no, crea un log de prueba con el
    formato combinado para ver la lógica:
    ```bash
    node flag404.js /var/log/nginx/access.log
    ```
+   - `node` → ejecuta un programa JavaScript con Node.js.
+   - `flag404.js` → el script a ejecutar.
+   - `/var/log/nginx/access.log` → argumento: el log de accesos que analiza.
+
    Lista las IP con muchos 404, la huella de una enumeración web. Ajusta el umbral
    `THRESHOLD` a tu tráfico real.
 4. Script de fallos SSH (Bash). Copia `top_ssh_failures.sh`, dale permiso y córrelo en
@@ -64,6 +87,9 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    chmod +x top_ssh_failures.sh
    ./top_ssh_failures.sh
    ```
+   - `chmod +x top_ssh_failures.sh` → da permiso de ejecución al script.
+   - `./top_ssh_failures.sh` → ejecuta el script desde el directorio actual.
+
    Debe mostrar las cinco IP con más `Failed password` del último día. Si tu servicio
    no se llama `ssh`, ajusta `-u ssh` por `-u sshd`.
 5. Script de eventos 4625 (PowerShell, en tu Windows). Copia `failed_logons.ps1` y
@@ -71,11 +97,18 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\failed_logons.ps1
    ```
+   - `powershell` → inicia el intérprete de PowerShell.
+   - `-ExecutionPolicy Bypass` → salta la política de ejecución para esta sesión, de modo que el script corra aunque no esté firmado.
+   - `-File .\failed_logons.ps1` → el script a ejecutar.
+
    Lista las cuentas con más inicios de sesión fallidos de las últimas 24 h.
 6. Programa los scripts de Linux con cron. Edita tu crontab:
    ```bash
    crontab -e
    ```
+   - `crontab` → gestiona la tabla de tareas programadas del usuario.
+   - `-e` → abre esa tabla en el editor para modificarla.
+
    Añade estas líneas (ajusta rutas y tu correo). `MAILTO` hace que cron te envíe por
    correo cualquier salida que el script imprima, y los scripts solo imprimen cuando
    hay algo que mirar:
@@ -90,6 +123,16 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    # IPs con muchos 404 cada dia a las 8:05
    5 8 * * * node /home/USUARIO/segscripts/flag404.js /var/log/nginx/access.log
    ```
+   - `MAILTO="tu-correo@ejemplo.com"` → variable de cron: a este correo se envía cualquier salida que impriman las tareas.
+   - Los cinco campos antes de cada comando son, en orden: minuto, hora, día del mes, mes y día de la semana (`*` significa "cualquiera").
+   - `0 * * * *` → minuto 0 de cada hora (una vez por hora); ejecuta `cd .../segscripts && python3 check_hashes.py base.txt`.
+   - `&&` (en esa línea) → corre el `python3` solo si el `cd` tuvo éxito.
+   - `0 7 * * *` → a las 07:00 todos los días; corre `portcheck 127.0.0.1`.
+   - `>> /home/USUARIO/segscripts/logs/puertos.log` → añade la salida al final de ese archivo (histórico).
+   - `2>&1` → manda también los errores al mismo archivo.
+   - `0 8 * * *` → a las 08:00 todos los días; corre `top_ssh_failures.sh`.
+   - `5 8 * * *` → a las 08:05 todos los días; corre `flag404.js` sobre el log de nginx.
+
    Para que `MAILTO` funcione, configura `msmtp` como `sendmail` (archivo
    `~/.msmtprc` con tu servidor SMTP) o, como alternativa, cambia cada línea para que
    el aviso lo mande el propio script, por ejemplo:
@@ -103,6 +146,18 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    Register-ScheduledTask -TaskName "Fallos4625" -Action $accion -Trigger $disparador `
      -Description "Resumen diario de logins fallidos (4625)"
    ```
+   - `New-ScheduledTaskAction` → crea el objeto "acción" que la tarea ejecutará.
+   - `-Execute "powershell.exe"` → el programa a lanzar.
+   - `-Argument "-ExecutionPolicy Bypass -File C:\segscripts\failed_logons.ps1"` → los argumentos con que se lanza (la política de ejecución y el script).
+   - `` ` `` (acento grave al final de la línea) → continúa el mismo comando en la línea siguiente.
+   - `New-ScheduledTaskTrigger` → crea el objeto "disparador" que fija cuándo corre la tarea.
+   - `-Daily` → se dispara cada día.
+   - `-At 8am` → a las 8 de la mañana.
+   - `Register-ScheduledTask` → registra la tarea en el Programador de tareas de Windows.
+   - `-TaskName "Fallos4625"` → nombre con el que queda registrada.
+   - `-Action $accion` → la acción creada antes.
+   - `-Trigger $disparador` → el disparador creado antes.
+   - `-Description "..."` → descripción de la tarea.
    Para el aviso por correo desde Windows, haz que el `.ps1` guarde su salida en un
    archivo y la envíe con tu propio flujo SMTP (nota: `Send-MailMessage` está obsoleto;
    usa un cliente SMTP o un script con `System.Net.Mail` apuntando a tu servidor).
@@ -128,5 +183,7 @@ anómalo.
 ```bash
 crontab -e      # borra las lineas que anadiste
 ```
+
+- `crontab -e` → abre la tabla de cron en el editor para borrar a mano las líneas que añadiste (ver paso 6).
 En Windows: `Unregister-ScheduledTask -TaskName "Fallos4625" -Confirm:$false`. Borra la
 carpeta `~/segscripts` y sus logs si no quieres conservarlos.

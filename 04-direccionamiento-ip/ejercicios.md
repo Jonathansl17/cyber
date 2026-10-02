@@ -4,6 +4,10 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
+Debajo de cada bloque de comandos hay una lista que explica el comando y todas sus
+opciones y argumentos. Cuando un comando y una opción ya se explicaron antes en este
+mismo archivo, se indica con "(ver ejercicio N)".
+
 El Ejercicio 1 se hace en Cisco Packet Tracer y está dividido en partes. Los Ejercicios
 2 a 5 se hacen en tu propio equipo.
 
@@ -66,8 +70,22 @@ interface GigabitEthernet0/1
 end
 write memory
 ```
+- `enable` → entra al modo privilegiado (EXEC).
+- `configure terminal` → entra al modo de configuración global.
+- `hostname SW1` → fija el nombre del switch.
+- `vlan 10` → crea la VLAN con ese ID y entra a su configuración.
+- `name Ventas` → le pone un nombre descriptivo a la VLAN.
+- `exit` → sube un nivel en los modos de configuración.
+- `interface FastEthernet0/1` → entra a configurar ese puerto.
+- `switchport mode access` → fija el puerto en modo acceso (un solo VLAN, para un equipo final).
+- `switchport access vlan 10` → asigna el puerto a la VLAN 10.
+- `interface GigabitEthernet0/1` → entra a configurar el puerto de subida al router.
+- `switchport mode trunk` → fija el puerto en modo trunk: lleva varias VLAN etiquetadas con 802.1Q.
+- `end` → vuelve al modo privilegiado.
+- `write memory` → guarda la configuración en marcha a la de arranque.
+
 Los puertos de los PC quedan cada uno en su VLAN; el puerto al router es un trunk que
-lleva ambas VLAN etiquetadas con 802.1Q.
+lleva ambas VLAN etiquetadas.
 
 ### Parte D: configuración del router (subinterfaces, DHCP y ACL)
 
@@ -90,6 +108,15 @@ interface GigabitEthernet0/1
  no shutdown
 exit
 ```
+- `enable`, `configure terminal`, `hostname R1` → ver Parte C.
+- `interface GigabitEthernet0/0` → entra a la interfaz física que irá al trunk.
+- `no ip address` → quita cualquier IP de la interfaz física: las IP van en las subinterfaces.
+- `no shutdown` → activa la interfaz.
+- `interface GigabitEthernet0/0.10` → crea/entra a la subinterfaz `.10` (una por VLAN) sobre la física.
+- `encapsulation dot1Q 10` → marca que esta subinterfaz procesa las tramas etiquetadas con la VLAN 10 (802.1Q).
+- `ip address 10.0.10.1 255.255.255.0` → IP (primer argumento) y máscara (segundo) de la subinterfaz; es el gateway de esa VLAN.
+- `interface GigabitEthernet0/1` → entra a la interfaz física de la DMZ (sin VLAN, directa al servidor).
+- `exit` → sale del modo de interfaz.
 
 Ahora los dos ámbitos DHCP, uno por VLAN. Se excluyen las primeras direcciones para el
 gateway y para equipos fijos:
@@ -107,10 +134,18 @@ ip dhcp pool INVITADOS
  dns-server 10.0.99.10
 exit
 ```
+- `ip dhcp excluded-address 10.0.10.1 10.0.10.9` → reserva el rango de la `.1` a la `.9` para que el DHCP no lo reparta (primer y último argumento son el inicio y el fin del rango).
+- `ip dhcp pool VENTAS` → crea un ámbito DHCP con ese nombre y entra a su configuración.
+- `network 10.0.10.0 255.255.255.0` → la red y máscara desde las que el ámbito reparte direcciones.
+- `default-router 10.0.10.1` → la puerta de enlace que el DHCP entrega a los clientes (opción 3).
+- `dns-server 10.0.99.10` → el servidor DNS que el DHCP entrega (opción 6).
+- `exit` → sale del ámbito.
+- El segundo bloque (`INVITADOS`) es igual con las direcciones de la VLAN 20.
 
 Por último las ACL que imponen la política de la DMZ y la separación entre VLAN. La
-ACL de la DMZ permite que la DMZ responda a lo que la LAN inicia (echo-reply) pero le
-prohíbe iniciar conexiones hacia la LAN; la de invitados les prohíbe alcanzar ventas:
+ACL de la DMZ permite que la DMZ responda a lo que la LAN inicia (echo-reply y conexiones
+establecidas) pero le prohíbe iniciar conexiones hacia la LAN; la de invitados les
+prohíbe alcanzar ventas:
 ```
 ip access-list extended DMZ-IN
  permit icmp 10.0.99.0 0.0.0.255 any echo-reply
@@ -130,6 +165,19 @@ interface GigabitEthernet0/0.20
 end
 write memory
 ```
+- `ip access-list extended DMZ-IN` → crea una ACL extendida (filtra por protocolo, origen, destino y puertos) con ese nombre y entra a editarla.
+- `permit icmp 10.0.99.0 0.0.0.255 any echo-reply` → permite respuestas de ping (`echo-reply`) que salen de la DMZ (`10.0.99.0` con wildcard `0.0.0.255`) hacia cualquier destino (`any`).
+- `permit tcp 10.0.99.0 0.0.0.255 any established` → permite tráfico TCP de respuesta desde la DMZ: `established` solo casa segmentos con el bit ACK/RST puesto, o sea respuestas a conexiones que inició la LAN.
+- `deny ip 10.0.99.0 0.0.0.255 10.0.10.0 0.0.0.255` → bloquea cualquier IP que la DMZ intente iniciar hacia la VLAN 10.
+- `deny ip 10.0.99.0 0.0.0.255 10.0.20.0 0.0.0.255` → lo mismo hacia la VLAN 20.
+- `permit ip any any` → permite todo lo demás (necesario para que la DMZ salga a Internet o responda fuera de la LAN).
+- `ip access-list extended INVITADOS-IN` → segunda ACL extendida.
+- `deny ip 10.0.20.0 0.0.0.255 10.0.10.0 0.0.0.255` → bloquea que invitados alcance ventas.
+- `permit ip any any` → permite el resto (DHCP, salida a la DMZ, etc.).
+- `interface GigabitEthernet0/1` / `interface GigabitEthernet0/0.20` → ver Parte D (bloque anterior).
+- `ip access-group DMZ-IN in` → aplica la ACL `DMZ-IN` al tráfico que entra (`in`) por esa interfaz.
+- `ip access-group INVITADOS-IN in` → aplica `INVITADOS-IN` al tráfico que entra desde la VLAN 20.
+- `end`, `write memory` → ver Parte C.
 
 ### Parte E: comprobar DHCP y la matriz de ping
 
@@ -139,8 +187,10 @@ write memory
 
 2. Confirma en el router los préstamos DHCP entregados:
    ```
-   R1# show ip dhcp binding
+   show ip dhcp binding
    ```
+   - `show ip dhcp binding` → lista las direcciones que el DHCP del router ha asignado, con su MAC y su tiempo de concesión.
+
    Deben aparecer las dos IP asignadas con su MAC.
 
 3. Ejecuta la matriz de ping desde `Desktop` → `Command Prompt` de cada equipo y anota
@@ -155,16 +205,20 @@ write memory
    PC-Ventas    →  10.0.20.x (Invitados) NO llega   el deny de vuelta corta el eco
    ```
 
+   El comando en cada caso es `ping <destino>` (envía ecos ICMP al destino indicado).
+
 4. Prueba el servidor web desde la LAN: en PC-Ventas, `Desktop` → `Web Browser`, escribe
    `http://10.0.99.10`. Debe cargar la página por defecto del servidor. Eso demuestra que
    la LAN sí accede al servicio público de la DMZ.
 
 5. Mira los aciertos de las ACL para confirmar que están filtrando:
    ```
-   R1# show access-lists
+   show access-lists
    ```
-   Los contadores `(N match(es))` suben en las líneas `deny` cada vez que un ping
-   bloqueado choca contra ellas.
+   - `show access-lists` → muestra todas las ACL configuradas y, por cada línea, cuántos paquetes han coincidido (`N match(es)`).
+
+   Los contadores suben en las líneas `deny` cada vez que un ping bloqueado choca contra
+   ellas.
 
 ### Resultado esperado
 
@@ -207,27 +261,45 @@ Tiempo estimado: 20 minutos. Capturas tu propio tráfico DHCP.
    ```bash
    ip -br addr
    ```
+   - `ip` → herramienta estándar de red en Linux.
+   - `-br` → brief: salida resumida, una línea por interfaz.
+   - `addr` → subcomando que muestra las direcciones de las interfaces.
+
    Anota el nombre (por ejemplo `eth0` o `wlan0`).
 
-2. Arranca la captura filtrando los puertos de DHCP (67 servidor, 68 cliente). La `-v`
-   hace que `tcpdump` muestre el tipo de cada mensaje y las opciones. Déjala corriendo.
+2. Arranca la captura filtrando los puertos de DHCP (67 servidor, 68 cliente). Déjala
+   corriendo.
    ```bash
    sudo tcpdump -i eth0 -n -v 'udp port 67 or udp port 68'
    ```
-   Cambia `eth0` por tu interfaz.
+   - `sudo` → capturar tráfico requiere privilegios de root.
+   - `tcpdump` → captura y muestra tráfico de red.
+   - `-i eth0` → interface: la interfaz por la que capturar (cambia `eth0` por la tuya).
+   - `-n` → no resuelve IP a nombres; muestra números.
+   - `-v` → verbose: muestra más detalle, incluido el tipo de mensaje DHCP y las opciones.
+   - `'udp port 67 or udp port 68'` → filtro de captura: solo tráfico UDP de los puertos 67 o 68 (los de DHCP).
 
 3. En otra terminal, fuerza una renovación del lease para provocar el intercambio. En una
    VM con `dhclient`:
    ```bash
    sudo dhclient -r eth0 && sudo dhclient eth0
    ```
+   - `sudo` → ver ejercicio 2 (paso 2).
+   - `dhclient` → cliente DHCP de Linux.
+   - `-r` → release: libera la concesión actual.
+   - `eth0` → la interfaz sobre la que actúa.
+   - `&&` → encadena: ejecuta el segundo comando solo si el primero salió bien.
+   - `sudo dhclient eth0` → vuelve a pedir una concesión (sin `-r`), lo que dispara el DORA.
+
    Si tu sistema usa NetworkManager, puedes en su lugar desconectar y reconectar la
-   interfaz: `nmcli device disconnect eth0 && nmcli device connect eth0`.
+   interfaz con `nmcli device disconnect eth0 && nmcli device connect eth0` (`nmcli`
+   controla NetworkManager; `device disconnect`/`device connect` bajan y suben la
+   interfaz indicada).
 
 4. Vuelve a la captura. Busca los cuatro mensajes en orden. Con `-v`, `tcpdump` etiqueta
    cada uno (`Discover`, `Offer`, `Request`, `ACK`):
    ```
-   IP 0.0.0.0.68 > 255.255.255.255.67: BOOTP/DHCP, Request ... DHCP-Message Option 53, length 1: Discover
+   IP 0.0.0.0.68 > 255.255.255.255.67: BOOTP/DHCP, Request ... Option 53 ... Discover
    IP 192.168.1.1.67 > 192.168.1.20.68: BOOTP/DHCP, Reply ... Option 53 ... Offer
    IP 0.0.0.0.68 > 255.255.255.255.67: BOOTP/DHCP, Request ... Option 53 ... Request
    IP 192.168.1.1.67 > 192.168.1.20.68: BOOTP/DHCP, Reply ... Option 53 ... ACK
@@ -278,6 +350,12 @@ minutos. Usa un dominio tuyo o uno muy conocido como `wikipedia.org`.
    ```bash
    dig wikipedia.org A +noall +answer
    ```
+   - `dig` → herramienta de consulta de DNS.
+   - `wikipedia.org` → el nombre de dominio a consultar.
+   - `A` → el tipo de registro pedido (A = nombre a IPv4).
+   - `+noall` → apaga todas las secciones de la salida (deja una salida limpia).
+   - `+answer` → vuelve a encender solo la sección de respuesta.
+
    La línea de respuesta muestra el nombre, el TTL, la clase `IN`, el tipo `A` y la IP.
 
 2. Ahora sigue la jerarquía completa con `+trace`. En vez de pedirle la respuesta a tu
@@ -285,19 +363,26 @@ minutos. Usa un dominio tuyo o uno muy conocido como `wikipedia.org`.
    ```bash
    dig wikipedia.org +trace
    ```
+   - `dig wikipedia.org` → ver ejercicio 3 (paso 1).
+   - `+trace` → hace la resolución iterativa paso a paso: pregunta a la raíz, al TLD y al autoritativo, mostrando cada delegación.
+
    Lee la salida de arriba hacia abajo: primero los servidores raíz que te mandan al
-   TLD, luego los servidores de `.org` que te mandan al autoritativo del dominio, y por
-   último el autoritativo que da la IP. Son los pasos 2, 3 y 4 de la resolución.
+   TLD, luego los de `.org` que te mandan al autoritativo, y por último el autoritativo
+   que da la IP. Son los pasos 2, 3 y 4 de la resolución.
 
 3. Consulta el servidor de correo (registro MX), que incluye una prioridad.
    ```bash
    dig wikipedia.org MX +noall +answer
    ```
+   - `dig wikipedia.org ... +noall +answer` → ver ejercicio 3 (paso 1).
+   - `MX` → el tipo de registro pedido (servidor de correo, con un número de prioridad).
 
 4. Consulta los registros de texto (TXT), donde suelen vivir SPF, DKIM y DMARC.
    ```bash
    dig wikipedia.org TXT +noall +answer
    ```
+   - `TXT` → el tipo de registro pedido (texto libre); el resto, ver ejercicio 3 (paso 1).
+
    Busca una línea que empiece con `v=spf1`: es la política SPF del dominio.
 
 5. Haz una consulta inversa (PTR): de una IP a su nombre. Toma una de las IP que te dio
@@ -305,6 +390,10 @@ minutos. Usa un dominio tuyo o uno muy conocido como `wikipedia.org`.
    ```bash
    dig -x 198.35.26.96 +noall +answer
    ```
+   - `dig` → ver ejercicio 3 (paso 1).
+   - `-x 198.35.26.96` → consulta inversa: busca el registro PTR de esa IP (su nombre).
+   - `+noall +answer` → ver ejercicio 3 (paso 1).
+
    Devuelve el nombre asociado a esa IP (o nada, si el dueño no publicó PTR).
 
 ### Resultado esperado
@@ -343,6 +432,9 @@ instalado. Tiempo estimado: 15 minutos.
    ```bash
    ip route
    ```
+   - `ip` → herramienta estándar de red (ver ejercicio 2, paso 1).
+   - `route` → subcomando que muestra la tabla de rutas.
+
    La línea `default via X.X.X.X dev ...` te da la IP del gateway. La otra línea
    (`.../24 dev ... scope link`) es tu red conectada directamente. Anota la IP del
    gateway.
@@ -352,9 +444,11 @@ instalado. Tiempo estimado: 15 minutos.
    ```bash
    ip neigh
    ```
+   - `ip` → ver ejercicio 2 (paso 1).
+   - `neigh` → subcomando (neighbour) que muestra la tabla de vecinos: la caché ARP en IPv4 y NDP en IPv6.
+
    Busca la línea con la IP del gateway: muestra `lladdr` seguido de su dirección MAC y
-   un estado (`REACHABLE`, `STALE`). Esa es la MAC a la que tu equipo envía todo lo que
-   va fuera de tu red.
+   un estado (`REACHABLE`, `STALE`).
 
 3. Si el gateway no aparece o está `STALE`, provoca tráfico hacia él para refrescar la
    entrada y vuelve a mirar.
@@ -362,12 +456,25 @@ instalado. Tiempo estimado: 15 minutos.
    ping -c 2 $(ip route | awk '/default/{print $3; exit}')
    ip neigh
    ```
+   - `ping` → envía ecos ICMP al destino.
+   - `-c 2` → count: envía 2 paquetes y termina.
+   - `$(...)` → sustitución de comando: ejecuta lo de dentro y usa su salida como argumento del `ping`.
+   - `ip route` → ver ejercicio 4 (paso 1).
+   - `|` → tubería: pasa la salida a `awk`.
+   - `awk '/default/{print $3; exit}'` → programa de awk: en la línea que contiene `default`, imprime el tercer campo (la IP del gateway) y para.
+   - `ip neigh` → ver ejercicio 4 (paso 2).
+
    Ahora debe salir `REACHABLE`.
 
 4. Lista los puertos TCP en escucha y fíjate en la dirección local de cada uno.
    ```bash
    ss -tln
    ```
+   - `ss` → muestra sockets (conexiones y puertos).
+   - `-t` → sockets TCP.
+   - `-l` → solo los que están en escucha (listening).
+   - `-n` → numeric: muestra puertos como número, sin traducir a nombre de servicio.
+
    Distingue dos casos en la columna `Local Address:Port`:
    - `127.0.0.1:PUERTO`: el servicio solo acepta conexiones del propio equipo; no es
      alcanzable desde la red.
@@ -378,6 +485,11 @@ instalado. Tiempo estimado: 15 minutos.
    ```bash
    ss -tln | grep '127.0.0.1'
    ```
+   - `ss -tln` → ver ejercicio 4 (paso 4).
+   - `|` → tubería (ver ejercicio 4, paso 3).
+   - `grep` → filtra líneas por patrón.
+   - `'127.0.0.1'` → patrón: deja solo los sockets atados a loopback.
+
    Esos son los que un atacante de la red no puede tocar directamente (aunque sí podría
    intentarlo con técnicas como SSRF desde dentro del propio equipo).
 
@@ -443,6 +555,10 @@ Linux. Tiempo estimado: 30 minutos.
    ```bash
    python3 -c 'import ipaddress as i; n=i.ip_interface("192.168.100.37/29").network; print(n, n.netmask, n.broadcast_address, n.num_addresses-2)'
    ```
+   - `python3` → el intérprete de Python 3.
+   - `-c '...'` → ejecuta el programa Python que va entre comillas, en lugar de un archivo.
+   - El programa: `import ipaddress as i` carga el módulo y lo apoda `i`; `i.ip_interface("192.168.100.37/29")` crea el objeto dirección+prefijo; `.network` saca su red; `print(...)` muestra la red, `.netmask` (máscara), `.broadcast_address` (broadcast) y `.num_addresses-2` (hosts útiles, restando red y broadcast).
+
    Salida esperada para ese ejemplo:
    ```
    192.168.100.32/29 255.255.255.248 192.168.100.39 6
@@ -457,6 +573,10 @@ Linux. Tiempo estimado: 30 minutos.
      python3 -c "import ipaddress as i,sys; n=i.ip_interface(sys.argv[1]).network; print(sys.argv[1], '->', n, n.broadcast_address, n.num_addresses-2)" "$ip"
    done
    ```
+   - `for ip in ... ; do ... done` → bucle de shell: recorre la lista de direcciones asignando cada una a la variable `ip`.
+   - `\` al final de línea → continúa el comando en la línea siguiente.
+   - `python3 -c "..."` → ver ejercicio 5 (paso 3); aquí el programa lee la dirección con `sys.argv[1]` (el primer argumento que recibe) en lugar de tenerla fija.
+   - `"$ip"` → pasa el valor actual del bucle como argumento al `python3`.
 
 5. Compara cada línea con tus cálculos a mano. Donde no cuadren, vuelve al número mágico
    de esa dirección: casi siempre el error está en elegir mal el octeto interesante o el

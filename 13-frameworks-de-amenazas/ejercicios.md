@@ -240,9 +240,23 @@ Necesitas: navegador; Linux (o WSL) con `curl` y `python3` para verificar el res
    for tid in sorted(grupo - cubiertas):
        print(tid)
    ```
+   - `import json`, `import sys` → módulos para leer JSON y para acceder a los argumentos de la línea de comandos.
+   - `def tecnicas_puntuadas(ruta):` → función que devuelve las técnicas con puntuación de una capa.
+   - `open(ruta, encoding="utf-8")` → abre el archivo como texto UTF-8; `with` lo cierra solo al terminar.
+   - `capa["techniques"]` → lista de técnicas de la capa del Navigator.
+   - `t.get("score", 0) > 0` → se queda con las técnicas cuyo `score` es mayor que 0; si una no tiene `score`, cuenta como 0.
+   - `{t["techniqueID"] ...}` → conjunto con los IDs de esas técnicas.
+   - `sys.argv[1]`, `sys.argv[2]` → primer y segundo argumento del script: la capa del grupo y la de Sysmon.
+   - `grupo & cubiertas` → intersección: técnicas del grupo que Sysmon cubre.
+   - `grupo - cubiertas` → diferencia: técnicas del grupo sin cobertura, los huecos.
+   - `f"..."` → cadena con formato; lo que va entre `{}` se evalúa e inserta.
+   - `sorted(...)` → ordena los IDs antes de imprimirlos.
    ```bash
    python3 huecos.py apt28.json sysmon.json
    ```
+   - `python3 huecos.py` → ejecuta el script con Python 3.
+   - `apt28.json` → primer argumento (`sys.argv[1]`), la capa del grupo.
+   - `sysmon.json` → segundo argumento (`sys.argv[2]`), la capa de cobertura.
    Salida de ejemplo (los números cambian con cada versión de ATT&CK y de la configuración):
    ```
    Técnicas del grupo: 101
@@ -278,6 +292,8 @@ Tres capas abiertas en el Navigator (APT28, Sysmon en verde y huecos en rojo), l
 rm -rf ~/lab-navigator
 ```
 
+- `rm -rf` → (ver ejercicio 1); aquí borra `~/lab-navigator`.
+
 ## Ejercicio 3: Superficie expuesta de tu dominio con OSINT
 
 Nodo: [OSINT para defensores](README.md#osint-para-defensores) y la fase Reconnaissance de la [Cyber Kill Chain](README.md#cyber-kill-chain).
@@ -291,6 +307,8 @@ sudo apt install curl python3     # Debian/Ubuntu
 sudo pacman -S curl python        # Arch
 ```
 
+- `sudo`, `apt install`, `pacman -S`, `curl`, `python3`/`python`, `#` → (ver ejercicio 1).
+
 ### Pasos
 
 1. Fija el dominio y crea la carpeta de trabajo:
@@ -298,6 +316,8 @@ sudo pacman -S curl python        # Arch
    DOMINIO=tudominio.com
    mkdir -p ~/lab-osint && cd ~/lab-osint
    ```
+   - `DOMINIO=tudominio.com` → guarda tu dominio en una variable de shell para usarlo como `$DOMINIO`; cambia `tudominio.com` por el tuyo.
+   - `mkdir -p`, `&&`, `cd` → (ver ejercicio 1).
 2. Abre en el navegador `https://crt.sh/?q=%25.tudominio.com` (el `%25` es un `%`, el comodín de crt.sh). Verás cada certificado emitido con su columna "Matching Identities": cada nombre ahí es un subdominio que alguien certificó, y que por tanto es público aunque nadie lo enlace. crt.sh a menudo responde `502 Bad Gateway` con dominios grandes; si pasa, reintenta o usa el paso 3.
 3. Saca la lista de subdominios por la API de Cert Spotter, que lee los mismos registros de Certificate Transparency:
    ```bash
@@ -307,6 +327,24 @@ sudo pacman -S curl python        # Arch
    wc -l subdominios.txt
    cat subdominios.txt
    ```
+   - `curl -s` → (ver ejercicio 1); la URL va entre comillas dobles para que `&` no lo interprete la shell y `$DOMINIO` sí se sustituya.
+   - `https://api.certspotter.com/v1/issuances` → endpoint de Cert Spotter que lista los certificados emitidos para un dominio; sin clave admite un número limitado de consultas por hora.
+   - `domain=$DOMINIO` → dominio cuyos certificados se buscan.
+   - `include_subdomains=true` → incluye los subdominios de cualquier profundidad (por defecto es `false`).
+   - `expand=dns_names` → añade a cada certificado el campo `dns_names`, la lista de nombres para los que es válido.
+   - `|` → pasa el JSON de la respuesta a Python por la entrada estándar.
+   - `python3 -c '...'` → (ver ejercicio 1).
+   - `import json,sys` → módulos para JSON y para leer la entrada estándar (`sys.stdin`).
+   - `json.load(sys.stdin)` → convierte la respuesta en una lista de certificados.
+   - `for c in ... for n in c["dns_names"]` → recorre cada nombre de cada certificado.
+   - `n.removeprefix("*.")` → quita el `*.` de los certificados comodín (requiere Python 3.9 o superior).
+   - `.lower()` → pasa el nombre a minúsculas para no contar duplicados por mayúsculas.
+   - `{...}` → conjunto: elimina los nombres repetidos.
+   - `sorted(...)` y `"\n".join(...)` → ordena los nombres y los une con un salto de línea, uno por línea.
+   - `\` al final de línea → continúa el comando en la línea siguiente.
+   - `> subdominios.txt` → guarda la lista en ese archivo.
+   - `wc -l subdominios.txt` → cuenta las líneas, es decir, cuántos subdominios hay.
+   - `cat subdominios.txt` → muestra el contenido del archivo.
    Una línea por nombre. La API sin cuenta devuelve los certificados vigentes; los antiguos están en crt.sh.
 4. Resuelve cada subdominio y consulta su IP en InternetDB, la base pública y sin clave de Shodan, que devuelve los puertos y vulnerabilidades que Shodan vio en esa IP:
    ```bash
@@ -317,6 +355,19 @@ sudo pacman -S curl python        # Arch
      curl -s "https://internetdb.shodan.io/$ip"; echo
    done < subdominios.txt | tee exposicion.txt
    ```
+   - `while read -r host; do ... done` → bucle que lee una línea por vuelta y la guarda en la variable `host`; `-r` (ver ejercicio 1, paso 2) evita que `\` se interprete.
+   - `< subdominios.txt` → el bucle lee sus líneas de ese archivo.
+   - `ip=$(...)` → ejecuta el comando entre paréntesis y guarda su salida en la variable `ip`.
+   - `getent ahostsv4 "$host"` → resuelve el nombre con el mismo mecanismo que usa el sistema (DNS, `/etc/hosts`) y devuelve solo direcciones IPv4, una línea por dirección y tipo de socket.
+   - `awk 'NR==1{print $1}'` → de la salida anterior toma solo la primera línea (`NR==1`, número de registro 1) e imprime su primer campo (`$1`), la IP.
+   - `if [ -z "$ip" ]; then ...; fi` → condición; `-z` es verdadero si la cadena está vacía, es decir, si el nombre no resolvió.
+   - `echo "$host -> no resuelve"` → anota el subdominio que no tiene IP.
+   - `continue` → salta a la siguiente vuelta del bucle sin consultar nada.
+   - `printf '%s %s ' "$host" "$ip"` → imprime nombre e IP separados por espacio, sin salto de línea; cada `%s` se sustituye por un argumento.
+   - `curl -s "https://internetdb.shodan.io/$ip"` → consulta InternetDB de Shodan para esa IP; devuelve en JSON puertos, CPE, etiquetas y CVE vistos.
+   - `;` → separa dos comandos en la misma línea.
+   - `echo` → sin argumentos, imprime un salto de línea para cerrar la línea de ese host.
+   - `| tee exposicion.txt` → `tee` muestra la salida de todo el bucle en pantalla y a la vez la guarda en `exposicion.txt`.
    Salida de ejemplo:
    ```
    www.tudominio.com 203.0.113.10 {"cpes":["cpe:/a:f5:nginx"],"hostnames":[...],"ip":"203.0.113.10","ports":[80,443],"tags":["cdn"],"vulns":[]}
@@ -350,6 +401,8 @@ sudo pacman -S curl python        # Arch
 rm -rf ~/lab-osint
 ```
 
+- `rm -rf` → (ver ejercicio 1); aquí borra `~/lab-osint`.
+
 ## Ejercicio 4: Caza por hipótesis de una tarea programada sospechosa
 
 Nodo: [Hunting por hipótesis](README.md#hunting-por-hipótesis), [Ciclo de threat hunting](README.md#ciclo-de-threat-hunting) y [Threat Hunting](README.md#threat-hunting).
@@ -370,18 +423,47 @@ Necesitas: VirtualBox o similar con una VM Windows 10/11 Enterprise de evaluaci�
    C:\Tools\Sysmon\Sysmon64.exe -accepteula -i C:\Tools\Sysmon\sysmonconfig.xml
    Get-Service Sysmon64
    ```
-   El servicio debe aparecer `Running`. Si Sysmon rechaza el XML por la versión de esquema, descarga el archivo `sysmonconfig-<versión>.xml` de la misma release que coincida con la versión que muestra `C:\Tools\Sysmon\Sysmon64.exe -?`. Ahora cambia la red de la VM a solo-anfitrión.
+   - `New-Item` → cmdlet que crea un elemento nuevo (archivo, carpeta, clave de registro).
+   - `-ItemType Directory` → el elemento es una carpeta.
+   - `-Force` → no da error si la carpeta ya existe y crea las carpetas padre que falten.
+   - `C:\Tools\Sysmon` → ruta de la carpeta (es el parámetro `-Path` puesto por posición).
+   - `| Out-Null` → descarta la salida para no llenar la pantalla con el objeto creado.
+   - `Invoke-WebRequest` → cmdlet que descarga contenido por HTTP, parecido a `curl`.
+   - `-Uri` → dirección que se descarga: el ZIP oficial de Sysmon en Sysinternals, y en la cuarta línea la configuración "Balanced" de sysmon-modular.
+   - `-OutFile` → archivo local donde se guarda la descarga.
+   - `Expand-Archive C:\Tools\Sysmon.zip` → descomprime ese ZIP (el primer argumento es `-Path`).
+   - `-DestinationPath C:\Tools\Sysmon` → carpeta donde se extrae.
+   - `-Force` → sobrescribe los archivos si ya existían.
+   - `C:\Tools\Sysmon\Sysmon64.exe` → ejecutable de Sysmon de 64 bits.
+   - `-accepteula` → acepta la licencia automáticamente, sin la ventana interactiva.
+   - `-i C:\Tools\Sysmon\sysmonconfig.xml` → instala el servicio y el controlador de Sysmon usando ese archivo de configuración.
+   - `-?` → muestra la ayuda, incluida la versión de Sysmon y del esquema; úsalo si Sysmon rechaza el XML por la versión de esquema, y descarga de la misma release el `sysmonconfig-<versión>.xml` que coincida.
+   - `Get-Service Sysmon64` → muestra el estado del servicio con ese nombre (parámetro `-Name` por posición); debe aparecer `Running`.
+
+   Ahora cambia la red de la VM a solo-anfitrión.
 3. Activa la auditoría que genera el evento 4698 (subcategoría "Other Object Access Events"; en un Windows en español usa el GUID, que no depende del idioma):
    ```powershell
    auditpol /set /subcategory:"{0CCE9227-69AE-11D9-BED3-505054503030}" /success:enable /failure:enable
    auditpol /get /subcategory:"{0CCE9227-69AE-11D9-BED3-505054503030}"
    ```
-   La segunda línea debe mostrar `Success and Failure` (o `Aciertos y errores`).
+   - `auditpol` → herramienta de Windows que consulta y cambia la política de auditoría del sistema.
+   - `/set` → modifica la política.
+   - `/subcategory:"{0CCE9227-69AE-11D9-BED3-505054503030}"` → subcategoría a la que se aplica, indicada por GUID en vez de por nombre; este GUID es "Other Object Access Events" y sirve igual en Windows en inglés y en español.
+   - `/success:enable` → registra los intentos que tienen éxito (la creación de la tarea genera el 4698).
+   - `/failure:enable` → registra también los intentos fallidos.
+   - `/get` → muestra la configuración actual de la subcategoría indicada; debe mostrar `Success and Failure` (o `Aciertos y errores`).
 4. Prepara la cuenta estándar y el binario. Todavía como administrador:
    ```powershell
    net user ana LabAna2026! /add
    Copy-Item C:\Windows\System32\whoami.exe C:\Users\Public\svc.exe
    ```
+   - `net user` → comando de Windows para gestionar cuentas locales.
+   - `ana` → nombre de la cuenta.
+   - `LabAna2026!` → contraseña que se le asigna.
+   - `/add` → crea la cuenta; por defecto entra solo en el grupo Usuarios, sin privilegios de administrador.
+   - `Copy-Item` → cmdlet que copia un archivo; el primer argumento es el origen (`-Path`) y el segundo el destino (`-Destination`).
+   - `C:\Windows\System32\whoami.exe` → programa inofensivo de Windows que imprime el usuario actual.
+   - `C:\Users\Public\svc.exe` → copia con nombre cambiado en una carpeta donde cualquier usuario puede escribir, como haría un atacante.
    `ana` no pertenece al grupo Administradores, como el atacante sin privilegios de la hipótesis.
 5. Antes de simular nada, escribe la hipótesis en `C:\Tools\hipotesis.txt` con el formato de la nota (técnica, dónde se vería, qué datos y qué ventana):
    ```
@@ -397,6 +479,17 @@ Necesitas: VirtualBox o similar con una VM Windows 10/11 Enterprise de evaluaci�
    schtasks /run /tn "LabUpdater"
    schtasks /query /tn "LabUpdater" /v /fo list
    ```
+   - `schtasks` → herramienta de línea de comandos del Programador de tareas de Windows.
+   - `/create` → crea una tarea programada.
+   - `/tn "LabUpdater"` → nombre de la tarea (task name); en `/run` y `/query` indica a qué tarea se aplica.
+   - `/tr "C:\Users\Public\svc.exe"` → programa que ejecuta la tarea (task run), con su ruta completa.
+   - `/sc minute` → tipo de programación: por minutos.
+   - `/mo 15` → modificador de la programación: con `minute`, cada 15 minutos (admite de 1 a 1439).
+   - `/f` → crea la tarea sin avisos aunque ya exista una con ese nombre, sustituyéndola.
+   - `/run` → ejecuta la tarea ahora, sin esperar a su horario.
+   - `/query` → muestra información de tareas.
+   - `/v` → salida detallada, con las propiedades avanzadas (`Task To Run`, repetición, usuario).
+   - `/fo list` → formato de salida en lista, un campo por línea (también existen `TABLE` y `CSV`).
    La primera línea responde `SUCCESS: The scheduled task "LabUpdater" has successfully been created.` y en la tercera el campo `Task To Run` (`Tarea que se ejecutará` en español) muestra `C:\Users\Public\svc.exe` y la repetición indica cada 15 minutos.
 7. Cierra la sesión de `ana`, vuelve a entrar como administrador y abre PowerShell elevado. Define una función que lee cualquier campo de un evento por su nombre:
    ```powershell
@@ -405,6 +498,13 @@ Necesitas: VirtualBox o similar con una VM Windows 10/11 Enterprise de evaluaci�
        (([xml]$Event.ToXml()).Event.EventData.Data | Where-Object Name -eq $Name).'#text'
    }
    ```
+   - `function Get-EventField { ... }` → define una función de PowerShell con ese nombre, válida en esta sesión.
+   - `param($Event, [string]$Name)` → sus dos parámetros: el evento a leer y el nombre del campo, forzado a texto con `[string]`.
+   - `$Event.ToXml()` → devuelve el evento completo como texto XML.
+   - `[xml]` → convierte ese texto en un documento XML navegable con puntos.
+   - `.Event.EventData.Data` → lista de campos `<Data Name="...">` del evento.
+   - `Where-Object Name -eq $Name` → se queda con el campo cuyo atributo `Name` es igual (`-eq`) al pedido.
+   - `.'#text'` → devuelve el texto que contiene ese campo, es decir, su valor.
 8. Consulta 1, la creación de la tarea vista por Sysmon (evento 1, `schtasks.exe` con `/create` y la ruta pública):
    ```powershell
    $desde = (Get-Date).AddHours(-24)
@@ -418,6 +518,25 @@ Necesitas: VirtualBox o similar con una VM Windows 10/11 Enterprise de evaluaci�
          Padre       = Get-EventField $_ 'ParentImage'
          CommandLine = Get-EventField $_ 'CommandLine' } } | Format-List
    ```
+   - `$desde = (Get-Date).AddHours(-24)` → guarda en `$desde` la fecha y hora actual menos 24 horas, la ventana de la hipótesis.
+   - `Get-WinEvent` → cmdlet que lee eventos de los registros de Windows.
+   - `-FilterHashtable @{...}` → filtro que se aplica al leer el registro, más rápido que filtrar después; `@{...}` es una tabla de pares clave = valor separados por `;`.
+   - `LogName='Microsoft-Windows-Sysmon/Operational'` → registro de Sysmon.
+   - `Id=1` → solo eventos con ID 1, creación de proceso.
+   - `StartTime=$desde` → solo eventos posteriores a esa fecha.
+   - `Where-Object { ... }` → deja pasar solo los eventos para los que el bloque devuelve verdadero; `$_` es el evento actual.
+   - `Get-EventField $_ 'Image'` → usa la función del paso 7 para leer la ruta del ejecutable.
+   - `-like '*\schtasks.exe'` → comparación con comodines; `*` equivale a cualquier texto, así que acepta cualquier ruta que acabe en `\schtasks.exe`.
+   - `-and` → las condiciones deben cumplirse todas.
+   - `-match '/create'` → comparación con expresión regular: la línea de comandos contiene `/create`.
+   - `-match 'Users\\Public'` → contiene `Users\Public`; en expresiones regulares la barra invertida se escribe doble (`\\`).
+   - `ForEach-Object { ... }` → ejecuta el bloque para cada evento que pasó el filtro.
+   - `[pscustomobject]@{...}` → crea un objeto con las propiedades indicadas, para mostrar solo lo que interesa.
+   - `Hora = $_.TimeCreated` → fecha y hora del evento.
+   - `Usuario = Get-EventField $_ 'User'` → cuenta que lanzó el proceso.
+   - `Padre = Get-EventField $_ 'ParentImage'` → ejecutable del proceso padre.
+   - `CommandLine = Get-EventField $_ 'CommandLine'` → línea de comandos completa.
+   - `| Format-List` → muestra cada propiedad en su propia línea.
    Debe salir un resultado con `Usuario` igual a `<EQUIPO>\ana`, `Padre` igual a `C:\Windows\System32\cmd.exe` y la línea de comandos del paso 6.
 9. Consulta 2, la misma tarea vista por Windows (evento 4698), filtrando por la ruta dentro de la definición XML de la tarea:
    ```powershell
@@ -429,6 +548,13 @@ Necesitas: VirtualBox o similar con una VM Windows 10/11 Enterprise de evaluaci�
          Tarea   = Get-EventField $_ 'TaskName'
          Comando = ([xml](Get-EventField $_ 'TaskContent')).Task.Actions.Exec.Command } } | Format-List
    ```
+   - `Get-WinEvent -FilterHashtable`, `StartTime=$desde`, `Where-Object`, `-match`, `ForEach-Object`, `[pscustomobject]`, `Format-List` → (ver paso 8).
+   - `LogName='Security'` → registro de seguridad de Windows.
+   - `Id=4698` → solo eventos "se creó una tarea programada".
+   - `Get-EventField $_ 'TaskContent'` → definición XML completa de la tarea creada.
+   - `Usuario = Get-EventField $_ 'SubjectUserName'` → cuenta que creó la tarea.
+   - `Tarea = Get-EventField $_ 'TaskName'` → nombre de la tarea con su carpeta (`\LabUpdater`).
+   - `([xml](...)).Task.Actions.Exec.Command` → convierte la definición en XML y saca el programa que la tarea ejecuta.
    Debe salir `Usuario : ana`, `Tarea : \LabUpdater` y `Comando : C:\Users\Public\svc.exe`. Que las dos consultas coincidan en hora (segundos de diferencia) y usuario es la correlación que confirma la hipótesis.
 10. Consulta 3, la ejecución de la tarea: el binario de la ruta pública lanzado por el servicio de tareas.
     ```powershell
@@ -440,6 +566,11 @@ Necesitas: VirtualBox o similar con una VM Windows 10/11 Enterprise de evaluaci�
           OriginalFileName = Get-EventField $_ 'OriginalFileName'
           ParentCommand    = Get-EventField $_ 'ParentCommandLine' } } | Format-List
     ```
+    - `Get-WinEvent -FilterHashtable`, `LogName`, `Id=1`, `StartTime`, `Where-Object`, `ForEach-Object`, `[pscustomobject]`, `Format-List` → (ver paso 8).
+    - `-like 'C:\Users\Public\*'` → cualquier ejecutable dentro de `C:\Users\Public`.
+    - `Image = Get-EventField $_ 'Image'` → ruta del ejecutable lanzado.
+    - `OriginalFileName = Get-EventField $_ 'OriginalFileName'` → nombre original que el binario lleva grabado en sus metadatos, aunque se haya renombrado.
+    - `ParentCommand = Get-EventField $_ 'ParentCommandLine'` → línea de comandos del proceso padre.
     `ParentCommand` contiene `svchost.exe -k netsvcs -p -s Schedule` (el servicio Programador de tareas), y `OriginalFileName` dice `whoami.exe` aunque el archivo se llame `svc.exe`: un nombre cambiado que delata el enmascaramiento (T1036), una pista extra para la siguiente hipótesis.
 11. Cierra el ciclo de caza (paso 4, informar y enriquecer): añade a `hipotesis.txt` el resultado (confirmada, con hora, usuario y tarea), las tres consultas y una frase con la regla que propondrías al SIEM, por ejemplo "alertar ante un 4698 cuyo TaskContent apunte a C:\Users\Public, AppData o Temp".
 
@@ -465,3 +596,13 @@ net user ana /delete
 auditpol /set /subcategory:"{0CCE9227-69AE-11D9-BED3-505054503030}" /success:disable /failure:disable
 C:\Tools\Sysmon\Sysmon64.exe -u
 ```
+
+- `schtasks /delete` → borra una tarea programada.
+- `/tn "LabUpdater"` → (ver paso 6).
+- `/f` → borra sin pedir confirmación.
+- `Remove-Item C:\Users\Public\svc.exe` → cmdlet que borra el archivo indicado.
+- `net user ana /delete` → borra la cuenta local `ana`.
+- `auditpol /set /subcategory:"{...}"` → (ver paso 3).
+- `/success:disable` → deja de registrar los intentos con éxito de esa subcategoría.
+- `/failure:disable` → deja de registrar los intentos fallidos.
+- `Sysmon64.exe -u` → desinstala el servicio y el controlador de Sysmon.

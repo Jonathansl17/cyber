@@ -31,6 +31,13 @@ sudo pacman -S dosfstools sleuthkit
 #   (Autopsy está en AUR: yay -S autopsy)
 ```
 
+- `sudo` → ejecuta el comando como root (administrador); hace falta para instalar paquetes.
+- `apt install` → instala paquetes y sus dependencias en Debian/Ubuntu.
+- `dosfstools sleuthkit autopsy` → los paquetes a instalar: utilidades FAT, The Sleuth Kit y Autopsy.
+- `pacman -S` → instala (sincroniza) paquetes en Arch; `-S` significa "sync".
+- `dosfstools sleuthkit` → los paquetes a instalar en Arch.
+- `yay -S autopsy` → instala Autopsy desde el AUR con el ayudante `yay`.
+
 Tiempo estimado: 45-60 minutos.
 
 ### Pasos
@@ -40,6 +47,9 @@ Tiempo estimado: 45-60 minutos.
    ```bash
    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL
    ```
+   - `lsblk` → lista los dispositivos de bloque (discos y particiones).
+   - `-o NAME,SIZE,TYPE,MOUNTPOINT,MODEL` → elige las columnas a mostrar: nombre, tamaño, tipo, punto de montaje y modelo.
+
    La USB aparece como `sdb`, `sdc`, etc. (nunca `sda`, que suele ser tu disco de sistema).
    En este ejercicio la llamamos `/dev/sdX`: sustituye `X` por la letra real en todos los
    comandos.
@@ -52,6 +62,15 @@ Tiempo estimado: 45-60 minutos.
    dd if=/dev/zero of=evidencia-origen.img bs=1M count=64
    mkfs.vfat evidencia-origen.img
    ```
+   - `cd ~/lab-forense` → entra en el directorio de trabajo del laboratorio.
+   - `dd` → copia datos bloque a bloque entre archivos o dispositivos.
+   - `if=/dev/zero` → origen: `/dev/zero`, que entrega bytes cero sin fin.
+   - `of=evidencia-origen.img` → destino: el archivo imagen que se crea.
+   - `bs=1M` → tamaño de bloque de 1 MiB en cada lectura/escritura.
+   - `count=64` → copia 64 bloques, es decir 64 MiB en total.
+   - `mkfs.vfat` → crea un sistema de archivos FAT sobre el archivo.
+   - `evidencia-origen.img` → el archivo donde se crea el FAT.
+
    La salida de `mkfs.vfat` termina con el nombre del volumen y el tamaño del FAT; significa
    que el archivo ya contiene un sistema de archivos FAT vacío.
 
@@ -69,6 +88,19 @@ Tiempo estimado: 45-60 minutos.
    sync
    sudo umount /tmp/mnt
    ```
+   - `mkdir -p /tmp/mnt` → crea el directorio de montaje; `-p` no falla si ya existe y crea los padres que falten.
+   - `sudo` → ejecuta como root (ver bloque de instalación).
+   - `mount` → monta un sistema de archivos en un directorio.
+   - `-o loop` → monta el archivo imagen a través de un dispositivo loop, como si fuera un disco.
+   - `evidencia-origen.img /tmp/mnt` → qué montar y dónde montarlo.
+   - `mount /dev/sdX1 /tmp/mnt` → variante con USB real: monta la partición `sdX1`.
+   - `echo "secreto-de-prueba-$(date +%s)"` → imprime ese texto; `$(date +%s)` inserta la hora.
+   - `date +%s` → imprime la hora actual en segundos desde 1970 (hace único el texto).
+   - `| sudo tee /tmp/mnt/pista.txt` → `tee` escribe lo que recibe por la tubería en el archivo (y también a pantalla); `sudo` permite escribir como root.
+   - `sync` → vuelca a disco los datos que aún están en caché.
+   - `umount /tmp/mnt` → desmonta el sistema de archivos.
+   - `rm /tmp/mnt/pista.txt` → borra el archivo.
+
    Borrar con `rm` solo quita la entrada del directorio FAT; los bytes de `pista.txt` siguen
    en el área de datos hasta que algo los sobrescriba. Eso es lo que recuperarás.
 
@@ -79,6 +111,11 @@ Tiempo estimado: 45-60 minutos.
    sudo blockdev --setro /dev/sdX
    sudo blockdev --getro /dev/sdX       # debe imprimir: 1
    ```
+   - `blockdev` → consulta o ajusta propiedades de un dispositivo de bloques.
+   - `--setro` → marca el dispositivo como solo lectura (set read-only).
+   - `--getro` → consulta si es solo lectura; imprime `1` (sí) o `0` (no).
+   - `/dev/sdX` → el dispositivo afectado.
+
    `1` confirma que el kernel rechazará cualquier escritura a `/dev/sdX`. (Con la variante de
    archivo no hay dispositivo de bloques, así que este paso se omite; el write blocker es
    precisamente el control que la variante no puede practicar.)
@@ -89,6 +126,11 @@ Tiempo estimado: 45-60 minutos.
    sudo sha256sum /dev/sdX > caso.original.sha256     # variante: sha256sum evidencia-origen.img > caso.original.sha256
    cat caso.original.sha256
    ```
+   - `sha256sum` → calcula el hash SHA-256 de su entrada.
+   - `/dev/sdX` → el dispositivo cuyo hash se calcula.
+   - `> caso.original.sha256` → redirige la salida al archivo (lo crea o sobrescribe).
+   - `sha256sum evidencia-origen.img` → variante: hash del archivo imagen.
+   - `cat caso.original.sha256` → muestra el contenido del archivo.
 
 6. Crea la imagen raw con `dd`. Los flags son los de la nota: bloque grande para ir rápido,
    `noerror,sync` para no detenerse ante sectores dañados y conservar los desplazamientos, y
@@ -97,6 +139,13 @@ Tiempo estimado: 45-60 minutos.
    sudo dd if=/dev/sdX of=caso.img bs=4M conv=noerror,sync status=progress
    #  variante: dd if=evidencia-origen.img of=caso.img bs=4M conv=noerror,sync status=progress
    ```
+   - `dd` → copia bloque a bloque (ver paso 2).
+   - `if=/dev/sdX` → origen: el dispositivo a copiar.
+   - `of=caso.img` → destino: la imagen forense.
+   - `bs=4M` → bloques de 4 MiB para ir más rápido.
+   - `conv=noerror,sync` → `noerror` sigue pese a errores de lectura; `sync` rellena con ceros los bloques dañados para conservar los desplazamientos.
+   - `status=progress` → muestra el avance mientras copia.
+
    Al terminar imprime cuántos bytes copió y los `records in`/`records out`. Si no hubo
    sectores ilegibles, el conteo de entrada y salida coincide.
 
@@ -107,6 +156,8 @@ Tiempo estimado: 45-60 minutos.
    sha256sum caso.img
    cat caso.original.sha256
    ```
+   - `sha256sum caso.img` → calcula el hash de la imagen (ver paso 5).
+   - `cat caso.original.sha256` → muestra el hash del original para compararlo a ojo.
 
 8. Recupera el archivo borrado desde la imagen, nunca desde el original. Opción CLI con The
    Sleuth Kit: localiza la partición, lista las entradas borradas y extrae la que te interesa.
@@ -116,6 +167,17 @@ Tiempo estimado: 45-60 minutos.
    icat -o OFFSET caso.img NUMERO > recuperado.txt
    cat recuperado.txt
    ```
+   - `mmls` → muestra la tabla de particiones de la imagen y el sector de inicio (offset) de cada una.
+   - `caso.img` → la imagen a analizar.
+   - `fls` → lista archivos y directorios de un sistema de archivos.
+   - `-o OFFSET` → desplazamiento, en sectores, donde empieza la partición dentro de la imagen.
+   - `-r` → recursivo: recorre también los subdirectorios.
+   - `-d` → muestra solo las entradas borradas.
+   - `icat` → extrae el contenido de un archivo por su número de inodo/entrada.
+   - `NUMERO` → el número de inodo/entrada del archivo a recuperar.
+   - `> recuperado.txt` → guarda el contenido extraído en ese archivo.
+   - `cat recuperado.txt` → muestra lo recuperado.
+
    Si el medio no tiene tabla de particiones (el caso de la variante con `mkfs.vfat` sobre el
    archivo entero), usa offset 0 y omite `mmls`: `fls -rd caso.img` e `icat caso.img NUMERO`.
 
@@ -150,6 +212,12 @@ rm -f caso.img recuperado.txt caso.original.sha256 evidencia-origen.img
 rmdir /tmp/mnt 2>/dev/null
 ```
 
+- `blockdev` → ajusta propiedades del dispositivo de bloques (ver paso 4).
+- `--setro /dev/sdX --setrw /dev/sdX` → en esta misma línea se aplican los dos ajustes en orden sobre el dispositivo; el efecto útil es `--setrw`, que lo devuelve a lectura-escritura (set read-write).
+- `rm -f` → borra archivos; `-f` fuerza y no se queja si alguno no existe.
+- `rmdir /tmp/mnt` → borra el directorio de montaje (debe estar vacío).
+- `2>/dev/null` → descarta los mensajes de error de `rmdir`.
+
 ## Ejercicio 2: Volcado de RAM con AVML y análisis con Volatility 3
 
 Nodo: [memdump](README.md#memdump).
@@ -178,6 +246,15 @@ curl -L -o dwarf2json https://github.com/volatilityfoundation/dwarf2json/release
 chmod +x dwarf2json
 ```
 
+- `python3 -m venv ~/vol3` → crea un entorno virtual de Python en `~/vol3`; `-m venv` ejecuta el módulo `venv`.
+- `&&` → encadena: ejecuta lo de la derecha solo si lo anterior tuvo éxito.
+- `~/vol3/bin/pip install volatility3` → instala Volatility 3 dentro de ese entorno virtual.
+- `curl` → descarga un recurso por HTTP(S).
+- `-L` → sigue las redirecciones (GitHub redirige las descargas de releases).
+- `-o avml` / `-o dwarf2json` → guarda la descarga con ese nombre de archivo.
+- la URL → el recurso a descargar (el binario de AVML o de dwarf2json).
+- `chmod +x avml` / `chmod +x dwarf2json` → da permiso de ejecución al binario descargado.
+
 Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la primera vez).
 
 ### Pasos
@@ -192,6 +269,12 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    nc 10.0.0.20 9000
    echo marcador-volatility-2026
    ```
+   - `nc` → netcat, abre o escucha conexiones de red TCP/UDP.
+   - `-l` → modo escucha (listen): espera una conexión entrante.
+   - `-p 9000` → fija el puerto local 9000.
+   - `nc 10.0.0.20 9000` → se conecta a la IP 10.0.0.20 en el puerto 9000.
+   - `echo marcador-volatility-2026` → imprime esa cadena, que queda en el historial de bash.
+
    La idea es que en el momento del volcado existan un proceso `nc`, una conexión TCP
    establecida al puerto 9000 y una línea de historial de bash con "marcador-volatility-2026".
 
@@ -201,6 +284,10 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    sudo ./avml memoria.lime
    sha256sum memoria.lime > memoria.sha256
    ```
+   - `sudo ./avml` → ejecuta el binario AVML como root (necesita privilegios para leer la memoria).
+   - `memoria.lime` → archivo de salida donde AVML escribe el volcado (formato LiME).
+   - `sha256sum memoria.lime > memoria.sha256` → calcula el hash del volcado y lo guarda en un archivo (ver Ejercicio 1).
+
    El archivo sale en formato LiME y ocupa aproximadamente lo mismo que la RAM de la VM.
    Calcular el hash justo al terminar es parte del procedimiento forense.
 
@@ -209,6 +296,8 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    ```bash
    uname -r        # ej.: 6.1.0-18-amd64
    ```
+   - `uname` → muestra información del sistema.
+   - `-r` → muestra solo la versión (release) del kernel en uso.
 
 4. Consigue los símbolos de depuración de ese kernel y genera la tabla ISF con dwarf2json.
    En Debian/Ubuntu los símbolos vienen en un paquete `linux-image-$(uname -r)-dbg` o en el
@@ -219,6 +308,13 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    # el vmlinux con símbolos suele quedar en /usr/lib/debug/boot/vmlinux-$(uname -r)
    ./dwarf2json linux --elf /usr/lib/debug/boot/vmlinux-$(uname -r) > linux-$(uname -r).json
    ```
+   - `sudo apt install linux-image-$(uname -r)-dbg` → instala los símbolos de depuración del kernel en uso; `$(uname -r)` inserta la versión actual en el nombre del paquete.
+   - `./dwarf2json` → convierte símbolos de depuración en una tabla ISF JSON para Volatility.
+   - `linux` → subcomando: genera símbolos para un kernel Linux.
+   - `--elf /usr/lib/debug/boot/vmlinux-$(uname -r)` → el binario `vmlinux` con información DWARF del que leer los tipos.
+   - `> linux-$(uname -r).json` → guarda la tabla en un JSON nombrado por la versión del kernel.
+   - `--system-map /boot/System.map-$(uname -r)` → alternativa citada: partir del `System.map` en vez del `vmlinux`.
+
    Si no hay paquete de símbolos para tu kernel, también puedes partir del `System.map`
    (`--system-map /boot/System.map-$(uname -r)`), aunque da menos información de tipos.
 
@@ -229,12 +325,21 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    mkdir -p ~/vol3-symbols/linux
    cp linux-$(uname -r).json ~/vol3-symbols/linux/
    ```
+   - `mkdir -p ~/vol3-symbols/linux` → crea la carpeta de símbolos; `-p` crea los padres y no falla si ya existe.
+   - `cp` → copia archivos.
+   - `linux-$(uname -r).json ~/vol3-symbols/linux/` → origen (la tabla generada) y destino (la carpeta `linux`).
 
 6. Lista los procesos del volcado y localiza `nc`. El plugin `linux.pslist` recorre la lista
    de tareas del kernel dentro del volcado.
    ```bash
    ~/vol3/bin/vol -s ~/vol3-symbols -f memoria.lime linux.pslist | grep -i nc
    ```
+   - `~/vol3/bin/vol` → el ejecutable de Volatility 3 del entorno virtual.
+   - `-s ~/vol3-symbols` → directorio donde Volatility busca las tablas de símbolos.
+   - `-f memoria.lime` → archivo de volcado a analizar.
+   - `linux.pslist` → plugin que recorre la lista de tareas del kernel y lista los procesos.
+   - `| grep -i nc` → filtra las líneas que contienen "nc"; `-i` ignora mayúsculas y minúsculas.
+
    Debe aparecer una fila con `nc` y su PID. Anota el PID.
 
 7. Encuentra la conexión de red. El plugin `linux.sockstat` lista los sockets abiertos con
@@ -242,6 +347,10 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    ```bash
    ~/vol3/bin/vol -s ~/vol3-symbols -f memoria.lime linux.sockstat | grep 9000
    ```
+   - `-s ~/vol3-symbols` y `-f memoria.lime` → (ver paso 6).
+   - `linux.sockstat` → plugin que lista los sockets abiertos con su proceso, direcciones y puertos.
+   - `| grep 9000` → deja solo las líneas que contienen el puerto 9000.
+
    Verás el socket TCP hacia el puerto 9000 asociado al proceso `nc`: es la conexión que
    dejaste viva.
 
@@ -250,6 +359,9 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    ```bash
    ~/vol3/bin/vol -s ~/vol3-symbols -f memoria.lime linux.bash
    ```
+   - `-s ~/vol3-symbols` y `-f memoria.lime` → (ver paso 6).
+   - `linux.bash` → plugin que extrae de la memoria el historial de bash que seguía en RAM.
+
    Entre las líneas debe estar `echo marcador-volatility-2026`, con la marca de tiempo de
    cuando lo escribiste.
 
@@ -279,6 +391,11 @@ sudo apt remove linux-image-$(uname -r)-dbg
 rm -rf ~/vol3
 ```
 
+- `rm -f memoria.lime memoria.sha256 avml dwarf2json linux-*.json` → borra esos archivos; `-f` no se queja si alguno falta, `linux-*.json` usa comodín.
+- `rm -rf ~/vol3-symbols` → borra el directorio y todo su contenido; `-r` recursivo, `-f` forzado.
+- `sudo apt remove linux-image-$(uname -r)-dbg` → desinstala el paquete de símbolos de depuración.
+- `rm -rf ~/vol3` → borra el entorno virtual de Volatility.
+
 ## Ejercicio 3: Triaje de un log de autenticación con la tubería grep sort uniq
 
 Nodo: [grep](README.md#grep), [tail](README.md#tail), [head](README.md#head),
@@ -304,6 +421,11 @@ sudo pacman -S openssh
 sudo systemctl enable --now sshd
 ```
 
+- `sudo apt install openssh-server` → instala el servidor SSH en Debian/Ubuntu.
+- `systemctl enable --now ssh` → activa el servicio SSH; `enable` lo deja arrancando en cada inicio y `--now` además lo inicia ya.
+- `sudo pacman -S openssh` → instala OpenSSH en Arch.
+- `systemctl enable --now sshd` → igual que arriba, con el nombre de unidad `sshd` que usa Arch.
+
 ### Pasos
 
 1. En la VM defensora, averigua su IP de la red de laboratorio y confirma que el servidor
@@ -312,6 +434,16 @@ sudo systemctl enable --now sshd
    ip -4 addr show
    ss -tlnp | grep :22
    ```
+   - `ip` → herramienta de configuración de red.
+   - `-4` → limita la salida a IPv4.
+   - `addr show` → muestra las direcciones asignadas a las interfaces.
+   - `ss` → muestra sockets de red.
+   - `-t` → solo sockets TCP.
+   - `-l` → solo sockets en escucha (listening).
+   - `-n` → no resuelve nombres de servicio; muestra el número de puerto.
+   - `-p` → muestra el proceso dueño de cada socket.
+   - `| grep :22` → deja solo las líneas del puerto 22.
+
    Apunta la IP (por ejemplo `10.0.0.10`). `ss` debe mostrar un proceso `sshd` en el puerto 22.
 
 2. Desde la VM de origen, genera inicios de sesión fallidos contra un usuario que no existe.
@@ -323,6 +455,16 @@ sudo systemctl enable --now sshd
          usuario-inexistente@10.0.0.10 true 2>/dev/null
    done
    ```
+   - `for i in $(seq 1 30); do ... done` → bucle que repite el cuerpo 30 veces.
+   - `seq 1 30` → genera los números del 1 al 30, uno por línea, para alimentar el bucle.
+   - `ssh` → cliente SSH.
+   - `-o BatchMode=yes` → modo no interactivo: no pide contraseña, el intento falla solo.
+   - `-o ConnectTimeout=3` → abandona el intento tras 3 segundos sin respuesta.
+   - `-o StrictHostKeyChecking=no` → no se detiene a preguntar por la clave de host desconocida.
+   - `usuario-inexistente@10.0.0.10` → usuario y servidor a los que conectar.
+   - `true` → comando a ejecutar en el servidor; no hace nada, solo provoca el intento de login.
+   - `2>/dev/null` → descarta los mensajes de error de cada intento.
+
    `BatchMode=yes` hace que el cliente no se quede esperando una contraseña: cada intento
    falla solo y deja su rastro en el log del servidor. Las 30 vueltas simulan la ráfaga.
 
@@ -331,6 +473,11 @@ sudo systemctl enable --now sshd
    ```bash
    sudo tail -f /var/log/auth.log         # systemd sin auth.log: sudo journalctl -u ssh -f
    ```
+   - `tail` → muestra el final de un archivo.
+   - `-f` → sigue el archivo y va imprimiendo lo que se le añade (follow).
+   - `/var/log/auth.log` → el log de autenticación a vigilar.
+   - `journalctl -u ssh -f` → variante systemd: `-u ssh` filtra por la unidad ssh y `-f` sigue el journal en vivo.
+
    Verás líneas del tipo `Failed password for invalid user usuario-inexistente from 10.0.0.20`.
    Corta con Ctrl-C cuando dejen de llegar.
 
@@ -341,6 +488,13 @@ sudo systemctl enable --now sshd
      | grep -oE "from [0-9.]+" \
      | sort | uniq -c | sort -rn | head
    ```
+   - `grep "Failed password" /var/log/auth.log` → deja solo las líneas de contraseña fallida del log.
+   - `grep -oE "from [0-9.]+"` → `-o` imprime solo lo que coincide (no la línea entera), `-E` usa expresión regular extendida; el patrón captura "from" seguido de la IP.
+   - `sort` → ordena las líneas, de modo que las iguales queden juntas.
+   - `uniq -c` → colapsa las líneas repetidas consecutivas; `-c` antepone a cada una su número de repeticiones.
+   - `sort -rn` → reordena por ese conteo; `-n` lo trata como número y `-r` lo pone de mayor a menor.
+   - `head` → se queda con las primeras líneas (el top de IPs).
+
    La salida es una tabla "conteo IP" con la IP más ruidosa arriba:
    ```
    30 from 10.0.0.20
@@ -355,12 +509,17 @@ sudo systemctl enable --now sshd
      | grep -oE "from [0-9.]+" \
      | sort | uniq -c | sort -rn | head
    ```
+   - `journalctl -u sshd --no-pager` → vuelca el log de la unidad `sshd`; `-u sshd` filtra por esa unidad y `--no-pager` lo imprime todo de corrido, sin paginador.
+   - `grep "Failed password" | grep -oE "from [0-9.]+" | sort | uniq -c | sort -rn | head` → misma tubería del paso 4 (ver allí cada eslabón).
 
 6. Confirma el hallazgo mirando el contexto de esa IP: cuántos fallos y si hubo algún acceso
    aceptado después (en este laboratorio no debería haberlo, porque el usuario no existe).
    ```bash
    sudo grep "10.0.0.20" /var/log/auth.log | grep -E "Failed|Accepted" | head
    ```
+   - `grep "10.0.0.20" /var/log/auth.log` → deja solo las líneas del log en que aparece esa IP.
+   - `grep -E "Failed|Accepted"` → `-E` usa regex extendida; `Failed|Accepted` deja las líneas con una u otra palabra.
+   - `head` → muestra solo las primeras líneas del resultado.
 
 ### Resultado esperado
 
@@ -386,3 +545,5 @@ entradas del log de laboratorio.
 ```bash
 sudo systemctl disable --now ssh      # o sshd, según la distribución
 ```
+
+- `systemctl disable --now ssh` → desactiva el servicio SSH; `disable` quita su arranque automático y `--now` además lo detiene en el acto.

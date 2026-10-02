@@ -87,6 +87,7 @@ el ID 4625). Acceso a `journalctl`. 30 minutos. En Windows harías lo mismo filt
    - `uniq` → colapsa líneas consecutivas iguales en una sola.
    - `-c` → antepone a cada línea cuántas veces se repetía: fallos por cuenta.
    - `sort -rn` → ordena de nuevo la salida: `-n` compara como número (el recuento) y `-r` invierte el orden, de mayor a menor.
+
    Esperado del paso 1: la cuenta atacada (p. ej. `ana`) con 5 fallos destacando sobre el resto.
 
 5. Cuenta cuántas cuentas distintas falla cada IP de origen. Si una IP toca muchas cuentas con
@@ -98,6 +99,7 @@ el ID 4625). Acceso a `journalctl`. 30 minutos. En Windows harías lo mismo filt
    - `sort -u` → ordena y `-u` deja una sola copia de cada línea repetida: cada par IP-usuario cuenta una vez, aunque fallara varias veces.
    - `awk '{print $1}'` → (ver paso 4); aquí el primer campo es la IP.
    - `sort | uniq -c | sort -rn` → (ver paso 4); ahora el recuento es de cuentas distintas por IP.
+
    Esperado del paso 2: `127.0.0.1` (o tu IP) con 5 cuentas distintas.
 
 ### Resultado esperado

@@ -2,7 +2,7 @@
 
 Guía de estudio del roadmap de Cyber Security de roadmap.sh, solo con los temas que no están marcados como skipped. El roadmap completo con los skipped marcados está en [`roadmap-cyber-security.pdf`](roadmap-cyber-security.pdf).
 
-Cada tema tiene conceptos con analogías y ejemplos, una sección de recursos (videos, lectura y labs de práctica) y un cuadro resumen al final.
+Cada tema tiene conceptos con analogías y ejemplos, una sección de recursos (videos, lectura y labs de práctica) y un cuadro resumen al final. Los ejercicios guiados de cada tema, paso a paso y con cada comando explicado, están en su `ejercicios.md`, enlazado desde la sección de práctica.
 
 | # | Tema | Qué cubre |
 |---|------|-----------|

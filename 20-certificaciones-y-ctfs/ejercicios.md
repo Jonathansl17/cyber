@@ -31,6 +31,9 @@ Todo en red host-only, sin salida a internet para la máquina objetivo.
    ```bash
    sha1sum Kioptrix_Level_1.rar      # compara con el hash de la pagina de VulnHub
    ```
+   - `sha1sum` → calcula el hash SHA-1 de un archivo.
+   - `Kioptrix_Level_1.rar` → el archivo descargado cuyo hash se verifica.
+
    Descomprime el archivo para obtener el `.ova` o los discos de la VM.
 3. Importa la máquina (`Archivo > Importar servicio virtualizado`, o crea una VM y
    adjunta el disco). En su configuración de red, pon el adaptador en `Red solo-anfitrión
@@ -39,18 +42,34 @@ Todo en red host-only, sin salida a internet para la máquina objetivo.
    ```bash
    ip -brief address
    ```
+   - `ip` → herramienta de configuración de red.
+   - `-brief` → salida resumida, una línea por interfaz.
+   - `address` → objeto consultado: las direcciones IP asignadas.
+
    Debe darte una IP dentro del rango host-only (p. ej. `192.168.56.1` o `.101`).
 5. Descubre la IP de la máquina objetivo escaneando tu propio rango (host discovery):
    ```bash
    sudo nmap -sn 192.168.56.0/24
    ```
+   - `sudo` → ejecuta como root; algunas técnicas de descubrimiento de Nmap lo requieren.
+   - `nmap` → escáner de red.
+   - `-sn` → ping scan: descubre qué hosts están vivos sin escanear sus puertos.
+   - `192.168.56.0/24` → el rango de red a barrer.
+
    Aparecerán tu VM de ataque y la objetivo; la que no reconozcas es Kioptrix. Anótala.
 6. Enumera puertos, versiones y servicios del objetivo:
    ```bash
    sudo nmap -sV -sC -p- 192.168.56.NNN -oN kioptrix_nmap.txt
    ```
-   `-p-` escanea los 65535 puertos, `-sV` detecta versiones y `-sC` corre los scripts
-   por defecto. Guarda la salida: es la base de tu informe.
+   - `sudo` → ejecuta como root (ver paso 5).
+   - `nmap` → escáner de red.
+   - `-sV` → detecta la versión de cada servicio abierto.
+   - `-sC` → ejecuta los scripts NSE por defecto.
+   - `-p-` → escanea los 65535 puertos.
+   - `192.168.56.NNN` → la IP del objetivo.
+   - `-oN kioptrix_nmap.txt` → guarda la salida en formato normal (legible) en ese archivo.
+
+   Guarda la salida: es la base de tu informe.
 
 ### Resultado esperado
 
@@ -92,11 +111,18 @@ solo después de intentarlo, y documenta con tus palabras.
    searchsploit apache 1.3
    searchsploit samba 2.2
    ```
+   - `searchsploit` → busca en la base local de Exploit-DB exploits y CVE conocidos.
+   - `apache 1.3` / `samba 2.2` → términos de búsqueda: producto y versión.
+
    Apunta los CVE o exploits candidatos. Enumera también el servicio web:
    ```bash
    whatweb http://192.168.56.NNN
    gobuster dir -u http://192.168.56.NNN -w /usr/share/wordlists/dirb/common.txt
    ```
+   - `whatweb http://192.168.56.NNN` → identifica las tecnologías del sitio web (servidor, CMS, versiones).
+   - `gobuster dir` → busca rutas y directorios web por fuerza de diccionario; `dir` es el modo directorios.
+   - `-u http://192.168.56.NNN` → la URL objetivo.
+   - `-w /usr/share/wordlists/dirb/common.txt` → el diccionario (wordlist) de nombres a probar.
 2. Análisis de vulnerabilidades: para cada candidato, anota qué fallo es, qué requisito
    tiene y qué impacto daría. No lances nada todavía: primero decide cuál es el camino
    más probable de acceso inicial.
@@ -110,12 +136,18 @@ solo después de intentarlo, y documenta con tus palabras.
    id
    uname -a          # version de kernel, candidata a exploit local
    ```
+   - `id` → muestra tu usuario y grupos actuales (confirma si ya eres root).
+   - `uname -a` → muestra toda la información del sistema; `-a` incluye la versión del kernel, candidata a un exploit local.
    Busca un exploit de escalada acorde a esa versión y ejecútalo en tu laboratorio.
 5. Bandera: lee la prueba de compromiso total (en Kioptrix, normalmente un archivo en
    el directorio de root):
    ```bash
    cat /root/*.txt 2>/dev/null ; ls -la /root
    ```
+   - `cat /root/*.txt` → muestra el contenido de los archivos `.txt` del directorio de root; `*` es un comodín que casa cualquier nombre.
+   - `2>/dev/null` → descarta los mensajes de error (por ejemplo si no hay ninguno o falta permiso).
+   - `;` → separa comandos: ejecuta el siguiente pase lo que pase con el anterior.
+   - `ls -la /root` → lista el directorio de root; `-l` usa formato largo con detalles y `-a` incluye los archivos ocultos.
    Guarda una captura o el texto como evidencia.
 6. Informe: rellena la plantilla de abajo. Para cada hallazgo, incluye evidencia (el
    comando y su salida) y una recomendación de corrección.

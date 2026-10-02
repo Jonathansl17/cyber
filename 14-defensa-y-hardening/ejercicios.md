@@ -152,7 +152,17 @@ Necesitas:
    EOF
    modprobe -n -v cramfs
    ```
-   `modprobe -n` simula la carga sin hacerla y debe responder `install /bin/false`: si alguien enchufa un disco con ese formato, el kernel no cargará el módulo.
+   - `sudo` → (ver paso 1); `/etc/modprobe.d/` solo lo puede escribir root.
+   - `tee /etc/modprobe.d/cis-filesystems.conf` → escribe en ese archivo lo que recibe; se usa `sudo tee` en lugar de `sudo cat >` porque la redirección `>` la haría tu shell sin privilegios.
+   - `<<'EOF'` ... `EOF` → heredoc con el contenido del archivo (ver paso 5).
+   - `# CIS L1: ...` → comentario dentro del archivo de configuración; modprobe lo ignora.
+   - `install cramfs /bin/false` → cuando se pida cargar el módulo `cramfs`, en lugar de cargarlo ejecuta `/bin/false`, que no hace nada y termina con error.
+   - `blacklist cramfs` → impide que el módulo se cargue automáticamente por alias (por ejemplo al detectar un dispositivo); solo con esto aún se podría cargar a mano, por eso va junto a `install`.
+   - `freevxfs`, `hfs`, `hfsplus`, `jffs2` → los demás sistemas de archivos, con las mismas dos directivas.
+   - `modprobe` → carga o descarga módulos del kernel.
+   - `-n` → simulación (dry run): hace todo menos cargar el módulo.
+   - `-v` → modo detallado: imprime lo que haría; debe responder `install /bin/false`, así que si alguien enchufa un disco con ese formato, el kernel no cargará el módulo.
+   - `cramfs` → el módulo que se comprueba.
 8. Control "parámetros de red y kernel" (secciones Network Parameters y Process Hardening). Archivo completo:
    ```bash
    sudo tee /etc/sysctl.d/60-cis.conf <<'EOF'
@@ -185,6 +195,27 @@ Necesitas:
    sudo sysctl --system | tail -n 5
    sysctl net.ipv4.conf.all.accept_redirects kernel.randomize_va_space
    ```
+   - `sudo tee /etc/sysctl.d/60-cis.conf <<'EOF'` → escribe el archivo como root con el texto del heredoc (ver pasos 5 y 7). El prefijo `60-` fija el orden de lectura frente a otros archivos de `/etc/sysctl.d/`.
+   - `# ...` → comentarios; sysctl los ignora.
+   - `all` / `default` → en cada parámetro `net.ipv4.conf.*`, `all` afecta a todas las interfaces actuales y `default` a las que se creen después; por eso se fijan las dos.
+   - `net.ipv4.ip_forward = 0` → el equipo no reenvía paquetes entre interfaces: no actúa como router.
+   - `send_redirects = 0` → no envía mensajes ICMP Redirect (solo los manda un router).
+   - `accept_redirects = 0` → ignora los ICMP Redirect recibidos, que un atacante podría usar para desviar tu tráfico.
+   - `secure_redirects = 0` → ignora también los redirects que vengan de las puertas de enlace conocidas.
+   - `accept_source_route = 0` → descarta paquetes con enrutamiento de origen, en los que el emisor impone la ruta.
+   - `net.ipv6.conf.all.accept_redirects = 0` y `net.ipv6.conf.default.accept_redirects = 0` → lo mismo para IPv6.
+   - `log_martians = 1` → registra en el log del kernel los paquetes con direcciones de origen imposibles ("marcianos"), típicos de suplantación.
+   - `rp_filter = 1` → filtro de ruta inversa estricto: descarta un paquete si la respuesta no saldría por la misma interfaz por la que llegó.
+   - `net.ipv4.icmp_echo_ignore_broadcasts = 1` → no responde a pings enviados a direcciones de difusión (evita ataques smurf).
+   - `net.ipv4.icmp_ignore_bogus_error_responses = 1` → no registra las respuestas ICMP de error mal formadas, para que no llenen el log.
+   - `net.ipv4.tcp_syncookies = 1` → activa las SYN cookies, que mantienen el servicio durante una inundación SYN.
+   - `kernel.randomize_va_space = 2` → ASLR completo: aleatoriza pila, bibliotecas, mmap y también el heap.
+   - `kernel.yama.ptrace_scope = 1` → un proceso solo puede depurar con `ptrace` a sus propios descendientes, no a cualquier proceso del mismo usuario.
+   - `fs.suid_dumpable = 0` → los programas setuid no generan volcados de memoria (core dumps) que podrían filtrar datos privilegiados.
+   - `sysctl --system` → carga los parámetros de todos los directorios de configuración del sistema, incluido el archivo nuevo.
+   - `| tail -n 5` → muestra solo las últimas 5 líneas de esa salida (`-n` indica cuántas).
+   - `sysctl net.ipv4.conf.all.accept_redirects kernel.randomize_va_space` → sin `=`, solo lee y muestra el valor actual de esos dos parámetros.
+
    La última orden debe devolver `= 0` y `= 2`. Son los mismos parámetros que el ejemplo `90-hardening.conf` del README, ampliados.
 9. Control "firewall basado en host configurado" (sección Host Based Firewall, con ufw). Primero la regla de SSH, después la política; si lo haces al revés y estás por SSH, te cortas:
    ```bash
@@ -199,7 +230,19 @@ Necesitas:
    sudo ufw enable
    sudo ufw status verbose
    ```
-   Salida esperada: `Status: active`, `Default: deny (incoming), allow (outgoing)` y una regla `22/tcp ALLOW IN Anywhere`. Las tres primeras reglas son las del benchmark para loopback: se acepta tráfico de `lo`, pero se rechaza cualquier paquete que diga venir de `127.0.0.1` por una interfaz real (sería falsificado).
+   - `sudo apt install -y ufw` → instala ufw (ver paso 1); ufw y todas sus órdenes requieren root.
+   - `ufw` → Uncomplicated Firewall, interfaz sencilla sobre el firewall del kernel.
+   - `allow in on lo` → acepta el tráfico entrante (`in`) por la interfaz de loopback `lo`.
+   - `deny in from 127.0.0.0/8` → descarta lo que entre con origen en la red de loopback IPv4; como `lo` ya se aceptó antes, solo afecta a paquetes que llegan por una interfaz real diciendo venir de `127.0.0.1`, que serían falsificados.
+   - `deny in from ::1` → lo mismo para la dirección de loopback IPv6.
+   - `allow 22/tcp` → permite conexiones entrantes al puerto 22 por TCP (SSH); va antes que la política para no cortarte.
+   - `default deny incoming` → política por defecto: descarta todo lo entrante que ninguna regla permita.
+   - `default allow outgoing` → política por defecto: permite todo lo saliente.
+   - `logging on` → activa el registro de paquetes bloqueados en el log del kernel (nivel `low` por defecto).
+   - `enable` → carga el firewall y lo deja activado en cada arranque.
+   - `status verbose` → muestra el estado, las políticas por defecto, el nivel de log y las reglas.
+
+   Salida esperada: `Status: active`, `Default: deny (incoming), allow (outgoing)` y una regla `22/tcp ALLOW IN Anywhere`.
 10. Control "configuración del servidor SSH" (sección SSH Server). En Ubuntu 24.04 y Debian 12, `sshd_config` incluye `sshd_config.d/*.conf` en su primera línea, y en sshd gana el primer valor leído, así que un archivo ahí manda sobre el resto. Archivo completo:
     ```bash
     sudo tee /etc/ssh/sshd_config.d/10-cis.conf <<'EOF'
@@ -223,19 +266,62 @@ Necesitas:
     sudo sshd -t && sudo systemctl reload ssh
     sudo sshd -T | grep -E '^(permitrootlogin|maxauthtries|disableforwarding|loglevel) '
     ```
-    `sshd -t` valida la sintaxis y no imprime nada si todo está bien; solo entonces se recarga. En Ubuntu y Debian el servicio se llama `ssh`, no `sshd`. Antes de cerrar tu sesión actual, abre una segunda con `ssh usuario@192.168.56.10` para confirmar que sigues entrando.
+    - `sudo tee /etc/ssh/sshd_config.d/10-cis.conf <<'EOF'` → escribe el archivo como root con el texto del heredoc (ver pasos 5 y 7); el prefijo `10-` hace que se lea antes que otros archivos del directorio.
+    - `# CIS L1 SSH server settings` → comentario; sshd lo ignora.
+    - `PermitRootLogin no` → root no puede iniciar sesión por SSH de ninguna forma.
+    - `PermitEmptyPasswords no` → rechaza el acceso a cuentas con contraseña vacía.
+    - `PermitUserEnvironment no` → ignora `~/.ssh/environment` y las opciones `environment=` de `authorized_keys`, con las que un usuario podría inyectar variables como `LD_PRELOAD`.
+    - `HostbasedAuthentication no` → desactiva la autenticación basada en la máquina de origen (estilo rhosts).
+    - `IgnoreRhosts yes` → ignora los archivos `.rhosts` y `.shosts` de los usuarios.
+    - `MaxAuthTries 4` → como máximo 4 intentos de autenticación por conexión; a partir de la mitad, los fallos se registran.
+    - `MaxSessions 10` → como máximo 10 sesiones (shell, sftp) multiplexadas dentro de una misma conexión.
+    - `MaxStartups 10:30:60` → con 10 conexiones sin autenticar, rechaza las nuevas con un 30 % de probabilidad, que sube linealmente hasta rechazar todas al llegar a 60.
+    - `LoginGraceTime 60` → corta la conexión si en 60 segundos no se ha autenticado.
+    - `ClientAliveInterval 15` → si el cliente no envía nada en 15 segundos, sshd le manda un mensaje por el canal cifrado pidiendo respuesta.
+    - `ClientAliveCountMax 3` → tras 3 de esos mensajes sin respuesta, desconecta (sesión muerta en unos 45 segundos).
+    - `DisableForwarding yes` → desactiva todo reenvío: X11, puertos TCP y sockets Unix.
+    - `LogLevel VERBOSE` → registra más detalle que el nivel por defecto `INFO`, entre otras cosas la huella de la clave usada en cada login.
+    - `Banner /etc/issue.net` → envía el contenido de ese archivo (aviso legal) antes de la autenticación.
+    - `chmod 600` → deja los permisos en lectura y escritura solo para el dueño (root), sin acceso para grupo ni otros.
+    - `/etc/ssh/sshd_config /etc/ssh/sshd_config.d/10-cis.conf` → los dos archivos a los que se aplica.
+    - `sshd -t` → modo prueba: valida la sintaxis de la configuración y las claves, y no imprime nada si todo está bien.
+    - `&&` → ejecuta lo de la derecha solo si lo de la izquierda terminó bien; así solo se recarga si la configuración es válida.
+    - `systemctl reload ssh` → pide al servicio que relea su configuración sin cortar las sesiones abiertas; en Ubuntu y Debian el servicio se llama `ssh`, no `sshd`.
+    - `sshd -T` → modo prueba extendido: valida y escribe la configuración efectiva completa, una directiva por línea en minúsculas.
+    - `grep -E '^(permitrootlogin|maxauthtries|disableforwarding|loglevel) '` → deja solo las líneas que empiezan (`^`) por una de esas directivas seguida de espacio; `-E` permite usar el grupo `( | )` de alternativas.
+
+    Antes de cerrar tu sesión actual, abre una segunda con `ssh usuario@192.168.56.10` para confirmar que sigues entrando.
 11. Control "permisos de archivos de cuentas" (sección System File Permissions). Comprueba y, si hiciera falta, corrige:
     ```bash
     stat -c '%a %U:%G %n' /etc/passwd /etc/group /etc/shadow /etc/gshadow
     ```
-    Lo esperado es `644 root:root` para `passwd` y `group`, y `640 root:shadow` (o más restrictivo) para `shadow` y `gshadow`. Si alguno no cuadra: `sudo chmod 640 /etc/shadow && sudo chown root:shadow /etc/shadow`.
+    - `stat` → muestra los metadatos de un archivo.
+    - `-c '...'` → usa el formato indicado en lugar de la salida completa.
+    - `%a` → permisos en octal (por ejemplo `644`).
+    - `%U` → nombre del usuario dueño.
+    - `%G` → nombre del grupo dueño.
+    - `%n` → nombre del archivo.
+    - `/etc/passwd /etc/group /etc/shadow /etc/gshadow` → los cuatro archivos de cuentas y grupos que se revisan.
+
+    Lo esperado es `644 root:root` para `passwd` y `group`, y `640 root:shadow` (o más restrictivo) para `shadow` y `gshadow`. Si alguno no cuadra: `sudo chmod 640 /etc/shadow && sudo chown root:shadow /etc/shadow` (`chmod 640` deja lectura y escritura al dueño y solo lectura al grupo; `chown root:shadow` pone como dueño a `root` y como grupo a `shadow`).
 12. Control "AppArmor activo" y "parches al día" (secciones Mandatory Access Control y Software Updates):
     ```bash
     sudo aa-status | head -n 4
     sudo apt update && sudo apt full-upgrade -y
     ls /var/run/reboot-required 2>/dev/null && sudo reboot
     ```
-    `aa-status` debe decir `apparmor module is loaded.` y un número de perfiles cargados. Si existe `/var/run/reboot-required`, el parche del kernel no protege hasta reiniciar, igual que explica la sección Patching.
+    - `sudo` → (ver paso 1); `aa-status` necesita root para leer el estado de AppArmor.
+    - `aa-status` → muestra si el módulo AppArmor está cargado y cuántos perfiles hay en modo enforce y complain; debe decir `apparmor module is loaded.` y un número de perfiles cargados.
+    - `| head -n 4` → muestra solo las 4 primeras líneas (`-n` indica cuántas).
+    - `apt update` → (ver paso 1).
+    - `&&` → (ver paso 10).
+    - `apt full-upgrade` → instala todas las actualizaciones disponibles y, si hace falta, instala o quita paquetes para completarlas (por ejemplo un kernel nuevo).
+    - `-y` → (ver paso 1).
+    - `ls /var/run/reboot-required` → lista ese archivo, que Ubuntu crea cuando una actualización exige reiniciar; si no existe, `ls` falla.
+    - `2>/dev/null` → descarta el mensaje de error de `ls` cuando el archivo no existe.
+    - `sudo reboot` → reinicia el sistema; solo se ejecuta si el archivo existe, gracias a `&&`.
+
+    Si existe `/var/run/reboot-required`, el parche del kernel no protege hasta reiniciar, igual que explica la sección Patching.
 13. Toma la foto final y vuelve a escanear desde el anfitrión:
     ```bash
     sudo ss -tlnp | tee ~/hardening/despues-tcp.txt
@@ -243,16 +329,24 @@ Necesitas:
     ss -H -tln | wc -l
     diff ~/hardening/antes-tcp.txt ~/hardening/despues-tcp.txt
     ```
+    - `sudo ss -tlnp | tee ...`, `sudo ss -ulnp | tee ...`, `ss -H -tln | wc -l` → (ver paso 2), ahora guardando en `despues-tcp.txt` y `despues-udp.txt`.
+    - `diff` → compara dos archivos línea a línea y muestra solo las diferencias: las líneas con `<` estaban solo antes y las de `>` solo después.
+    - `~/hardening/antes-tcp.txt ~/hardening/despues-tcp.txt` → el archivo antiguo y el nuevo.
     ```bash
     nmap -sT -p- 192.168.56.10 -oN despues-nmap.txt   # en el anfitrión
     ```
-    En la VM deberían quedar solo el 22 y los 53 de `systemd-resolved` en loopback. Desde fuera, nmap debe mostrar únicamente `22/tcp open ssh`; si pruebas un puerto concreto que antes estaba abierto (`nmap -sT -p 21,111 192.168.56.10`) aparecerá `filtered`, porque ufw descarta sin responder.
+    - `nmap -sT -p- 192.168.56.10` → (ver paso 3).
+    - `-oN despues-nmap.txt` → (ver paso 3), ahora con el archivo "después".
+    En la VM deberían quedar solo el 22 y los 53 de `systemd-resolved` en loopback. Desde fuera, nmap debe mostrar únicamente `22/tcp open ssh`; si pruebas un puerto concreto que antes estaba abierto (`nmap -sT -p 21,111 192.168.56.10`, donde `-p 21,111` limita el escaneo a esos dos puertos) aparecerá `filtered`, porque ufw descarta sin responder.
 14. Mide otra vez con Lynis y compara:
     ```bash
     sudo lynis audit system --quick | tee ~/hardening/lynis-despues.txt
     sudo grep hardening_index /var/log/lynis-report.dat
     ```
-    Copia a `cambios.txt` las dos cifras, el número de puertos TCP antes y después, y las primeras tres sugerencias que Lynis siga dando (`grep suggestion /var/log/lynis-report.dat | head -n 3`): son tu lista de pendientes.
+    - `sudo lynis audit system --quick | tee ...` → (ver paso 4), ahora guardando en `lynis-despues.txt`.
+    - `sudo grep hardening_index /var/log/lynis-report.dat` → (ver paso 4).
+
+    Copia a `cambios.txt` las dos cifras, el número de puertos TCP antes y después, y las primeras tres sugerencias que Lynis siga dando (`sudo grep suggestion /var/log/lynis-report.dat | head -n 3`: las líneas con `suggestion` del informe, quedándote con las 3 primeras): son tu lista de pendientes.
 
 ### Resultado esperado
 
@@ -289,11 +383,29 @@ Necesitas:
    nmcli -f DEVICE,TYPE,STATE device
    ip route show default
    ```
+   - `nmcli` → cliente de línea de comandos de NetworkManager.
+   - `-f DEVICE,TYPE,STATE` → (`--fields`) muestra solo esas columnas: nombre de la interfaz, tipo y estado.
+   - `device` → objeto `device`: sin más argumentos, lista las interfaces de red.
+   - `ip` → (ver ejercicio 1).
+   - `route show` → muestra la tabla de rutas.
+   - `default` → limita la salida a la ruta por defecto, la que apunta al router.
+
    La interfaz es la de tipo `wifi` (por ejemplo `wlan0` o `wlp2s0`); la IP del router es la que va tras `via` (por ejemplo `default via 192.168.1.1 dev wlan0`). En Windows, `ipconfig` y mira "Puerta de enlace predeterminada".
 2. Mira qué seguridad anuncia tu red, sin tocar todavía el panel:
    ```bash
    nmcli -f IN-USE,SSID,BSSID,CHAN,SECURITY,WPA-FLAGS,RSN-FLAGS device wifi list --rescan yes
    ```
+   - `nmcli -f` → (ver paso 1), ahora con las columnas siguientes.
+   - `IN-USE` → marca con `*` la red a la que estás conectado.
+   - `SSID` → nombre de la red.
+   - `BSSID` → dirección MAC del radio que emite.
+   - `CHAN` → canal Wi-Fi.
+   - `SECURITY` → resumen de la seguridad anunciada (WEP, WPA1, WPA2, WPA3).
+   - `WPA-FLAGS` → cifrados y autenticación anunciados en el elemento WPA (versión 1).
+   - `RSN-FLAGS` → cifrados y autenticación anunciados en el elemento RSN (WPA2 y WPA3).
+   - `device wifi list` → lista los puntos de acceso Wi-Fi visibles.
+   - `--rescan yes` → fuerza un escaneo nuevo en lugar de usar la lista guardada.
+
    Cada fila es un BSSID (un radio del router); muchos routers tienen uno en 2,4 GHz y otro en 5 GHz con el mismo nombre, y pueden tener configuraciones distintas: revisa todas las filas de tu SSID. Cómo leer las columnas:
    ```
    SECURITY   WPA-FLAGS                 RSN-FLAGS
@@ -307,6 +419,22 @@ Necesitas:
    ```bash
    sudo iw dev wlan0 scan ssid "MiRed" | grep -E '^BSS|SSID:|RSN:|WPA:|WPS:|Pairwise ciphers|Authentication suites|Protected Setup State|AP setup locked'
    ```
+   - `sudo` → (ver ejercicio 1); lanzar un escaneo con `iw` requiere root.
+   - `iw` → herramienta para consultar y configurar interfaces inalámbricas del kernel (nl80211).
+   - `dev wlan0` → actúa sobre la interfaz `wlan0`; pon la tuya.
+   - `scan` → lanza un escaneo y muestra todo lo que anuncia cada BSS, incluidos los elementos RSN, WPA y WPS.
+   - `ssid "MiRed"` → escaneo dirigido solo a ese nombre de red; las comillas permiten nombres con espacios.
+   - `grep -E '...'` → deja solo las líneas que contengan alguna de las alternativas separadas por `|`; `-E` activa las expresiones regulares extendidas.
+   - `^BSS` → línea que empieza (`^`) por `BSS`: inicio de cada punto de acceso.
+   - `SSID:` → nombre de la red.
+   - `RSN:` → bloque de seguridad WPA2/WPA3.
+   - `WPA:` → bloque de seguridad WPA (versión 1).
+   - `WPS:` → bloque WPS: si aparece, el WPS está activo.
+   - `Pairwise ciphers` → cifrados para el tráfico unicast (CCMP es AES; TKIP es el antiguo).
+   - `Authentication suites` → método de autenticación (PSK para WPA2-Personal, SAE para WPA3-Personal).
+   - `Protected Setup State` → estado de configuración WPS.
+   - `AP setup locked` → indica si el router bloqueó el PIN WPS tras demasiados intentos.
+
    Fragmento de un router mal configurado:
    ```
    BSS a4:2b:b0:11:22:33(on wlan0)
@@ -330,11 +458,19 @@ Necesitas:
    sudo iw dev wlan0 scan ssid "MiRed" | grep -E '^BSS|SSID:|RSN:|WPA:|WPS:|Pairwise ciphers|Authentication suites' | tee despues-wifi.txt
    nmcli -g 802-11-wireless-security.key-mgmt connection show "MiRed"
    ```
-   Ahora no debe salir ninguna línea `WPS:`, `Pairwise ciphers` debe decir solo `CCMP`, y la última orden indica cómo se autentica tu propio equipo: `sae` (WPA3) o `wpa-psk` (WPA2). Si NetworkManager guardó la red como `wpa-psk` pero el router ya ofrece SAE, borra la conexión y vuelve a unirte para que negocie WPA3: `nmcli connection delete "MiRed"` y `nmcli --ask device wifi connect "MiRed"`. En Windows, `netsh wlan show interfaces` muestra en "Autenticación" `WPA3-Personal` o `WPA2-Personal` y en "Cifrado" `CCMP`.
+   - `nmcli -f IN-USE,SSID,BSSID,SECURITY,WPA-FLAGS,RSN-FLAGS device wifi list --rescan yes` → (ver paso 2), sin la columna `CHAN`.
+   - `sudo iw dev wlan0 scan ssid "MiRed" | grep -E '...'` → (ver paso 3), con un patrón más corto.
+   - `| tee despues-wifi.txt` → muestra la salida y la guarda en ese archivo (ver ejercicio 1).
+   - `-g 802-11-wireless-security.key-mgmt` → (`--get-values`) imprime solo el valor de ese campo, sin nombre ni formato; `key-mgmt` es el método de gestión de claves de la conexión guardada.
+   - `connection show "MiRed"` → muestra la configuración del perfil de conexión con ese nombre.
+
+   Ahora no debe salir ninguna línea `WPS:`, `Pairwise ciphers` debe decir solo `CCMP`, y la última orden indica cómo se autentica tu propio equipo: `sae` (WPA3) o `wpa-psk` (WPA2). Si NetworkManager guardó la red como `wpa-psk` pero el router ya ofrece SAE, borra la conexión y vuelve a unirte para que negocie WPA3: `nmcli connection delete "MiRed"` (borra el perfil guardado) y `nmcli --ask device wifi connect "MiRed"` (`device wifi connect` se une a esa red y `--ask` te pide por teclado la contraseña que falta). En Windows, `netsh wlan show interfaces` (consulta el estado de las interfaces inalámbricas) muestra en "Autenticación" `WPA3-Personal` o `WPA2-Personal` y en "Cifrado" `CCMP`.
 6. Compara las dos capturas y anótalo:
    ```bash
    diff antes-wifi.txt despues-wifi.txt
    ```
+   - `diff` → (ver ejercicio 1).
+   - `antes-wifi.txt despues-wifi.txt` → la captura del paso 3 y la del paso 5.
    Debe verse desaparecer el bloque `WPS:` y `TKIP`, y aparecer `SAE` en `Authentication suites` si activaste WPA3.
 
 ### Resultado esperado

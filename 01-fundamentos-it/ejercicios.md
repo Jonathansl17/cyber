@@ -4,6 +4,10 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
+Debajo de cada bloque de comandos hay una lista que explica el comando y todas sus
+opciones y argumentos. Cuando un comando y una opción ya se explicaron antes en este
+mismo archivo, se indica con "(ver ejercicio N)".
+
 ## Ejercicio 1: Diagnostica un fallo de DNS con el método por capas
 
 Nodo: [OS-Independent Troubleshooting](README.md#os-independent-troubleshooting) y la
@@ -24,6 +28,12 @@ en tu propia VM; no sales a equipos ajenos.
    ```bash
    ip route | grep default
    ```
+   - `ip` → herramienta estándar de Linux para ver y configurar red (interfaces, rutas, vecinos).
+   - `route` → subcomando de `ip` que muestra la tabla de rutas.
+   - `|` → tubería: envía la salida de `ip route` como entrada de `grep`.
+   - `grep` → filtra líneas de texto por un patrón.
+   - `default` → patrón que busca `grep`: deja solo la línea de la ruta por defecto.
+
    Verás algo como `default via 192.168.1.1 dev eth0`. Guarda esa IP del gateway: la
    usarás en el paso 4.
 
@@ -32,7 +42,11 @@ en tu propia VM; no sales a equipos ajenos.
    ```bash
    ping -c 2 google.com
    ```
-   Debe responder con líneas `64 bytes from ...`. Si ya falla aquí, arrégla la red
+   - `ping` → envía paquetes ICMP de eco a un destino y mide si responde y cuánto tarda.
+   - `-c 2` → count: envía solo 2 paquetes y termina (sin esto, ping seguiría indefinidamente).
+   - `google.com` → el destino; al ser un nombre, obliga al sistema a resolverlo por DNS.
+
+   Debe responder con líneas `64 bytes from ...`. Si ya falla aquí, arregla la red
    antes de seguir.
 
 3. Rompe el DNS a propósito: pon un servidor DNS que no existe. En una VM con
@@ -41,6 +55,15 @@ en tu propia VM; no sales a equipos ajenos.
    sudo cp /etc/resolv.conf /etc/resolv.conf.bak
    echo "nameserver 192.0.2.53" | sudo tee /etc/resolv.conf
    ```
+   - `sudo` → ejecuta el comando como root; hace falta para escribir en `/etc`.
+   - `cp` → copia un archivo.
+   - `/etc/resolv.conf` → primer argumento de `cp`: el archivo de origen (la config DNS actual).
+   - `/etc/resolv.conf.bak` → segundo argumento de `cp`: el destino, una copia de respaldo.
+   - `echo "nameserver 192.0.2.53"` → imprime ese texto (una línea de config DNS válida).
+   - `|` → tubería (ver ejercicio 1).
+   - `tee` → escribe su entrada en un archivo y además la muestra; con `sudo` puede escribir en archivos de root.
+   - `/etc/resolv.conf` → argumento de `tee`: el archivo que se sobrescribe con la línea nueva.
+
    `192.0.2.53` es una dirección del bloque de documentación (RFC 5737): no responde
    nunca, así que simula un DNS caído. En VMs con `systemd-resolved` o NetworkManager
    que sobrescriben el archivo, usa en su lugar su configuración (por ejemplo
@@ -50,6 +73,9 @@ en tu propia VM; no sales a equipos ajenos.
    ```bash
    ping -c 2 192.168.1.1
    ```
+   - `ping -c 2` → ver ejercicio 1 (paso 2).
+   - `192.168.1.1` → el destino: tu gateway, dado como IP, así que esta prueba no usa DNS.
+
    Si responde, la capa física y la red local están bien: el cable, la tarjeta y el
    router de tu red no son el problema. Una variable descartada.
 
@@ -57,6 +83,9 @@ en tu propia VM; no sales a equipos ajenos.
    ```bash
    ping -c 2 8.8.8.8
    ```
+   - `ping -c 2` → ver ejercicio 1 (paso 2).
+   - `8.8.8.8` → el destino: el DNS público de Google dado como IP; prueba Internet sin resolver nombres.
+
    Si responde, el enrutamiento y el proveedor funcionan: el paquete sale de tu red y
    vuelve. Otra variable descartada. Fíjate en que esta prueba no toca el DNS, porque
    `8.8.8.8` ya es una IP.
@@ -65,6 +94,8 @@ en tu propia VM; no sales a equipos ajenos.
    ```bash
    ping -c 2 google.com
    ```
+   - `ping -c 2 google.com` → ver ejercicio 1 (paso 2); aquí se repite a propósito para ver que ahora falla.
+
    Ahora debe fallar con `Temporary failure in name resolution` o
    `Name or service not known`. Como las dos pruebas anteriores salieron bien, la única
    causa que queda es el DNS. Eso es divide y vencerás: la prueba del paso 5 ya demostró
@@ -75,6 +106,12 @@ en tu propia VM; no sales a equipos ajenos.
    sudo mv /etc/resolv.conf.bak /etc/resolv.conf
    ping -c 2 google.com
    ```
+   - `sudo` → ver ejercicio 1 (paso 3).
+   - `mv` → mueve o renombra un archivo; aquí devuelve el respaldo a su sitio.
+   - `/etc/resolv.conf.bak` → primer argumento de `mv`: el origen (el respaldo).
+   - `/etc/resolv.conf` → segundo argumento de `mv`: el destino (se restaura la config buena).
+   - `ping -c 2 google.com` → ver ejercicio 1 (paso 2).
+
    El último `ping` debe volver a responder.
 
 ### Resultado esperado
@@ -117,9 +154,14 @@ Instalación de oletools (la forma recomendada, aislada del sistema):
 ```bash
 pipx install oletools
 ```
+- `pipx` → instala aplicaciones de Python en entornos aislados, sin tocar el Python del sistema.
+- `install` → subcomando de `pipx`: instala el paquete indicado.
+- `oletools` → el paquete a instalar; incluye `olevba` y otras utilidades de análisis de documentos.
+
 En Debian/Ubuntu, si no tienes `pipx`: `sudo apt install pipx`. En Arch:
 `sudo pacman -S python-pipx`. Alternativa directa: `python3 -m pip install --user
-oletools`. Comprueba que quedó: `olevba --version`.
+oletools`. Comprueba que quedó con `olevba --version` (la opción `--version` solo imprime
+la versión y sale).
 
 ### Pasos
 
@@ -134,8 +176,9 @@ oletools`. Comprueba que quedó: `olevba --version`.
        MsgBox "Documento de laboratorio: macro de prueba inofensiva"
    End Sub
    ```
-   `AutoOpen` es el nombre que un documento de Word ejecuta solo al abrirse; `MsgBox`
-   solo muestra un cuadro de texto, no toca el sistema.
+   - `Sub AutoOpen()` → declara una subrutina (macro) llamada `AutoOpen`; ese nombre es el que Word ejecuta solo al abrir el documento.
+   - `MsgBox "..."` → instrucción que muestra un cuadro de mensaje con ese texto; no toca el sistema.
+   - `End Sub` → cierra la definición de la subrutina.
 
 3. Cierra el IDE y vuelve al documento. Escribe cualquier texto en la página (por
    ejemplo "factura de prueba") para que no quede vacío.
@@ -149,9 +192,11 @@ oletools`. Comprueba que quedó: `olevba --version`.
    > Si tu versión de LibreOffice no escribe la macro Basic dentro del `.docm` al
    > guardar (es una limitación conocida: el Basic creado en LibreOffice no siempre se
    > exporta al formato de Microsoft), usa un `.docm` de ejemplo público con macro ya
-   > incrustada del repositorio de oletools para el análisis. Descárgalo en la VM con
-   > `curl -L -o prueba.docm https://github.com/decalage2/oletools/raw/master/tests/test-data/oleform/oleform-PR314.docm`.
-   > El objetivo del ejercicio es leer la salida de `olevba`, y ese archivo sirve igual.
+   > incrustada del repositorio de oletools. Descárgalo con
+   > `curl -L -o prueba.docm https://github.com/decalage2/oletools/raw/master/tests/test-data/oleform/oleform-PR314.docm`,
+   > donde `curl` descarga una URL, `-L` sigue las redirecciones del servidor y
+   > `-o prueba.docm` guarda el resultado en ese archivo. El objetivo del ejercicio es
+   > leer la salida de `olevba`, y ese archivo sirve igual.
 
 5. Crea también un documento equivalente sin macros para comparar. En Writer, archivo
    nuevo, escribe texto y guárdalo como `limpio.docx` (tipo `Word 2007-365 (.docx)`).
@@ -161,6 +206,9 @@ oletools`. Comprueba que quedó: `olevba --version`.
    ```bash
    olevba prueba.docm
    ```
+   - `olevba` → extrae y analiza las macros VBA de un documento de oficina sin ejecutarlas.
+   - `prueba.docm` → el archivo a analizar.
+
    Busca en la salida tres cosas: el bloque `VBA MACRO` con el código, la columna
    `Type` con una fila `AutoExec` y, en Keyword, `AutoOpen`. Verás algo parecido a:
    ```
@@ -177,6 +225,9 @@ oletools`. Comprueba que quedó: `olevba --version`.
    ```bash
    olevba limpio.docx
    ```
+   - `olevba` → ver ejercicio 2 (paso 6).
+   - `limpio.docx` → el archivo a analizar; al no tener macros, la salida lo dirá.
+
    La salida debe terminar en `No VBA or XLM macros found.`: no hay nada que ejecutar.
 
 ### Resultado esperado
@@ -196,8 +247,9 @@ práctica, un programa que se ejecuta al abrirlo, y el segundo son solo datos.
 
 ### Limpieza
 
-Borra los archivos de prueba cuando termines: `rm prueba.docm limpio.docx`. Como todo se
-hizo con una macro que solo muestra un mensaje, no queda nada instalado ni en ejecución.
+Borra los archivos de prueba cuando termines: `rm prueba.docm limpio.docx` (`rm` borra
+los archivos que recibe como argumentos). Como todo se hizo con una macro que solo
+muestra un mensaje, no queda nada instalado ni en ejecución.
 
 ## Ejercicio 3: Rastrea la ruta a tres destinos con traceroute
 
@@ -217,6 +269,8 @@ traceroute` en Arch); en Windows ya viene `tracert`. Tiempo estimado: 15 minutos
    ```bash
    ip route | grep default
    ```
+   - `ip route | grep default` → ver ejercicio 1 (paso 1).
+
    Anota la IP que aparece tras `via` (por ejemplo `192.168.1.1`).
 
 2. Rastrea el primer destino, un DNS público. La opción `-n` muestra las IP sin
@@ -224,19 +278,28 @@ traceroute` en Arch); en Windows ya viene `tracert`. Tiempo estimado: 15 minutos
    ```bash
    traceroute -n 1.1.1.1
    ```
-   En Windows sería `tracert -d 1.1.1.1`. Cada línea es un salto: número, IP del router
-   y tres tiempos de ida y vuelta en milisegundos.
+   - `traceroute` → muestra cada router (salto) por el que pasa un paquete hasta el destino.
+   - `-n` → numeric: muestra las IP tal cual, sin convertirlas a nombres por DNS.
+   - `1.1.1.1` → el destino a rastrear (el DNS público de Cloudflare).
+
+   En Windows sería `tracert -d 1.1.1.1` (`-d` es el equivalente de `-n`: no resuelve
+   nombres). Cada línea es un salto: número, IP del router y tres tiempos de ida y vuelta
+   en milisegundos.
 
 3. Rastrea un segundo destino distinto.
    ```bash
    traceroute -n 8.8.8.8
    ```
+   - `traceroute -n` → ver ejercicio 3 (paso 2); solo cambia el destino.
+   - `8.8.8.8` → el destino (DNS público de Google).
 
-4. Rastrea un tercero, por ejemplo un servidor web conocido por su IP (puedes usar
-   `9.9.9.9`, el DNS de Quad9, para no depender de resolver un nombre).
+4. Rastrea un tercero, por ejemplo otro DNS público conocido por su IP, para no depender
+   de resolver un nombre.
    ```bash
    traceroute -n 9.9.9.9
    ```
+   - `traceroute -n` → ver ejercicio 3 (paso 2); solo cambia el destino.
+   - `9.9.9.9` → el destino (DNS público de Quad9).
 
 5. En las tres salidas, identifica las tres cosas. El salto 1 es siempre tu puerta de
    enlace (la IP del paso 1). El salto 2 o 3, cuando deja de ser una dirección privada

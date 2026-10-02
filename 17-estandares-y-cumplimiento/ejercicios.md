@@ -86,6 +86,10 @@ Greenbone tarda). Todo en red host-only, aislado de tu red doméstica.
    ip -brief address        # anota la IP host-only de cada VM, p. ej. 192.168.56.0/24
    ping -c1 192.168.56.10   # desde la VM de Greenbone hacia la objetivo
    ```
+   - `ip -brief address` → lista las direcciones IP; `-brief` las muestra en formato resumido (una línea por interfaz) y `address` es el objeto consultado.
+   - `ping` → envía paquetes ICMP para comprobar si un host responde.
+   - `-c1` → envía un solo paquete y termina (count 1).
+   - `192.168.56.10` → la IP de destino.
 2. Levanta Greenbone Community Edition con los contenedores oficiales (lo dicta la
    [documentación de Greenbone](https://greenbone.github.io/docs/latest/22.4/container/)):
    ```bash
@@ -95,6 +99,19 @@ Greenbone tarda). Todo en red host-only, aislado de tu red doméstica.
    docker compose -f docker-compose.yml -p greenbone-community-edition pull
    docker compose -f docker-compose.yml -p greenbone-community-edition up -d
    ```
+   - `mkdir ~/greenbone` → crea el directorio de trabajo.
+   - `&& cd ~/greenbone` → si lo anterior tuvo éxito, entra en él.
+   - `curl` → descarga un recurso por HTTP(S).
+   - `-f` → falla sin producir salida ante errores HTTP del servidor (fail).
+   - `-L` → sigue las redirecciones.
+   - la URL → el `docker-compose` oficial de Greenbone.
+   - `-o docker-compose.yml` → guarda la descarga con ese nombre.
+   - `docker compose` → orquesta los contenedores definidos en un archivo compose.
+   - `-f docker-compose.yml` → usa ese archivo de compose.
+   - `-p greenbone-community-edition` → nombre de proyecto con el que se agrupan los contenedores.
+   - `pull` → descarga las imágenes de los contenedores.
+   - `up -d` → crea y arranca los contenedores; `-d` los deja corriendo en segundo plano (detached).
+
    Espera a que los feeds terminen de sincronizar (`docker compose ... logs -f` deja de
    mostrar descargas); puede tardar 30-60 min la primera vez.
 3. Entra a la interfaz web en `https://127.0.0.1:9392` (usuario `admin`; la contraseña
@@ -133,6 +150,11 @@ justificado.
 cd ~/greenbone
 docker compose -f docker-compose.yml -p greenbone-community-edition down -v
 ```
+
+- `docker compose` con `-f docker-compose.yml` y `-p greenbone-community-edition` → (ver paso 2).
+- `down` → detiene y elimina los contenedores del proyecto.
+- `-v` → elimina también los volúmenes asociados (borra los datos persistidos).
+
 Apaga o elimina las VMs del laboratorio. La red host-only puede quedarse; no da acceso
 a internet.
 
@@ -155,6 +177,10 @@ de ataque; la VM objetivo sigue aislada.
    ```bash
    nmap --script-help vulners | head
    ```
+   - `nmap` → escáner de red y de puertos.
+   - `--script-help vulners` → muestra la descripción y ayuda del script NSE `vulners` sin ejecutarlo.
+   - `| head` → deja solo las primeras líneas de la salida.
+
    Si no aparece, instálalo con: `sudo nmap --script-updatedb` tras copiar
    `vulners.nse` desde su [repositorio](https://github.com/vulnersCom/nmap-vulners),
    o actualiza Nmap. En Debian/Ubuntu: `sudo apt install nmap`; en Arch:
@@ -163,12 +189,20 @@ de ataque; la VM objetivo sigue aislada.
    ```bash
    nmap -sV --script vulners -p- 192.168.56.10
    ```
+   - `nmap` → escáner de red (ver paso 1).
+   - `-sV` → detecta la versión de cada servicio abierto.
+   - `--script vulners` → ejecuta el script `vulners`, que lista los CVE asociados a cada versión con su CVSS.
+   - `-p-` → escanea los 65535 puertos.
+   - `192.168.56.10` → la IP del objetivo.
+
    `-sV` detecta la versión de cada servicio y `--script vulners` lista los CVE
    asociados a esa versión con su CVSS, igual que el ejemplo del README.
 3. Copia la salida a un archivo de trabajo:
    ```bash
    nmap -sV --script vulners -oN vulners.txt -p- 192.168.56.10
    ```
+   - `-sV`, `--script vulners`, `-p-` y la IP → (ver paso 2).
+   - `-oN vulners.txt` → guarda la salida en formato normal (legible) en ese archivo.
 4. Para cada servicio con hallazgos, decide el tratamiento y escríbelo en una tabla de
    texto (servicio, CVE principal, decisión, motivo):
    - Corregir: hay actualización disponible y el servicio importa. Ej.: subir la versión
@@ -212,19 +246,31 @@ nada del sistema: Lynis solo audita.
    ```bash
    lynis show version
    ```
+   - `lynis` → herramienta de auditoría de hardening del sistema.
+   - `show version` → imprime la versión instalada de Lynis.
 2. Ejecuta la auditoría del sistema (Lynis recomienda correr como root para ver todo):
    ```bash
    sudo lynis audit system
    ```
+   - `sudo` → ejecuta como root para que Lynis pueda leerlo todo.
+   - `lynis audit system` → lanza la auditoría completa del sistema local (`audit` es la acción y `system` el perfil).
 3. Al terminar, localiza el índice de endurecimiento en la sección final:
    ```bash
    sudo grep -i "hardening index" /var/log/lynis.log
    ```
+   - `grep` → busca un patrón en un archivo.
+   - `-i` → ignora mayúsculas y minúsculas.
+   - `"hardening index"` → el texto a buscar.
+   - `/var/log/lynis.log` → el log donde Lynis dejó el resultado.
+
    Es un número de 0 a 100; anótalo como tu línea base.
 4. Extrae las sugerencias (líneas `Suggestion[]`) a un archivo:
    ```bash
    sudo grep "Suggestion\[\]" /var/log/lynis-report.dat > sugerencias.txt
    ```
+   - `grep "Suggestion\[\]"` → deja las líneas que contienen `Suggestion[]`; las barras `\[\]` escapan los corchetes para tratarlos como texto literal, no como patrón.
+   - `/var/log/lynis-report.dat` → el archivo de datos del informe de Lynis.
+   - `> sugerencias.txt` → guarda las líneas encontradas en ese archivo.
 5. Elige cinco sugerencias (por ejemplo, sobre SSH, módulos del kernel, parámetros de
    `sysctl`, permisos de archivos o banners). Para cada una, busca en el PDF del CIS
    Benchmark de tu distribución la recomendación equivalente y anota: número del
@@ -234,6 +280,9 @@ nada del sistema: Lynis solo audita.
    ```bash
    sudo sshd -T | grep -i permitrootlogin
    ```
+   - `sshd -T` → imprime la configuración efectiva del servidor SSH (modo test extendido) sin arrancar el servicio.
+   - `| grep -i permitrootlogin` → deja solo la línea de esa directiva; `-i` ignora mayúsculas y minúsculas.
+
    Si devuelve `permitrootlogin yes`, no cumple el benchmark; `no` cumple.
 
 ### Resultado esperado

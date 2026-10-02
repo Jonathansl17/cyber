@@ -4,6 +4,10 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
+Debajo de cada bloque de comandos hay una lista que explica el comando y todas sus
+opciones y argumentos. Cuando un comando y una opción ya se explicaron antes en este
+mismo archivo, se indica con "(ver ejercicio N)".
+
 El Ejercicio 1 se hace en Cisco Packet Tracer (simulador gratuito); es largo y está
 dividido en partes. Los Ejercicios 2 y 3 se hacen en tu propio equipo o en VMs.
 
@@ -74,7 +78,33 @@ PC1 = `192.168.1.10`, PC2 = `192.168.1.11`, máscara `255.255.255.0`, gateway
 `192.168.1.1`. Srv = `192.168.4.10`, máscara `255.255.255.0`, gateway `192.168.4.1`. Esos
 datos se ponen en cada equipo en `Desktop` → `IP Configuration`.
 
-### Parte C: configuración IOS de los routers
+### Parte C: configuración del switch
+
+Abre el switch, pestaña `CLI`, y pega:
+```
+enable
+configure terminal
+interface FastEthernet0/1
+ no shutdown
+interface FastEthernet0/2
+ no shutdown
+interface GigabitEthernet0/1
+ no shutdown
+end
+write memory
+```
+- `enable` → entra al modo privilegiado (EXEC), necesario para ver y configurar.
+- `configure terminal` → entra al modo de configuración global.
+- `interface FastEthernet0/1` → entra a configurar esa interfaz concreta.
+- `no shutdown` → activa la interfaz (por defecto podría estar administrativamente apagada).
+- `interface GigabitEthernet0/1` → entra a configurar el puerto de subida al router.
+- `end` → vuelve al modo privilegiado desde cualquier submodo.
+- `write memory` → guarda la configuración en marcha a la de arranque (persiste tras reiniciar).
+
+El switch 2960 deja todos sus puertos en la VLAN 1 por defecto, y eso basta para la
+estrella; solo nos aseguramos de que los puertos estén activos.
+
+### Parte D: configuración IOS de los routers
 
 Abre cada router, pestaña `CLI`, y pega su bloque. En los extremos serie marcados DCE se
 pone `clock rate 64000`; en el otro extremo no. Se usa OSPF para que todos los routers
@@ -109,6 +139,16 @@ router ospf 1
 end
 write memory
 ```
+- `enable`, `configure terminal`, `interface ...`, `no shutdown`, `end`, `write memory` → ver Parte C.
+- `hostname R1` → fija el nombre del router (aparece en el prompt).
+- `ip address 192.168.1.1 255.255.255.0` → asigna a la interfaz una IP (primer argumento) y su máscara (segundo argumento).
+- `interface Serial0/0/0` → entra a configurar un puerto serie de la malla.
+- `clock rate 64000` → en el extremo DCE del enlace serie, marca el ritmo del reloj en bits por segundo; el extremo DTE no lo lleva.
+- `ip address 10.0.12.1 255.255.255.252` → IP y máscara `/30` del enlace punto a punto.
+- `router ospf 1` → entra a configurar OSPF; el `1` es el identificador local del proceso (solo tiene sentido dentro de este router).
+- `router-id 1.1.1.1` → fija el identificador único del router dentro de OSPF.
+- `network 192.168.1.0 0.0.0.255 area 0` → anuncia en OSPF las interfaces cuya IP cae en esa red; `0.0.0.255` es la wildcard (máscara invertida de `/24`) y `area 0` es el área troncal.
+- `network 10.0.12.0 0.0.0.3 area 0` → igual para un enlace `/30`; `0.0.0.3` es la wildcard de `/30`.
 
 R2:
 ```
@@ -134,6 +174,7 @@ router ospf 1
 end
 write memory
 ```
+- Mismos comandos IOS que R1 (ver arriba). Aquí cambian solo el `hostname`, las IP de cada interfaz, el `router-id` y los `network` de OSPF. En `Serial0/0/0` no hay `clock rate` porque ese extremo es DTE (el DCE es R1).
 
 R3:
 ```
@@ -158,6 +199,7 @@ router ospf 1
 end
 write memory
 ```
+- Mismos comandos IOS que R1 (ver arriba). Solo `Serial0/1/0` lleva `clock rate` porque es el único extremo DCE de R3.
 
 R4 (tiene la LAN del servidor):
 ```
@@ -185,33 +227,37 @@ router ospf 1
 end
 write memory
 ```
+- Mismos comandos IOS que R1 (ver arriba). R4 es DTE en sus tres enlaces serie, así que ninguno lleva `clock rate`.
 
-El switch 2960 no necesita configuración: todos sus puertos están en la VLAN 1 por
-defecto y eso basta para la estrella.
-
-### Parte D: comprobar conectividad
+### Parte E: comprobar conectividad
 
 1. Espera a que OSPF converja (las interfaces serie pasan de triángulos ámbar a verdes
    en unos segundos). En R1, confirma que aprendió las redes del resto:
    ```
-   R1# show ip route ospf
+   show ip route ospf
    ```
-   Debes ver rutas marcadas con `O` hacia `192.168.4.0/24` y las redes de enlace que no
-   son directas.
+   - `show ip route` → muestra la tabla de rutas del router.
+   - `ospf` → filtra la tabla para ver solo las rutas aprendidas por OSPF (marcadas con `O`).
+
+   Debes ver rutas `O` hacia `192.168.4.0/24` y las redes de enlace que no son directas.
 
 2. Comprueba las vecindades OSPF en R1: deben aparecer R2, R3 y R4 en estado `FULL`.
    ```
-   R1# show ip ospf neighbor
+   show ip ospf neighbor
    ```
+   - `show ip ospf neighbor` → lista los routers vecinos OSPF y el estado de la relación; `FULL` significa adyacencia completa.
 
 3. Desde PC1, abre `Desktop` → `Command Prompt` y haz ping al servidor del otro extremo:
    ```
-   PC> ping 192.168.4.10
+   ping 192.168.4.10
    ```
+   - `ping` → envía ecos ICMP al destino para probar conectividad (en el Command Prompt de Packet Tracer).
+   - `192.168.4.10` → el destino: el servidor de la LAN de R4.
+
    Debe responder. Eso prueba que el paquete cruzó la estrella, entró a R1, atravesó la
    malla y llegó a la LAN de R4.
 
-### Parte E: observar el encapsulamiento en modo Simulation
+### Parte F: observar el encapsulamiento en modo Simulation
 
 1. Pasa a modo `Simulation` (botón abajo a la derecha). En `Edit Filters`, deja solo
    `ICMP` y `ARP` para no ver ruido.
@@ -220,27 +266,30 @@ defecto y eso basta para la estrella.
    cerrado) o repitiendo el ping del Command Prompt. Avanza con `Capture / Forward`.
 
 3. Haz clic en el sobre cuando está en PC1 y mira `Outbound PDU Details`. Lee de dentro
-   hacia fuera las capas: los datos ICMP (capa 4/aplicación del eco), la cabecera IP con
-   origen `192.168.1.10` y destino `192.168.4.10` (capa 3) y la cabecera Ethernet con
-   las MAC (capa 2). Esa es la pila de encapsulamiento.
+   hacia fuera las capas: los datos ICMP, la cabecera IP con origen `192.168.1.10` y
+   destino `192.168.4.10` (capa 3) y la cabecera Ethernet con las MAC (capa 2). Esa es la
+   pila de encapsulamiento.
 
 4. Avanza salto a salto. Fíjate en lo clave: al pasar por cada router, la **cabecera IP
    no cambia** (origen y destino siguen siendo los PC/servidor), pero la **cabecera de
    capa 2 se reconstruye** en cada enlace (en los serie es PPP/HDLC en vez de Ethernet).
-   Es exactamente lo que dice la teoría: la MAC/trama cambia en cada salto, la IP se
-   mantiene de extremo a extremo.
+   Es lo que dice la teoría: la MAC/trama cambia en cada salto, la IP se mantiene de
+   extremo a extremo.
 
 5. Prueba la redundancia de la malla. Vuelve a `Realtime`, entra a R1 y apaga el enlace
    directo a R4:
    ```
-   R1# configure terminal
-   R1(config)# interface Serial0/1/0
-   R1(config-if)# shutdown
-   R1(config-if)# end
+   configure terminal
+   interface Serial0/1/0
+   shutdown
+   end
    ```
+   - `configure terminal`, `interface Serial0/1/0`, `end` → ver Parte C y Parte D.
+   - `shutdown` → apaga administrativamente la interfaz (lo contrario de `no shutdown`), simulando un enlace caído.
+
    Vuelve a hacer ping desde PC1 a `192.168.4.10`: tras unos segundos de reconvergencia
-   OSPF debe volver a responder, ahora pasando por R2 o R3 en vez del enlace caído.
-   Reactívalo con `no shutdown` al terminar.
+   OSPF debe volver a responder, ahora pasando por R2 o R3. Reactiva el enlace con `no
+   shutdown` (ver Parte C) dentro de `interface Serial0/1/0` al terminar.
 
 ### Resultado esperado
 
@@ -284,21 +333,36 @@ tráfico hacia una web; nada de interceptar a terceros.
    ```bash
    ip -br addr
    ```
+   - `ip` → herramienta estándar de red en Linux.
+   - `-br` → brief: salida resumida, una línea por interfaz.
+   - `addr` → subcomando que muestra las direcciones de las interfaces.
+
    Anota el nombre (por ejemplo `eth0`, `enp3s0` o `wlan0`).
 
 2. Prepara la captura: una sola línea del inicio de una conexión al puerto 443, con la
-   cabecera de capa 2 visible. La `-e` muestra las MAC; `-n` evita resolver nombres; `-c
-   1` corta tras el primer paquete.
+   cabecera de capa 2 visible.
    ```bash
    sudo tcpdump -i eth0 -e -n -c 1 'tcp port 443'
    ```
-   Sustituye `eth0` por tu interfaz. El comando se queda esperando.
+   - `sudo` → captura de paquetes requiere privilegios de root.
+   - `tcpdump` → captura y muestra tráfico de red.
+   - `-i eth0` → interface: la interfaz por la que capturar (cambia `eth0` por la tuya).
+   - `-e` → muestra la cabecera de capa 2 (direcciones MAC y ethertype) en cada línea.
+   - `-n` → no resuelve IP a nombres ni puertos a servicios; muestra números.
+   - `-c 1` → count: captura solo 1 paquete y termina.
+   - `'tcp port 443'` → filtro de captura: solo tráfico TCP del puerto 443 (HTTPS).
+
+   El comando se queda esperando.
 
 3. En otra terminal (o en el navegador), genera tráfico hacia una web para que la
    captura atrape el primer paquete, el SYN que abre la conexión.
    ```bash
    curl -s https://example.com -o /dev/null
    ```
+   - `curl` → hace peticiones a una URL.
+   - `-s` → silent: no muestra la barra de progreso ni mensajes.
+   - `https://example.com` → la URL a la que se conecta.
+   - `-o /dev/null` → guarda la respuesta en `/dev/null`, es decir, la descarta (solo interesa generar la conexión).
 
 4. Vuelve a la captura. Verás una línea parecida a:
    ```
@@ -360,6 +424,17 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    sudo mkdir -p /srv/compartido
    echo "archivo servido por NFS" | sudo tee /srv/compartido/hola.txt
    ```
+   - `sudo` → ejecuta como root; instalar y escribir en `/srv` lo requiere.
+   - `apt` → gestor de paquetes de Debian/Ubuntu.
+   - `install` → subcomando de `apt`: instala el paquete.
+   - `nfs-kernel-server` → el paquete del servidor NFS.
+   - `mkdir` → crea un directorio.
+   - `-p` → crea las carpetas intermedias que falten y no se queja si ya existen.
+   - `/srv/compartido` → la carpeta a crear.
+   - `echo "archivo servido por NFS"` → imprime ese texto.
+   - `|` → tubería: pasa la salida a `tee`.
+   - `tee` → escribe su entrada en un archivo (con `sudo`, puede escribir donde solo root escribe).
+   - `/srv/compartido/hola.txt` → el archivo que se crea con ese contenido.
 
 2. Exporta la carpeta hacia la red del cliente. Añade la línea al archivo de exports y
    recarga.
@@ -368,7 +443,17 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    sudo exportfs -ra
    sudo systemctl restart nfs-kernel-server
    ```
-   `rw` da lectura y escritura; `sync` escribe antes de confirmar.
+   - `echo "..."` → imprime la línea de exportación: la carpeta, la red autorizada y las opciones `rw` (lectura/escritura), `sync` (confirma tras escribir) y `no_subtree_check` (desactiva una comprobación que da problemas).
+   - `|` → tubería (ver Parte A, paso 1).
+   - `tee` → escribe en un archivo.
+   - `-a` → append: añade al final del archivo en vez de sobrescribir.
+   - `/etc/exports` → el archivo de configuración de exportaciones NFS.
+   - `exportfs` → gestiona la tabla de exportaciones de NFS.
+   - `-r` → reexporta todo, sincronizando con `/etc/exports`.
+   - `-a` → aplica a todas las exportaciones.
+   - `systemctl` → controla servicios de systemd.
+   - `restart` → reinicia el servicio para que tome la configuración.
+   - `nfs-kernel-server` → el servicio NFS.
 
 3. En el cliente, instala el soporte NFS y monta la carpeta.
    ```bash
@@ -377,6 +462,15 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    sudo mount -t nfs 192.168.56.10:/srv/compartido /mnt/nas
    ls /mnt/nas
    ```
+   - `sudo apt install nfs-common` → ver Parte A (paso 1); `nfs-common` trae el cliente NFS.
+   - `sudo mkdir -p /mnt/nas` → ver Parte A (paso 1); crea el punto de montaje.
+   - `mount` → monta un sistema de archivos en un directorio.
+   - `-t nfs` → type: indica que el recurso es de tipo NFS.
+   - `192.168.56.10:/srv/compartido` → origen: la IP del servidor y la carpeta exportada.
+   - `/mnt/nas` → destino: dónde se monta localmente.
+   - `ls` → lista el contenido.
+   - `/mnt/nas` → la carpeta montada que se lista.
+
    Debe aparecer `hola.txt`. Acabas de acceder a nivel de archivo: pediste un archivo por
    su nombre y el servidor te lo entregó.
 
@@ -384,22 +478,30 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    ```bash
    mount | grep nas
    ```
+   - `mount` (sin argumentos) → lista todos los sistemas de archivos montados.
+   - `|` → tubería (ver Parte A, paso 1).
+   - `grep` → filtra líneas por patrón.
+   - `nas` → patrón: deja la línea del montaje NFS.
+
    Verás `type nfs`. El cliente no formateó nada: el servidor es el dueño del sistema de
    archivos y tú solo pides archivos. Ese es el comportamiento NAS.
 
 ### Parte B: iSCSI (nivel bloque, el modelo SAN)
 
-1. En el servidor, instala `targetcli` y crea un archivo que hará de disco de respaldo
-   (backstore) de 500 MB.
+1. En el servidor, instala `targetcli` y crea una carpeta para el archivo que hará de
+   disco.
    ```bash
    sudo apt install targetcli-fb
    sudo mkdir -p /srv/iscsi
    sudo targetcli
    ```
+   - `sudo apt install targetcli-fb` → ver Parte A (paso 1); instala la herramienta de target iSCSI.
+   - `sudo mkdir -p /srv/iscsi` → ver Parte A (paso 1); carpeta para el archivo-disco.
+   - `targetcli` → abre la consola interactiva para configurar el target iSCSI.
 
-2. Dentro de la consola interactiva de `targetcli`, crea el backstore, el target (IQN),
-   el LUN y el permiso de acceso para el cliente. Escribe cada línea y termina con
-   `exit`:
+2. Dentro de la consola interactiva de `targetcli`, crea el backstore (el disco de
+   respaldo), el target (IQN), el LUN y el permiso de acceso para el cliente. Escribe
+   cada línea y termina con `exit`:
    ```
    /backstores/fileio create disk01 /srv/iscsi/disk01.img 500M
    /iscsi create iqn.2026-10.lab.servidor:disco1
@@ -407,7 +509,11 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    /iscsi/iqn.2026-10.lab.servidor:disco1/tpg1/acls create iqn.2026-10.lab.cliente:init01
    exit
    ```
-   El IQN es el nombre único del target; el ACL autoriza al iniciador del cliente.
+   - `/backstores/fileio create disk01 /srv/iscsi/disk01.img 500M` → crea un disco de respaldo basado en archivo llamado `disk01`, en esa ruta y de 500 MB.
+   - `/iscsi create iqn.2026-10.lab.servidor:disco1` → crea un target iSCSI con ese IQN (nombre único del target).
+   - `.../tpg1/luns create /backstores/fileio/disk01` → asocia el disco de respaldo como un LUN dentro del grupo de portales `tpg1` del target.
+   - `.../tpg1/acls create iqn.2026-10.lab.cliente:init01` → autoriza a ese IQN de iniciador (el del cliente) a usar el LUN.
+   - `exit` → sale de la consola de `targetcli` guardando la configuración.
 
 3. En el cliente, instala el iniciador iSCSI y ponle el mismo IQN que autorizaste.
    ```bash
@@ -415,18 +521,32 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    echo "InitiatorName=iqn.2026-10.lab.cliente:init01" | sudo tee /etc/iscsi/initiatorname.iscsi
    sudo systemctl restart iscsid
    ```
+   - `sudo apt install open-iscsi` → ver Parte A (paso 1); `open-iscsi` es el iniciador.
+   - `echo "InitiatorName=..." | sudo tee /etc/iscsi/initiatorname.iscsi` → escribe el IQN del iniciador en su archivo de configuración (`echo`, `|`, `tee` ver Parte A, paso 1; aquí `tee` sin `-a` sobrescribe).
+   - `sudo systemctl restart iscsid` → reinicia el servicio iniciador para tomar el nuevo IQN (`systemctl restart` ver Parte A, paso 2).
 
 4. Descubre el target del servidor e inicia sesión en él.
    ```bash
    sudo iscsiadm -m discovery -t sendtargets -p 192.168.56.10
    sudo iscsiadm -m node -T iqn.2026-10.lab.servidor:disco1 -p 192.168.56.10 --login
    ```
+   - `iscsiadm` → administra las conexiones iSCSI del iniciador.
+   - `-m discovery` → mode discovery: busca targets disponibles.
+   - `-t sendtargets` → tipo de descubrimiento: pregunta al portal qué targets ofrece.
+   - `-p 192.168.56.10` → portal: la IP (y puerto por defecto 3260) del servidor.
+   - `-m node` → mode node: opera sobre un target concreto ya descubierto.
+   - `-T iqn.2026-10.lab.servidor:disco1` → target: el IQN del servidor al que conectarse.
+   - `-p 192.168.56.10` → el portal del target.
+   - `--login` → inicia sesión en el target, de modo que aparezca como disco local.
+
    El `discovery` debe listar el IQN del servidor; el `--login` conecta.
 
 5. Comprueba que apareció un disco nuevo. Es un bloque crudo, sin formato.
    ```bash
    lsblk
    ```
+   - `lsblk` → lista los dispositivos de bloque (discos y particiones) del sistema.
+
    Verás un disco nuevo (por ejemplo `sdb`) de 500 MB. Nadie le ha puesto sistema de
    archivos todavía: ese trabajo te toca a ti, el cliente.
 
@@ -438,6 +558,14 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    sudo mount /dev/sdb /mnt/san
    mount | grep san
    ```
+   - `mkfs.ext4` → crea un sistema de archivos ext4 en un dispositivo.
+   - `/dev/sdb` → el disco iSCSI recién aparecido (ajusta la letra según `lsblk`).
+   - `sudo mkdir -p /mnt/san` → ver Parte A (paso 1); crea el punto de montaje.
+   - `mount` → monta un sistema de archivos.
+   - `/dev/sdb` → origen: el disco ya formateado.
+   - `/mnt/san` → destino: dónde se monta (sin `-t` porque `mount` detecta el tipo del disco local).
+   - `mount | grep san` → ver Parte A (paso 4); confirma el montaje.
+
    Aquí está la diferencia clave: en NFS el servidor ya tenía el sistema de archivos; en
    iSCSI tú lo creaste con `mkfs`. Ese es el comportamiento SAN.
 
@@ -459,13 +587,18 @@ el sistema de archivos".
 
 ### Limpieza
 
-En el cliente: desmonta y cierra sesión iSCSI.
+En el cliente, desmonta y cierra sesión iSCSI:
 ```bash
 sudo umount /mnt/san
 sudo umount /mnt/nas
 sudo iscsiadm -m node -T iqn.2026-10.lab.servidor:disco1 -p 192.168.56.10 --logout
 ```
-En el servidor: quita la exportación NFS (borra la línea de `/etc/exports` y
-`sudo exportfs -ra`) y elimina el target iSCSI entrando de nuevo a `targetcli` con
-`/iscsi delete iqn.2026-10.lab.servidor:disco1`. Desinstala los paquetes si no los vas a
-reutilizar.
+- `umount` → desmonta un sistema de archivos.
+- `/mnt/san` / `/mnt/nas` → los puntos de montaje a desmontar.
+- `iscsiadm -m node -T ... -p ...` → ver Parte B (paso 4).
+- `--logout` → cierra la sesión iSCSI, con lo que el disco desaparece del cliente.
+
+En el servidor, quita la exportación NFS (borra la línea de `/etc/exports` y vuelve a
+correr `sudo exportfs -ra`, ver Parte A, paso 2) y elimina el target iSCSI entrando de
+nuevo a `targetcli` con `/iscsi delete iqn.2026-10.lab.servidor:disco1` (`delete` borra
+el target indicado). Desinstala los paquetes si no los vas a reutilizar.

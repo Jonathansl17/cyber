@@ -115,6 +115,7 @@ arreglar el bug, no explotarlo. 40 minutos.
    - `printf(...); return 0;` → solo si cabe, saluda y devuelve 0 (éxito).
    - `if (greet(argv[1]) != 0) { ... return 1; }` → en `main`, si `greet` rechazó, avisa por `stderr` y sale con código 1.
    - Resto de `main` → (ver paso 1).
+
    ```bash
    gcc -fsanitize=address -g -o greet_fixed greet_fixed.c
    ./greet_fixed "$(python3 -c 'print("A"*200)')"; echo "codigo de salida: $?"
@@ -123,6 +124,7 @@ arreglar el bug, no explotarlo. 40 minutos.
    - `./greet_fixed "$(python3 -c 'print("A"*200)')"` → (ver paso 2): la misma entrada de 200 A.
    - `;` → separa comandos: ejecuta el siguiente cuando termina el anterior, haya fallado o no.
    - `echo "codigo de salida: $?"` → imprime el texto; `$?` es el código de salida del último comando ejecutado (aquí, `greet_fixed`).
+
    Esperado: `nombre demasiado largo, rechazado` y código de salida 1. ASan no dice nada porque
    no hay escritura fuera de límites.
 
@@ -160,6 +162,22 @@ arreglar el bug, no explotarlo. 40 minutos.
        return 0;
    }
    ```
+   - `#include <stdio.h>` → (ver paso 1): declara `printf`.
+   - `#include <stdlib.h>` → declara `malloc` y `free`, la reserva y liberación de memoria dinámica.
+   - `#include <string.h>` → declara `memset`.
+   - `struct request { size_t len; };` → tipo que representa una petición; solo guarda el tamaño del cuerpo `len`.
+   - `static int is_valid_size(size_t len)` → devuelve verdadero si el tamaño es como mucho 4096; `static` la deja visible solo en este archivo.
+   - `static void process(...)` → simula el procesado: `memset` pone a cero los `req->len` bytes de `body`.
+   - `/* Leaks on the error path. */` → comentario: la función pierde memoria en la ruta de error.
+   - `char *body = malloc(req->len);` → reserva en el heap tantos bytes como pide la petición; `req->len` lee el campo `len` a través del puntero.
+   - `if (body == NULL) return -1;` → si `malloc` falla, sale con error (no hay nada que liberar).
+   - `if (!is_valid_size(req->len)) return -1;` → si el tamaño no es válido, sale con error sin llamar a `free`: es la fuga.
+   - `process(body, req); free(body); return 0;` → en la ruta correcta procesa, libera y devuelve éxito.
+   - `int main(void)` → punto de entrada sin argumentos.
+   - `for (int i = 0; i < 100; i++)` → repite el cuerpo 100 veces.
+   - `struct request req = { .len = 8192 };` → crea una petición con `len` a 8192 (inicializador designado `.len`); es inválida porque supera 4096.
+   - `handle(&req);` → llama a `handle` pasando la dirección de `req` (`&`).
+   - `printf(...); return 0;` → avisa que terminó y sale con código 0.
 
 5. Compila y ejecuta. ASan incluye LeakSanitizer, que al terminar el programa reporta la memoria
    que nunca se liberó.
@@ -167,6 +185,9 @@ arreglar el bug, no explotarlo. 40 minutos.
    gcc -fsanitize=address -g -o handle_vuln handle_vuln.c
    ./handle_vuln
    ```
+   - `gcc -fsanitize=address -g -o handle_vuln handle_vuln.c` → (ver paso 2); ASan incluye LeakSanitizer, que en Linux x86_64 queda activo automáticamente con `-fsanitize=address`. Cambian el ejecutable `handle_vuln` y el fuente `handle_vuln.c`.
+   - `./handle_vuln` → ejecuta el binario del directorio actual; no necesita argumentos.
+
    Al final del programa aparece:
    ```
    ==NNNNN==ERROR: LeakSanitizer: detected memory leaks
@@ -212,10 +233,23 @@ arreglar el bug, no explotarlo. 40 minutos.
        return 0;
    }
    ```
+   - `#include`, `struct request`, `is_valid_size`, `process` → (ver paso 4): idénticos a la versión con fuga.
+   - `/* Fixed: single exit path that always frees. */` → comentario: un único punto de salida que siempre libera.
+   - `int rc = -1;` → código de retorno que empieza en error; solo pasa a 0 si todo va bien.
+   - `char *body = malloc(req->len);` y `if (body == NULL) return -1;` → (ver paso 4).
+   - `if (is_valid_size(req->len)) { process(body, req); rc = 0; }` → solo procesa si el tamaño es válido, y entonces marca éxito; si no, no sale antes de tiempo.
+   - `free(body);` → se ejecuta en las dos rutas (válida e inválida), así que no hay fuga.
+   - `return rc;` → devuelve 0 o -1 según el caso.
+   - `main` → (ver paso 4): las mismas 100 peticiones de 8192 bytes.
+
    ```bash
    gcc -fsanitize=address -g -o handle_fixed handle_fixed.c
    ./handle_fixed; echo "codigo de salida: $?"
    ```
+   - `gcc -fsanitize=address -g -o handle_fixed handle_fixed.c` → (ver paso 2); cambian el ejecutable `handle_fixed` y el fuente `handle_fixed.c`.
+   - `./handle_fixed` → ejecuta el binario corregido.
+   - `;` y `echo "codigo de salida: $?"` → (ver paso 3): imprime el código de salida de `handle_fixed`.
+
    Esperado: `procesadas 100 peticiones` y código de salida 0, sin informe de fugas.
 
 ### Resultado esperado
@@ -238,6 +272,9 @@ corregidos terminan sin que ASan diga nada.
 ```bash
 rm -f greet_vuln greet_vuln.c greet_fixed greet_fixed.c handle_vuln handle_vuln.c handle_fixed handle_fixed.c
 ```
+- `rm` → borra archivos.
+- `-f` → fuerza: no pide confirmación y no da error si algún archivo no existe.
+- `greet_vuln greet_vuln.c ... handle_fixed.c` → los cuatro binarios y sus cuatro fuentes creados en el ejercicio.
 
 ## Ejercicio 2: Endurece los trunks contra VLAN hopping en Packet Tracer
 
@@ -270,6 +307,14 @@ nota.
     name servidores
    exit
    ```
+   - `enable` → pasa del modo usuario (`Switch>`) al modo privilegiado (`Switch#`), necesario para configurar.
+   - `configure terminal` → entra en el modo de configuración global (`Switch(config)#`), con los comandos tecleados desde la consola.
+   - `vlan 10` → crea la VLAN 10 (o la modifica si existe) y entra en su modo de configuración (`Switch(config-vlan)#`); el número va de 1 a 4094.
+   - `name usuarios` → le pone el nombre `usuarios` a la VLAN; sin nombre, el switch usa `VLAN0010`.
+   - `vlan 20` → crea la VLAN 20 y entra en su configuración.
+   - `name servidores` → nombra la VLAN 20 `servidores`.
+   - `exit` → sale del modo de VLAN y vuelve a configuración global; la VLAN se guarda al salir.
+
    Repite lo mismo en SW2.
 
 3. Antes de endurecer, deja el enlace entre switches negociando trunk por DTP (el estado por
@@ -281,6 +326,12 @@ nota.
    end
    show interfaces trunk
    ```
+   - `configure terminal` → (ver paso 2).
+   - `interface GigabitEthernet0/1` → entra en la configuración de ese puerto (`Switch(config-if)#`): el enlace hacia el otro switch.
+   - `switchport mode dynamic desirable` → el puerto intenta activamente convertir el enlace en trunk mediante DTP (Dynamic Trunking Protocol); lo consigue si el vecino está en `trunk`, `desirable` o `auto`.
+   - `end` → sale de cualquier modo de configuración y vuelve directo al modo privilegiado.
+   - `show interfaces trunk` → lista los puertos que están funcionando como trunk, con su modo, encapsulación, estado, native VLAN y VLAN permitidas.
+
    Verás `Gi0/1` como `trunking` y, en `show dtp interface gi0/1`, que negocia. Un equipo que
    hable DTP en un puerto de acceso podría convertirlo en trunk: ese es el riesgo.
 
@@ -301,6 +352,19 @@ nota.
     switchport trunk allowed vlan 10,20
    end
    ```
+   - `configure terminal` → (ver paso 2).
+   - `interface range FastEthernet0/1 - 24` → entra a la vez en la configuración de los puertos `Fa0/1` a `Fa0/24` (los de PC); lo que escribas se aplica a los 24. Los espacios alrededor del guion son obligatorios.
+   - `switchport mode access` → fija el puerto en modo acceso permanente, sin trunk: pertenece a una sola VLAN y su tráfico va sin etiqueta.
+   - `switchport access vlan 10` → asigna el puerto de acceso a la VLAN 10.
+   - `switchport nonegotiate` → impide que el puerto genere tramas DTP; solo se admite si el modo es `access` o `trunk`. Es lo que corta el switch spoofing.
+   - `exit` → sale del modo de interfaz y vuelve a configuración global.
+   - `interface GigabitEthernet0/1` → (ver paso 3): el enlace entre switches.
+   - `switchport mode trunk` → fija el puerto en modo trunk permanente (estático), sin depender de lo que diga el vecino.
+   - `switchport nonegotiate` → igual que arriba: el trunk deja de enviar DTP.
+   - `switchport trunk native vlan 999` → define la VLAN 999 como native: la que viaja sin etiqueta 802.1Q por el trunk. Al no ser la VLAN 1 ni tener hosts, frena el double tagging. Debe coincidir en los dos extremos.
+   - `switchport trunk allowed vlan 10,20` → limita el trunk a transportar solo las VLAN 10 y 20 (lista separada por comas; también admite rangos y las palabras `add`, `remove`, `except`, `all`).
+   - `end` → (ver paso 3).
+
    Repite en SW2. Crea también la VLAN 999 muerta (`vlan 999` / `name no-usar`) y no pongas
    ningún host en ella.
 
@@ -308,6 +372,8 @@ nota.
    ```
    show interfaces trunk
    ```
+   - `show interfaces trunk` → (ver paso 3); ejecútalo en modo privilegiado (`Switch#`).
+
    Esperado (parecido al README):
    ```
    Port        Mode         Encapsulation  Status        Native vlan
@@ -320,6 +386,11 @@ nota.
    show interfaces switchport | include Name|Administrative Mode|Negotiation
    show dtp
    ```
+   - `show interfaces switchport` → muestra, por cada puerto, su configuración de capa 2: modo administrativo y operativo, VLAN de acceso, native VLAN, negociación DTP, etc.
+   - `|` → filtra la salida del comando con lo que sigue (tubería de IOS).
+   - `include Name|Administrative Mode|Negotiation` → deja solo las líneas que contienen alguno de los textos; en la expresión regular de IOS `|` significa "o". Así quedan el nombre del puerto, su modo y si negocia trunk.
+   - `show dtp` → muestra el estado global de DTP: cuántos puertos lo están usando.
+
    En cada `FastEthernet` de PC debe verse `Administrative Mode: static access` y
    `Negotiation of Trunking: Off`. Ningún puerto de acceso debe salir en `show interfaces trunk`.
 
@@ -367,6 +438,12 @@ ataca nada. 20 minutos.
    ```bash
    dig @1.1.1.1 +dnssec cloudflare.com A
    ```
+   - `dig` → herramienta de consultas DNS que muestra la respuesta completa del servidor (cabecera, banderas y secciones).
+   - `@1.1.1.1` → servidor DNS al que se envía la consulta, aquí el resolver de Cloudflare, que valida DNSSEC; sin `@`, `dig` usa el de `/etc/resolv.conf`.
+   - `+dnssec` → pide los registros DNSSEC activando el bit DO (DNSSEC OK) en la consulta; por eso la respuesta incluye los `RRSIG`.
+   - `cloudflare.com` → el nombre que se consulta, un dominio firmado con DNSSEC.
+   - `A` → tipo de registro pedido: la dirección IPv4 (también es el tipo por defecto si se omite).
+
    En `;; flags:` debe aparecer `ad` (Authenticated Data): el resolver validó las firmas. En la
    sección de respuesta verás, junto al registro `A`, un registro `RRSIG` con la firma, igual que
    en el ejemplo de la nota.
@@ -375,6 +452,13 @@ ataca nada. 20 minutos.
    ```bash
    dig @1.1.1.1 +dnssec cloudflare.com A | grep -E "flags:|RRSIG" | head
    ```
+   - `dig @1.1.1.1 +dnssec cloudflare.com A` → (ver paso 1): la misma consulta.
+   - `|` → tubería: pasa la salida de un comando como entrada del siguiente.
+   - `grep` → filtra y deja solo las líneas que coinciden con un patrón.
+   - `-E` → interpreta el patrón como expresión regular extendida, donde `|` significa "o" sin escaparlo.
+   - `"flags:|RRSIG"` → el patrón: líneas que contienen `flags:` o `RRSIG`.
+   - `head` → muestra solo las primeras 10 líneas de lo que recibe.
+
    Esperado: una línea `;; flags: qr rd ra ad;` y al menos un `RRSIG`.
 
 3. Consulta ahora `dnssec-failed.org`, un dominio que Verisign mantiene con firmas inválidas a
@@ -382,15 +466,24 @@ ataca nada. 20 minutos.
    ```bash
    dig @1.1.1.1 +dnssec dnssec-failed.org A
    ```
+   - `dig`, `@1.1.1.1`, `+dnssec`, `A` → (ver paso 1).
+   - `dnssec-failed.org` → el nombre consultado, cuyas firmas son inválidas a propósito.
+
    Esperado: `;; ->>HEADER<<- opcode: QUERY, status: SERVFAIL` y ninguna IP en la respuesta. El
    resolver, al no poder validar las firmas, prefiere no contestar antes que entregar datos que
    podrían ser falsos.
 
-4. Para ver la diferencia con un resolver que NO valida, repite contra uno sin validación (por
-   ejemplo el `+cd`, "checking disabled", que le pide al resolver que no valide):
+4. Para ver la diferencia con un resolver que NO valida, repite la consulta pidiéndole al mismo
+   resolver que no valide:
    ```bash
    dig @1.1.1.1 +dnssec +cd dnssec-failed.org A | grep -E "status:|[0-9]+\s+IN\s+A"
    ```
+   - `dig`, `@1.1.1.1`, `+dnssec`, `A` → (ver paso 1).
+   - `+cd` → activa el bit CD ("checking disabled") en la consulta: le pide al resolver que no valide DNSSEC y devuelva la respuesta aunque las firmas fallen. Es la forma corta de `+cdflag`.
+   - `dnssec-failed.org` → (ver paso 3).
+   - `|`, `grep`, `-E` → (ver paso 2).
+   - `"status:|[0-9]+\s+IN\s+A"` → el patrón: la línea de cabecera con `status:` o las líneas de registro `A` de la respuesta (`[0-9]+` es el TTL, uno o más dígitos; `\s+` uno o más espacios o tabuladores; `IN` es la clase Internet).
+
    Con `+cd` el resolver sí devuelve la IP (status `NOERROR`) porque le dijiste que no validara:
    eso ilustra que la protección depende de que el resolver valide.
 
