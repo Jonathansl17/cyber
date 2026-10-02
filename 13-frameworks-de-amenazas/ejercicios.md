@@ -17,6 +17,13 @@ sudo apt install curl python3     # Debian/Ubuntu
 sudo pacman -S curl python        # Arch
 ```
 
+- `sudo` → ejecuta el comando que sigue como root, necesario para instalar paquetes del sistema.
+- `apt install` → gestor de paquetes de Debian/Ubuntu; la acción `install` descarga e instala los paquetes indicados con sus dependencias.
+- `pacman -S` → gestor de paquetes de Arch; `-S` (`--sync`) instala los paquetes desde los repositorios.
+- `curl` → paquete del cliente HTTP de línea de comandos que usarás para hablar con las API.
+- `python3` / `python` → paquete del intérprete de Python 3 (en Arch se llama `python`).
+- `# Debian/Ubuntu`, `# Arch` → comentarios de la shell: todo lo que va tras `#` se ignora; ejecuta solo la línea de tu distribución.
+
 ### Pasos
 
 1. Comprueba primero en tu máquina, con un archivo inofensivo, lo que dice la base de la pirámide: un byte distinto da un hash completamente distinto.
@@ -27,12 +34,27 @@ sudo pacman -S curl python        # Arch
    printf ' ' >> modificado.txt
    sha256sum original.txt modificado.txt
    ```
+   - `mkdir -p ~/lab-piramide` → crea la carpeta de trabajo en tu directorio personal (`~`); `-p` crea también los directorios padre que falten y no da error si ya existe.
+   - `&&` → ejecuta el comando de la derecha solo si el de la izquierda terminó bien.
+   - `cd ~/lab-piramide` → entra en esa carpeta.
+   - `printf 'factura 0423\n'` → escribe el texto tal cual; `\n` es un salto de línea.
+   - `> original.txt` → redirige la salida a ese archivo, creándolo o sobrescribiéndolo.
+   - `cp original.txt modificado.txt` → copia el primer archivo (origen) en el segundo (destino).
+   - `printf ' '` → escribe un solo espacio, es decir, un byte.
+   - `>> modificado.txt` → añade la salida al final del archivo sin borrar lo que ya tenía.
+   - `sha256sum original.txt modificado.txt` → calcula e imprime el hash SHA-256 de cada archivo, uno por línea, seguido de su nombre.
+
    Verás dos hashes de 64 caracteres hexadecimales sin ningún parecido entre sí. Eso es lo que hace un malware polimórfico en cada infección.
 2. Entra a [auth.abuse.ch](https://auth.abuse.ch/), inicia sesión y copia tu Auth-Key. Guárdala solo en la variable de entorno de esta terminal (no en un archivo ni en el historial compartido):
    ```bash
    read -rs ABUSE_KEY && export ABUSE_KEY
    ```
-   Pega la clave y pulsa Enter; no se muestra en pantalla.
+   - `read` → orden interna de bash que lee una línea del teclado y la guarda en una variable.
+   - `-r` → no trata las barras invertidas `\` como caracteres de escape, así la clave se guarda literal.
+   - `-s` → modo silencioso: no muestra en pantalla lo que escribes o pegas. Pega la clave y pulsa Enter.
+   - `ABUSE_KEY` → nombre de la variable donde queda la clave.
+   - `&&` → ejecuta lo siguiente solo si `read` terminó bien.
+   - `export ABUSE_KEY` → marca la variable para que la hereden los programas que lances desde esta terminal; desaparece al cerrarla.
 3. Pide a MalwareBazaar las 100 muestras más recientes y quédate con hash, familia (`signature`) y fecha:
    ```bash
    curl -s -H "Auth-Key: $ABUSE_KEY" \
@@ -46,6 +68,20 @@ sudo pacman -S curl python        # Arch
        print(s["first_seen"], s["signature"], s["sha256_hash"])
    '
    ```
+   - `curl` → cliente HTTP que hace la petición a la API.
+   - `-s` → modo silencioso: no muestra la barra de progreso ni mensajes de error.
+   - `-H "Auth-Key: $ABUSE_KEY"` → añade esa cabecera HTTP a la petición; la shell sustituye `$ABUSE_KEY` por tu clave, y las comillas dobles lo permiten.
+   - `--data "query=get_recent&selector=100"` → envía esos datos en el cuerpo de una petición POST (activar `--data` convierte la petición en POST); `query=get_recent` pide las muestras más recientes y `selector=100` limita a las últimas 100.
+   - `\` al final de línea → continúa el mismo comando en la línea siguiente.
+   - `https://mb-api.abuse.ch/api/v1/` → URL de la API de MalwareBazaar.
+   - `> recientes.json` → guarda la respuesta JSON en ese archivo.
+   - `python3 -c '...'` → ejecuta el programa de Python escrito entre comillas simples en vez de leerlo de un archivo.
+   - `import json` → carga el módulo para leer JSON.
+   - `d = json.load(open("recientes.json"))` → abre el archivo y lo convierte en un diccionario de Python.
+   - `d["query_status"]` → campo de la respuesta que indica si la consulta fue bien (`ok`).
+   - `for s in d["data"][:15]:` → recorre las primeras 15 muestras de la lista `data`.
+   - `print(s["first_seen"], s["signature"], s["sha256_hash"])` → imprime fecha de primera aparición, familia y hash SHA-256 de cada muestra.
+
    `estado: ok` y una lista de líneas con fecha de hoy. Elige una muestra cuya columna `signature` no sea `None` (por ejemplo `AgentTesla`, `Formbook`, `RemcosRAT`) y anota su hash y su familia.
 4. Pide todas las muestras recientes de esa familia (hasta 1000) y cuenta cuántos hashes distintos hay. Sustituye `AgentTesla` por la familia que elegiste:
    ```bash
@@ -64,6 +100,18 @@ sudo pacman -S curl python        # Arch
        print(dia, n)
    '
    ```
+   - `FAMILIA=AgentTesla` → crea una variable de shell con el nombre de la familia; sin espacios alrededor de `=`.
+   - `curl -s -H "Auth-Key: $ABUSE_KEY"` → (ver paso 3).
+   - `--data "query=get_siginfo&signature=$FAMILIA&limit=1000"` → petición POST; `get_siginfo` pide muestras por firma (familia), `signature=$FAMILIA` indica cuál y `limit=1000` pide hasta 1000 resultados, el máximo de la API.
+   - `> familia.json` → guarda la respuesta en ese archivo.
+   - `python3 -c '...'`, `import json`, `json.load(open(...))` → (ver paso 3).
+   - `from collections import Counter` → importa `Counter`, un diccionario que cuenta apariciones.
+   - `hashes = {s["sha256_hash"] for s in d["data"]}` → conjunto con los hashes; un conjunto no admite repetidos, así que su tamaño es el número de hashes distintos.
+   - `Counter(s["first_seen"][:10] for s in d["data"])` → cuenta muestras por día; `[:10]` toma los 10 primeros caracteres de la fecha (`AAAA-MM-DD`).
+   - `len(hashes)` → número de elementos del conjunto.
+   - `sorted(por_dia.items())[-7:]` → ordena los pares (día, cantidad) por fecha y se queda con los 7 últimos.
+   - `print(dia, n)` → imprime cada día con su número de muestras.
+
    Salida de ejemplo:
    ```
    hashes distintos: 1000
@@ -78,6 +126,8 @@ sudo pacman -S curl python        # Arch
    ```bash
    echo "Bloquear este hash detiene 1 de 1000 muestras de $FAMILIA vistas en pocos días; el atacante obtiene otro hash recompilando, así que hay que subir en la pirámide (artefactos, herramienta, TTP)." > conclusion.txt
    ```
+   - `echo "..."` → imprime el texto; las comillas dobles permiten que la shell sustituya `$FAMILIA` por el nombre de la familia.
+   - `> conclusion.txt` → escribe esa línea en el archivo, sobrescribiéndolo si ya existía.
 
 ### Resultado esperado
 
@@ -97,6 +147,12 @@ unset ABUSE_KEY
 rm -rf ~/lab-piramide
 ```
 
+- `unset ABUSE_KEY` → borra la variable de la sesión para que la clave no quede en memoria de la terminal.
+- `rm` → borra archivos.
+- `-r` → recursivo: borra la carpeta y todo su contenido.
+- `-f` → forzado: no pide confirmación ni da error si algo no existe.
+- `~/lab-piramide` → carpeta del ejercicio que se elimina.
+
 ## Ejercicio 2: Huecos de cobertura de Sysmon frente a APT28
 
 Nodo: [ATT&CK](README.md#attck) y [Los tres frameworks responden preguntas distintas](README.md#los-tres-frameworks-responden-preguntas-distintas).
@@ -115,23 +171,54 @@ Necesitas: navegador; Linux (o WSL) con `curl` y `python3` para verificar el res
    curl -sL -o sysmonconfig.xml https://github.com/olafhartong/sysmon-modular/releases/latest/download/sysmonconfig.xml
    python3 -c 'import json; [print(f, json.load(open(f))["versions"]) for f in ("apt28.json","sysmon.json")]'
    ```
+   - `mkdir -p`, `&&`, `cd` → (ver ejercicio 1).
+   - `curl -s` → (ver ejercicio 1).
+   - `-L` → sigue las redirecciones HTTP; hace falta porque `releases/latest/download/...` de GitHub redirige al archivo real de la última versión.
+   - `-o apt28.json` → guarda la respuesta en ese archivo en vez de mostrarla en pantalla (igual con `sysmon.json` y `sysmonconfig.xml`).
+   - `https://attack.mitre.org/groups/G0007/G0007-enterprise-layer.json` → capa del Navigator que publica MITRE con las técnicas de APT28 (G0007) en la matriz Enterprise.
+   - `.../attack-matrix-15.21.json` → capa del Navigator generada por sysmon-modular a partir de su configuración.
+   - `.../sysmonconfig.xml` → la configuración "Balanced" de Sysmon de la que sale esa capa.
+   - `python3 -c '...'` → (ver ejercicio 1).
+   - `for f in ("apt28.json","sysmon.json")` → recorre los dos archivos; los corchetes `[...]` forman una lista por comprensión que solo se usa para ejecutar el `print` de cada uno.
+   - `json.load(open(f))["versions"]` → lee el JSON y saca su campo `versions`, que dice la versión de ATT&CK, del Navigator y de la capa.
    Las dos deben decir `'attack': '19'` (o la misma versión entre sí). En `apt28.json` las técnicas usadas por APT28 tienen `score: 1`; en `sysmon.json` el `score` es el número de reglas de Sysmon que apuntan a esa técnica.
 2. Comprueba de dónde sale la capa de Sysmon: cuenta las técnicas etiquetadas en la configuración.
    ```bash
    grep -o 'technique_id=T[0-9.]*' sysmonconfig.xml | sort -u | wc -l
    grep -o 'technique_id=T1053[0-9.]*' sysmonconfig.xml | sort | uniq -c
    ```
+   - `grep` → busca un patrón (expresión regular) en el archivo `sysmonconfig.xml`.
+   - `-o` → imprime solo el trozo que coincide, uno por línea, en vez de la línea entera.
+   - `'technique_id=T[0-9.]*'` → patrón: el texto `technique_id=T` seguido de cualquier cantidad de dígitos y puntos (un ID como `T1053.005`).
+   - `'technique_id=T1053[0-9.]*'` → igual, pero solo las etiquetas de T1053 y sus subtécnicas.
+   - `|` → tubería: pasa la salida del comando de la izquierda como entrada del de la derecha.
+   - `sort -u` → ordena las líneas; `-u` deja una sola copia de cada línea repetida.
+   - `sort` → ordena las líneas, necesario para que `uniq` vea juntas las repetidas.
+   - `uniq -c` → junta líneas repetidas consecutivas; `-c` antepone cuántas veces aparece cada una (aquí, cuántas reglas apuntan a cada técnica).
+   - `wc -l` → cuenta líneas, es decir, el número de técnicas distintas.
    Unas 130 técnicas, y varias reglas para T1053 y T1053.005 (tareas programadas). Si ya tienes Sysmon con otra configuración en tu máquina, usa tu XML en vez de este y en PowerShell saca sus técnicas con:
    ```powershell
    Select-String -Path .\sysmonconfig.xml -Pattern 'technique_id=(T[\d.]+)' -AllMatches |
      ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
    ```
+   - `Select-String` → cmdlet que busca texto con expresiones regulares, parecido a `grep`.
+   - `-Path .\sysmonconfig.xml` → archivo en el que busca, en la carpeta actual (`.\`).
+   - `-Pattern 'technique_id=(T[\d.]+)'` → expresión regular; `\d` es un dígito, `[\d.]+` uno o más dígitos o puntos, y los paréntesis forman el grupo 1, que captura solo el ID de la técnica.
+   - `-AllMatches` → recoge todas las coincidencias de cada línea, no solo la primera.
+   - `|` → tubería de PowerShell: pasa objetos al siguiente cmdlet.
+   - `ForEach-Object { $_.Matches }` → para cada línea encontrada (`$_` es el objeto actual), saca la lista de coincidencias.
+   - `ForEach-Object { $_.Groups[1].Value }` → de cada coincidencia toma el texto del grupo 1, el ID de la técnica.
+   - `Sort-Object -Unique` → ordena los IDs; `-Unique` elimina los repetidos.
 3. Abre [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/). En la pestaña nueva elige "Open Existing Layer" y luego "Upload from local", y sube `apt28.json`. Abre otra pestaña (botón `+`) y sube igual `sysmon.json`.
 4. En la pestaña de Sysmon, pulsa el botón "Color Setup" y en "Scoring Gradient" pon "low value" en 0 y "high value" en 1, con colores de blanco a verde. Así toda técnica con al menos una regla queda verde.
 5. Abre una tercera pestaña, despliega "Create Layer from other layers", elige el dominio Enterprise y fíjate en la letra que el Navigator asigna a cada capa abierta (aparece en la pestaña: `a` para APT28 y `b` para Sysmon si las abriste en ese orden). En "Score Expression" escribe:
    ```
    (a > 0) and not (b > 0)
    ```
+   - `a`, `b` → la puntuación de cada técnica en la capa con esa letra (APT28 y Sysmon).
+   - `a > 0` → la técnica la usa APT28.
+   - `b > 0` → la técnica tiene al menos una regla de Sysmon.
+   - `and not` → las dos condiciones a la vez, negando la segunda: técnicas de APT28 sin regla de Sysmon. El resultado verdadero vale 1 y el falso 0.
    Pulsa "Create Layer". La capa nueva tiene puntuación 1 en las técnicas de APT28 sin regla de Sysmon. Pon su gradiente de 0 (blanco) a 1 (rojo) con "Color Setup".
 6. Verifica la lista con un script, porque el Navigator distingue "sin puntuar" de "puntuación 0" y conviene confirmar el recuento. Guarda esto como `huecos.py`:
    ```python

@@ -26,6 +26,13 @@ Necesitas: Python 3 y OpenSSL (ambos vienen en Linux). 20 minutos. No hace falta
    ```bash
    python3 -c 'p,g,a,b=23,5,6,15; A=pow(g,a,p); B=pow(g,b,p); print("A=",A,"B=",B,"sA=",pow(B,a,p),"sB=",pow(A,b,p))'
    ```
+   - `python3` → el intérprete de Python 3.
+   - `-c '...'` → ejecuta el programa que va entre comillas en vez de leerlo de un archivo.
+   - `p,g,a,b=23,5,6,15` → asigna el primo público, el generador y los secretos de Ana y Luis.
+   - `pow(g,a,p)` → calcula `g^a mod p` de forma eficiente (exponenciación modular); así salen `A` y `B`.
+   - `pow(B,a,p)` y `pow(A,b,p)` → cada lado eleva el valor que recibió a su propio secreto: la llave compartida vista por Ana (`sA`) y por Luis (`sB`).
+   - `print(...)` → muestra los valores en una línea.
+
    Salida esperada: `A= 8 B= 19 sA= 2 sB= 2`. Los dos lados obtienen `2` y nunca lo enviaron.
 
 2. Comprueba que el espía lo tiene difícil incluso con números minúsculos: resuelve el
@@ -33,6 +40,10 @@ Necesitas: Python 3 y OpenSSL (ambos vienen en Linux). 20 minutos. No hace falta
    ```bash
    python3 -c 'p,g,A=23,5,8; print([x for x in range(p) if pow(g,x,p)==A])'
    ```
+   - `python3 -c` → (ver paso 1).
+   - `p,g,A=23,5,8` → los valores públicos que ve el espía: primo, generador y la `A` que mandó Ana.
+   - `[x for x in range(p) if pow(g,x,p)==A]` → prueba todos los exponentes de 0 a `p-1` y se queda con los que cumplen `g^x mod p = A`; es la fuerza bruta del logaritmo discreto.
+
    Da `[6]`: con `p=23` se prueba a mano; la gracia es que con `p` de 2048 bits esto es inviable.
 
 3. Pasa a números reales: genera parámetros DH de 2048 bits con openssl. Tarda unos segundos.
@@ -40,13 +51,21 @@ Necesitas: Python 3 y OpenSSL (ambos vienen en Linux). 20 minutos. No hace falta
    openssl dhparam -out dh2048.pem 2048
    openssl dhparam -in dh2048.pem -noout -text | head -3
    ```
+   - `openssl dhparam` → subcomando de OpenSSL que genera o inspecciona parámetros Diffie-Hellman (`p` y `g`).
+   - `-out dh2048.pem` → archivo donde se guardan los parámetros generados (formato PEM por defecto).
+   - `2048` → tamaño en bits del primo `p` que se genera. Como no se indica `-2`, `-3` ni `-5`, el generador `g` es 2, el valor por defecto.
+   - `-in dh2048.pem` → lee los parámetros de ese archivo en vez de generarlos.
+   - `-noout` → no vuelve a escribir los parámetros codificados en PEM.
+   - `-text` → imprime los parámetros en texto legible (tamaño, `prime`, `generator`).
+   - `| head -3` → pasa la salida a `head`, que muestra solo las 3 primeras líneas (`-3` equivale a `-n 3`).
+
    Verás `DH Parameters: (2048 bit)` y un `prime` enorme. Ese es el `p` que haría imposible el
    paso 2.
 
 4. Haz el intercambio con ese primo real en Python, con secretos grandes y aleatorios. Primero
    saca `p` y `g` del archivo en formato que Python entienda, y luego ejecuta el intercambio.
    ```bash
-   # extrae p (hex) y g (decimal) del dh2048.pem
+   # extrae p y g (ambos en hex) del dh2048.pem
    P=$(openssl asn1parse -in dh2048.pem | awk -F: '/INTEGER/{print $NF; exit}')
    G=$(openssl asn1parse -in dh2048.pem | awk -F': *' '/INTEGER/{c++; if(c==2){print $NF; exit}}')
    python3 - "$P" "$G" <<'EOF'

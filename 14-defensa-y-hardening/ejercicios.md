@@ -28,6 +28,15 @@ Necesitas:
    sudo apt update
    sudo apt install -y vsftpd rpcbind avahi-daemon cups
    ```
+   - `sudo` → ejecuta el comando que sigue como root; instalar paquetes exige privilegios de administrador.
+   - `apt update` → descarga de los repositorios la lista actualizada de paquetes y versiones disponibles; no instala nada.
+   - `apt install` → instala los paquetes indicados y sus dependencias.
+   - `-y` → responde "sí" automáticamente a la confirmación, para no tener que escribirla.
+   - `vsftpd` → servidor FTP.
+   - `rpcbind` → el portmapper que usan NFS y otros servicios RPC.
+   - `avahi-daemon` → servicio de anuncio y descubrimiento mDNS/DNS-SD en la red local.
+   - `cups` → servidor de impresión.
+
    Así tendrás un FTP, el portmapper de NFS, el anuncio mDNS y el servidor de impresión, cuatro cosas que el CIS nivel 1 pide quitar si no se usan.
 2. Crea la carpeta de trabajo y guarda la foto inicial de puertos TCP y UDP en escucha:
    ```bash
@@ -36,7 +45,22 @@ Necesitas:
    sudo ss -ulnp | tee ~/hardening/antes-udp.txt
    ss -H -tln | wc -l
    ```
-   Para ver el nombre del proceso hace falta `sudo`; si lo lanzas sin él, la columna `Process` sale vacía. Salida típica (abreviada):
+   - `mkdir` → crea un directorio.
+   - `-p` → crea también los directorios padre que falten y no da error si ya existe.
+   - `~/hardening` → la carpeta de trabajo dentro de tu directorio personal (`~`).
+   - `sudo` → ejecuta `ss` como root; hace falta para ver el nombre del proceso, sin él la columna `Process` sale vacía.
+   - `ss` → muestra los sockets del sistema (sustituto moderno de `netstat`).
+   - `-t` → solo sockets TCP.
+   - `-u` → solo sockets UDP.
+   - `-l` → solo los sockets en escucha (LISTEN).
+   - `-n` → muestra direcciones y puertos en número, sin traducirlos a nombres de servicio.
+   - `-p` → muestra el proceso (nombre, PID y descriptor) que usa cada socket.
+   - `-H` → suprime la línea de cabecera, para que el recuento no la incluya.
+   - `|` → tubería: pasa la salida del comando de la izquierda como entrada del de la derecha.
+   - `tee ~/hardening/antes-tcp.txt` → muestra en pantalla lo que recibe y a la vez lo guarda en ese archivo (`antes-udp.txt` para UDP).
+   - `wc -l` → cuenta las líneas que recibe, es decir, los sockets TCP en escucha.
+
+   Salida típica (abreviada):
    ```
    LISTEN 0 32    0.0.0.0:21        users:(("vsftpd",pid=1630,fd=3))
    LISTEN 0 4096  0.0.0.0:111       users:(("rpcbind",pid=1402,fd=4))
@@ -45,11 +69,21 @@ Necesitas:
    LISTEN 0 4096  127.0.0.53%lo:53  users:(("systemd-resolve",pid=610,fd=15))
    ```
    El último comando cuenta los sockets TCP en escucha sin la cabecera (IPv4 e IPv6 por separado): ese es tu número "antes".
-3. Averigua la IP de la VM en la red solo-anfitrión y escanéala desde el anfitrión. `-sT` hace conexión completa y no necesita privilegios:
+3. Averigua la IP de la VM en la red solo-anfitrión y escanéala desde el anfitrión:
    ```bash
    ip -4 -br addr            # en la VM; busca la interfaz con 192.168.56.x
    nmap -sT -p- 192.168.56.10 -oN antes-nmap.txt   # en el anfitrión, con la IP de tu VM
    ```
+   - `ip` → herramienta de iproute2 para consultar y configurar la red.
+   - `-4` → limita la salida a direcciones IPv4.
+   - `-br` → formato breve (brief): una línea por interfaz con su estado y sus direcciones.
+   - `addr` → objeto `address`: muestra las direcciones IP de cada interfaz.
+   - `# ...` → comentario de la shell; todo lo que va detrás no se ejecuta.
+   - `nmap` → escáner de puertos.
+   - `-sT` → escaneo TCP connect: completa el saludo de tres vías con cada puerto; no necesita privilegios.
+   - `-p-` → escanea todos los puertos TCP, del 1 al 65535 (sin él solo revisa los 1000 más comunes).
+   - `192.168.56.10` → la IP de tu VM en la red solo-anfitrión; cámbiala por la tuya.
+   - `-oN antes-nmap.txt` → guarda además el resultado en ese archivo en formato normal (legible).
    Deberías ver `21/tcp open ftp`, `22/tcp open ssh` y `111/tcp open rpcbind`. Copia `antes-nmap.txt` a tu cuaderno; los puertos en `127.0.0.1` no salen porque no son alcanzables desde fuera.
 4. Mide el punto de partida con Lynis:
    ```bash
@@ -57,6 +91,15 @@ Necesitas:
    sudo lynis audit system --quick | tee ~/hardening/lynis-antes.txt
    sudo grep hardening_index /var/log/lynis-report.dat
    ```
+   - `sudo apt install -y lynis` → instala Lynis sin pedir confirmación (`sudo`, `apt install` y `-y`, ver paso 1).
+   - `lynis` → herramienta de auditoría de seguridad para sistemas Unix.
+   - `audit system` → orden de Lynis que audita el sistema local completo.
+   - `--quick` → modo rápido: no se detiene a esperar que pulses Enter entre secciones.
+   - `| tee ~/hardening/lynis-antes.txt` → muestra el informe y lo guarda en ese archivo (ver paso 2).
+   - `sudo` → el informe de Lynis solo lo puede leer root.
+   - `grep hardening_index` → muestra solo las líneas que contienen el texto `hardening_index`.
+   - `/var/log/lynis-report.dat` → informe en formato `clave=valor` que Lynis escribe al terminar cada auditoría.
+
    Anota el número (por ejemplo `hardening_index=61`). El valor exacto depende de la versión; lo que importa es compararlo consigo mismo al final.
 5. Abre el registro de cambios. Cada control que apliques tendrá una entrada con este formato, en texto plano:
    ```bash
@@ -66,6 +109,11 @@ Necesitas:
 
    EOF
    ```
+   - `cat` → copia a su salida lo que recibe por la entrada estándar.
+   - `> ~/hardening/cambios.txt` → redirige esa salida a ese archivo, creándolo o vaciándolo si ya existía.
+   - `<<'EOF'` → heredoc: pasa como entrada todas las líneas que siguen hasta la línea `EOF`; las comillas simples evitan que la shell expanda `$`, comillas o comodines dentro del texto.
+   - `EOF` → marca de cierre del heredoc; debe ir sola en su línea.
+
    Después de cada paso siguiente, añade su entrada con `nano ~/hardening/cambios.txt`.
 6. Control "servicios de servidor que no se usan" (sección Services del benchmark: avahi, servidor de impresión, rpcbind, servidor FTP). Elimínalos, no solo los pares:
    ```bash
@@ -73,6 +121,16 @@ Necesitas:
    sudo apt autoremove -y
    dpkg -l vsftpd rpcbind avahi-daemon cups 2>&1 | grep -E '^ii' || echo "ninguno instalado"
    ```
+   - `sudo`, `-y` → (ver paso 1).
+   - `apt purge` → desinstala los paquetes y borra también sus archivos de configuración (`remove` los dejaría).
+   - `vsftpd rpcbind avahi-daemon cups` → los cuatro paquetes instalados en el paso 1.
+   - `apt autoremove` → desinstala las dependencias que se instalaron automáticamente y ya nadie necesita.
+   - `dpkg -l` → lista los paquetes indicados con su estado en el sistema.
+   - `2>&1` → manda también los errores (salida 2) a la salida normal (1), para que pasen por la tubería; `dpkg` avisa por error de los paquetes que no encuentra.
+   - `grep -E '^ii'` → deja solo las líneas que empiezan (`^`) por `ii`, el estado "deseado instalar, instalado"; `-E` activa las expresiones regulares extendidas.
+   - `||` → ejecuta lo de la derecha solo si lo de la izquierda falla; `grep` falla cuando no encuentra ninguna línea.
+   - `echo "ninguno instalado"` → imprime ese texto.
+
    La última línea debe imprimir `ninguno instalado`. Entrada de ejemplo para el registro:
    ```
    [Ensure ftp/avahi/print/rpcbind services are not in use] 4 servicios activos -> apt purge -> dpkg -l no los lista

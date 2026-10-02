@@ -170,7 +170,7 @@ del sistema, solo lee; no hay nada más que deshacer.
 
 ## Ejercicio 3: Diagnostica un puerto ocupado con systemctl, journalctl y ss
 
-Nodo: [Troubleshooting](README.md#troubleshooting-1).
+Nodo: [Troubleshooting](README.md#troubleshooting).
 
 Objetivo: provocar que nginx no arranque porque el puerto 80 ya está ocupado y
 diagnosticar la causa usando solo `systemctl status`, `journalctl -u` y `ss -tulpn`,

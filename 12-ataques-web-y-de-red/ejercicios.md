@@ -44,6 +44,17 @@ arreglar el bug, no explotarlo. 40 minutos.
        return 0;
    }
    ```
+   - `#include <stdio.h>` → incluye la cabecera de entrada/salida estándar, que declara `printf` y `fprintf`.
+   - `#include <string.h>` → incluye la cabecera de cadenas, que declara `strcpy`.
+   - `/* Vulnerable: no bounds check. */` → comentario: avisa que la función no comprueba límites.
+   - `void greet(const char *name)` → define la función `greet`, que no devuelve nada (`void`) y recibe un puntero a una cadena que no va a modificar (`const char *`).
+   - `char buf[64];` → reserva en la pila un búfer de 64 bytes (63 caracteres más el `\0` final).
+   - `strcpy(buf, name);` → copia `name` en `buf` byte a byte hasta el `\0`, sin mirar el tamaño de `buf`; si `name` es más largo, escribe fuera del búfer. Es la línea culpable.
+   - `printf("Hello %s\n", buf);` → imprime el saludo; `%s` se sustituye por la cadena `buf` y `\n` es el salto de línea.
+   - `int main(int argc, char **argv)` → punto de entrada; `argc` es el número de argumentos y `argv` el arreglo de cadenas con ellos (`argv[0]` es el nombre del programa).
+   - `if (argc < 2) { ... return 2; }` → si no se pasó ningún nombre, escribe el uso por la salida de error (`fprintf(stderr, ...)`) y termina con código 2.
+   - `greet(argv[1]);` → llama a `greet` con el primer argumento de la línea de comandos.
+   - `return 0;` → termina el programa con código 0 (éxito).
 
 2. Compila con AddressSanitizer y símbolos de depuración, y ejecútalo con un nombre de más de
    63 caracteres para desbordar `buf`.
@@ -51,6 +62,16 @@ arreglar el bug, no explotarlo. 40 minutos.
    gcc -fsanitize=address -g -o greet_vuln greet_vuln.c
    ./greet_vuln "$(python3 -c 'print("A"*200)')"
    ```
+   - `gcc` → el compilador de C de GNU; traduce el fuente a un ejecutable.
+   - `-fsanitize=address` → activa AddressSanitizer (ASan): instrumenta cada acceso a memoria para detectar escrituras y lecturas fuera de límites, y añade LeakSanitizer para las fugas.
+   - `-g` → incluye información de depuración, para que el informe de ASan muestre archivo y número de línea.
+   - `-o greet_vuln` → nombre del ejecutable de salida (sin `-o` sería `a.out`).
+   - `greet_vuln.c` → el archivo fuente que se compila.
+   - `./greet_vuln` → ejecuta el binario del directorio actual (`./` porque el directorio actual no está en el `PATH`).
+   - `"$(...)"` → sustitución de comandos: ejecuta lo de dentro y pone su salida como argumento; las comillas dobles hacen que llegue como un solo argumento aunque tuviera espacios. Quita el salto de línea final.
+   - `python3 -c '...'` → ejecuta con Python 3 el programa pasado como cadena tras `-c`.
+   - `print("A"*200)` → imprime la letra A repetida 200 veces: 200 caracteres más el `\0` que añade `strcpy` son los 201 bytes del informe.
+
    ASan aborta el programa y escribe un informe que empieza así:
    ```
    ==NNNNN==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x...
@@ -83,10 +104,25 @@ arreglar el bug, no explotarlo. 40 minutos.
        return 0;
    }
    ```
+   - `#include <stdio.h>` → (ver paso 1): declara `printf`, `fprintf` y `snprintf`.
+   - `#include <stddef.h>` → declara el tipo `size_t`, el entero sin signo que usan los tamaños.
+   - `#define NAME_MAX_LEN 64` → constante con el tamaño del búfer, en vez de un número mágico.
+   - `int greet(const char *name)` → ahora devuelve `int` para poder informar si rechazó la entrada.
+   - `char buf[NAME_MAX_LEN];` → el mismo búfer de 64 bytes en la pila.
+   - `snprintf(buf, sizeof buf, "%s", name)` → copia `name` en `buf` escribiendo como máximo `sizeof buf` bytes (incluido el `\0`); nunca se sale del búfer. Devuelve en `n` cuántos caracteres habría querido escribir.
+   - `if (n < 0 || (size_t)n >= sizeof buf)` → `n < 0` es un error de formato; `n >= sizeof buf` significa que no cabía y se habría truncado. `(size_t)n` convierte `n` a sin signo para comparar tipos iguales.
+   - `return -1;` → rechaza la entrada en lugar de truncarla en silencio, como dice el comentario.
+   - `printf(...); return 0;` → solo si cabe, saluda y devuelve 0 (éxito).
+   - `if (greet(argv[1]) != 0) { ... return 1; }` → en `main`, si `greet` rechazó, avisa por `stderr` y sale con código 1.
+   - Resto de `main` → (ver paso 1).
    ```bash
    gcc -fsanitize=address -g -o greet_fixed greet_fixed.c
    ./greet_fixed "$(python3 -c 'print("A"*200)')"; echo "codigo de salida: $?"
    ```
+   - `gcc -fsanitize=address -g -o greet_fixed greet_fixed.c` → (ver paso 2); solo cambian el ejecutable de salida `greet_fixed` y el fuente `greet_fixed.c`.
+   - `./greet_fixed "$(python3 -c 'print("A"*200)')"` → (ver paso 2): la misma entrada de 200 A.
+   - `;` → separa comandos: ejecuta el siguiente cuando termina el anterior, haya fallado o no.
+   - `echo "codigo de salida: $?"` → imprime el texto; `$?` es el código de salida del último comando ejecutado (aquí, `greet_fixed`).
    Esperado: `nombre demasiado largo, rechazado` y código de salida 1. ASan no dice nada porque
    no hay escritura fuera de límites.
 

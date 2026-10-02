@@ -515,9 +515,10 @@ LUN → disco lógico que la SAN presenta a un servidor.
 - [TryHackMe: Networking Concepts](https://tryhackme.com/room/networkingconcepts) — OSI, TCP/IP y encapsulamiento con preguntas guiadas; practica Understand the OSI Model.
 - [TryHackMe: Intro to LAN](https://tryhackme.com/room/introtolan) — topologías, switches y routers; practica Network Topologies y LAN.
 - [TryHackMe: What is Networking?](https://tryhackme.com/room/whatisnetworking) — introducción para quien empieza de cero; practica conceptos previos y LAN.
-- [Cisco Packet Tracer](https://www.netacad.com/cisco-packet-tracer) — simulador gratuito; arma una estrella con un switch y una malla de 4 routers y observa en modo Simulation cómo se encapsula cada PDU capa por capa.
-- Ejercicio en casa: en tu propia máquina, `sudo tcpdump -i <interfaz> -e -n -c 5 'tcp port 443'` mientras abres una web; identifica en cada línea qué parte es capa 2, 3 y 4, y comprueba que `length` = 14 + cabecera IP + cabecera TCP + datos.
-- Ejercicio en casa: con dos máquinas virtuales propias, exporta una carpeta por NFS desde una y móntala en la otra; luego compárala con un disco iSCSI (paquete `targetcli` en el servidor) y anota qué lado formatea el sistema de archivos en cada caso.
+- [Cisco Packet Tracer](https://www.netacad.com/cisco-packet-tracer) — simulador de red gratuito de Cisco; necesario para el Ejercicio 1.
+- [Ejercicio 1: Estrella con switch y malla de cuatro routers en Packet Tracer](ejercicios.md#ejercicio-1-estrella-con-switch-y-malla-de-cuatro-routers-en-packet-tracer) — arma la topología, enruta con OSPF y observa el encapsulamiento capa por capa en modo Simulation.
+- [Ejercicio 2: Lee las capas 2, 3 y 4 de una conexión con tcpdump](ejercicios.md#ejercicio-2-lee-las-capas-2-3-y-4-de-una-conexión-con-tcpdump) — captura un SYN y separa MAC, IP y puertos, comprobando que el `length` cuadra.
+- [Ejercicio 3: Comparte una carpeta por NFS y un disco por iSCSI](ejercicios.md#ejercicio-3-comparte-una-carpeta-por-nfs-y-un-disco-por-iscsi) — compara el nivel archivo (NAS) con el nivel bloque (SAN) y anota quién maneja el sistema de archivos.
 
 ## Cuadro resumen
 

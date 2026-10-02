@@ -896,11 +896,12 @@ IPAM → inventario y planificación de todas las IP; integra DHCP y DNS.
 - [TryHackMe: Secure Network Architecture](https://tryhackme.com/room/introtosecurityarchitecture) — gratis; VLAN, DMZ, segmentación, firewalls y routing; practica VLAN, DMZ, Router y Switch. Para DNS a fondo: [DNS in Detail](https://tryhackme.com/room/dnsindetail) (gratis).
 - [TryHackMe: DNS in Detail](https://tryhackme.com/room/dnsindetail) — jerarquía, tipos de registro y consultas; practica DNS.
 - [TryHackMe: Introductory Networking](https://tryhackme.com/room/introtonetworking) — capas, IP y herramientas básicas (`ping`, `traceroute`, `dig`); practica IP y DNS.
-- [Cisco Packet Tracer](https://www.netacad.com/cisco-packet-tracer) — arma un switch con dos VLAN, un router con un servidor DHCP por VLAN y una DMZ con un servidor web; comprueba con ping qué llega y qué no.
-- Ejercicio en casa: ejecuta `sudo tcpdump -i <interfaz> -n -v 'udp port 67 or udp port 68'` en tu máquina, desconecta y reconecta la red, e identifica los cuatro mensajes DORA y las opciones 1, 3, 6 y 51 en la salida.
-- Ejercicio en casa: `dig +trace` sobre un dominio tuyo o conocido para ver raíz, TLD y autoritativo; luego `dig MX`, `dig TXT` y `dig -x` sobre el mismo dominio.
-- Ejercicio en casa: `ip route`, `ip neigh` y `ss -tln` en tu máquina; identifica tu gateway, la MAC del gateway en la caché ARP y qué servicios escuchan solo en 127.0.0.1.
-- Ejercicio en casa: inventa 10 IP con prefijo, resuélvelas a mano y comprueba con `python3 -c 'import ipaddress as i; n=i.ip_interface("IP/prefijo").network; print(n, n.broadcast_address, n.num_addresses-2)'`.
+- [Cisco Packet Tracer](https://www.netacad.com/cisco-packet-tracer) — simulador de red gratuito de Cisco; necesario para el Ejercicio 1.
+- [Ejercicio 1: Dos VLAN con DHCP y una DMZ en Packet Tracer](ejercicios.md#ejercicio-1-dos-vlan-con-dhcp-y-una-dmz-en-packet-tracer) — switch con dos VLAN, router-on-a-stick con DHCP por VLAN y una DMZ con servidor web; comprueba con ping qué llega y qué no.
+- [Ejercicio 2: Captura el proceso DORA de DHCP](ejercicios.md#ejercicio-2-captura-el-proceso-dora-de-dhcp) — identifica los cuatro mensajes y las opciones 1, 3, 6 y 51 en una captura real.
+- [Ejercicio 3: Sigue la jerarquía del DNS con dig](ejercicios.md#ejercicio-3-sigue-la-jerarquía-del-dns-con-dig) — recorre raíz, TLD y autoritativo con `+trace` y consulta MX, TXT y PTR.
+- [Ejercicio 4: Lee tu gateway, tu caché ARP y tus servicios locales](ejercicios.md#ejercicio-4-lee-tu-gateway-tu-caché-arp-y-tus-servicios-locales) — con `ip route`, `ip neigh` y `ss -tln` sobre tu propia máquina.
+- [Ejercicio 5: Subnetea diez direcciones a mano y verifícalo con Python](ejercicios.md#ejercicio-5-subnetea-diez-direcciones-a-mano-y-verifícalo-con-python) — resuelve con el número mágico y comprueba con el módulo `ipaddress`.
 
 ## Cuadro resumen
 

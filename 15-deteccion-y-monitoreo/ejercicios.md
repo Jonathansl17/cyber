@@ -21,6 +21,10 @@ Necesitas:
    ```bash
    ip -br link
    ```
+   - `ip` → herramienta de iproute2 para ver y configurar interfaces, direcciones y rutas.
+   - `-br` → salida breve (`-brief`): una línea por interfaz con nombre, estado y dirección.
+   - `link` → objeto sobre el que actúa: las interfaces de red (capa 2); sin más argumentos las lista todas.
+
    En `sensor`, crea `/etc/netplan/60-lab.yaml` con este contenido completo (en `cliente` cambia la dirección por `192.168.56.10/24`):
    ```yaml
    network:
@@ -29,46 +33,105 @@ Necesitas:
        enp0s8:
          addresses: [192.168.56.20/24]
    ```
+   - `network:` → clave raíz obligatoria de todo archivo de netplan.
+   - `version: 2` → versión del formato de configuración de netplan; la única vigente es la 2.
+   - `ethernets:` → sección de interfaces Ethernet físicas.
+   - `enp0s8:` → nombre de la interfaz que se configura (la solo-anfitrión que viste con `ip -br link`).
+   - `addresses: [192.168.56.20/24]` → lista de direcciones IP estáticas con su prefijo; `/24` es la máscara 255.255.255.0.
+
    Aplícalo y verifica:
    ```bash
    sudo chmod 600 /etc/netplan/60-lab.yaml
    sudo netplan apply
    ip -br addr show enp0s8
    ```
+   - `sudo` → ejecuta el comando que sigue como root.
+   - `chmod 600` → cambia los permisos a lectura y escritura solo para el dueño (root); netplan avisa si sus archivos son legibles por otros.
+   - `/etc/netplan/60-lab.yaml` → archivo al que se aplican los permisos; el `60-` fija el orden en que netplan lo lee.
+   - `netplan apply` → genera la configuración para el backend de red (systemd-networkd o NetworkManager) y la aplica en el momento.
+   - `ip -br` → (ver paso 1).
+   - `addr show enp0s8` → muestra las direcciones IP solo de la interfaz `enp0s8`.
+   - `ping` → envía paquetes ICMP Echo Request y espera la respuesta.
+   - `-c 1` → envía un solo paquete y termina.
+   - `192.168.56.20` → destino del ping (`sensor`).
+
    Debe verse `enp0s8  UP  192.168.56.20/24`. Desde `cliente`, `ping -c 1 192.168.56.20` tiene que responder.
 2. En `sensor`, detén el servicio de Suricata que el paquete arranca solo, para lanzarlo a mano con tus reglas:
    ```bash
    sudo systemctl stop suricata
    suricata --build-info | grep -E 'Version|NFQueue'
    ```
-   `NFQueue support: yes` confirma que este binario puede funcionar inline. Si dice `no`, el modo IPS del paso 8 no funcionará con ese paquete.
+   - `sudo` → (ver paso 1).
+   - `systemctl stop suricata` → detiene ahora el servicio `suricata` de systemd (no lo deshabilita para el próximo arranque).
+   - `suricata --build-info` → muestra con qué opciones se compiló este binario de Suricata.
+   - `|` → tubería: la salida del comando de la izquierda pasa como entrada al de la derecha.
+   - `grep` → filtra y muestra solo las líneas que coinciden con un patrón.
+   - `-E` → interpreta el patrón como expresión regular extendida, donde `|` significa "o".
+   - `'Version|NFQueue'` → patrón: líneas que contengan `Version` o `NFQueue`. `NFQueue support: yes` confirma que este binario puede funcionar inline; si dice `no`, el modo IPS del paso 8 no funcionará con ese paquete.
 3. Crea `/etc/suricata/rules/local.rules` con las dos reglas de la nota. Este es el archivo completo; la segunda usa el buffer `http.uri;` de Suricata en lugar del `http_uri;` de Snort:
    ```
    alert icmp any any -> $HOME_NET any (msg:"LAB ICMP Echo Request hacia la red interna"; itype:8; sid:1000001; rev:1;)
    alert http any any -> $HOME_NET any (msg:"LAB cadena de prueba en el URI"; http.uri; content:"/hola-ids"; nocase; sid:1000002; rev:1;)
    ```
+   - `alert` → acción: si la regla coincide, genera una alerta y deja pasar el paquete.
+   - `icmp` / `http` → protocolo que inspecciona la regla; `http` hace que Suricata detecte el protocolo de aplicación sea cual sea el puerto.
+   - `any any` (el primero) → cualquier IP de origen y cualquier puerto de origen.
+   - `->` → dirección del tráfico: de origen a destino.
+   - `$HOME_NET any` → destino: las redes de la variable `HOME_NET` (paso 4), cualquier puerto.
+   - `msg:"..."` → texto que aparece en la alerta.
+   - `itype:8` → tipo ICMP 8, Echo Request (el ping de ida).
+   - `http.uri;` → buffer adhesivo: el `content` que sigue se busca solo en el URI normalizado de la petición HTTP (equivale al modificador `http_uri;` de Snort).
+   - `content:"/hola-ids"` → cadena de bytes que debe aparecer en ese buffer.
+   - `nocase` → la comparación del `content` anterior no distingue mayúsculas de minúsculas.
+   - `sid:1000001` / `sid:1000002` → identificador único de la regla; de 1000000 en adelante es el rango reservado para reglas locales.
+   - `rev:1` → revisión de la regla; se incrementa cada vez que se edita.
+   - `;` → separa cada opción dentro de los paréntesis; la última también lo lleva.
 4. La parte de `/etc/suricata/suricata.yaml` que importa es la variable `HOME_NET`, que por defecto incluye todas las redes privadas:
    ```yaml
    vars:
      address-groups:
        HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
    ```
+   - `vars:` → sección de variables que las reglas pueden usar.
+   - `address-groups:` → grupo de variables de direcciones IP (las de puertos van en `port-groups`).
+   - `HOME_NET: "[...]"` → la red que se protege; aquí, los tres rangos privados de RFC 1918. Las reglas la usan como `$HOME_NET`.
+
    No la edites: se sobrescribe al lanzar Suricata con `--set`. Valida la configuración y las reglas antes de arrancar:
    ```bash
    sudo suricata -T -c /etc/suricata/suricata.yaml -S /etc/suricata/rules/local.rules \
      --set "vars.address-groups.HOME_NET=[192.168.56.0/24]" -v
    ```
-   Al final debe aparecer `Configuration provided was successfully loaded. Exiting.` y una línea que dice `2 rules successfully loaded`. `-S` carga exclusivamente ese archivo e ignora las reglas del yaml.
+   - `sudo` → (ver paso 1).
+   - `suricata` → el motor IDS/IPS.
+   - `-T` → modo prueba: carga configuración y reglas, informa de errores y termina sin inspeccionar tráfico.
+   - `-c /etc/suricata/suricata.yaml` → ruta del archivo de configuración principal.
+   - `-S /etc/suricata/rules/local.rules` → carga exclusivamente este archivo de reglas e ignora las reglas que liste el yaml.
+   - `\` → al final de la línea, continúa el mismo comando en la línea siguiente.
+   - `--set "vars.address-groups.HOME_NET=[192.168.56.0/24]"` → sobrescribe un valor del yaml solo para esta ejecución; la ruta con puntos sigue la jerarquía `vars` → `address-groups` → `HOME_NET`.
+   - `-v` → aumenta el nivel de detalle de los mensajes de Suricata.
+
+   Al final debe aparecer `Configuration provided was successfully loaded. Exiting.` y una línea que dice `2 rules successfully loaded`.
 5. Arranca un servidor web mínimo en `sensor` (en una segunda terminal o sesión SSH) para que el `curl` tenga a quién pedir:
    ```bash
    sudo python3 -m http.server 80
    ```
-6. Lanza Suricata como IDS, escuchando una copia del tráfico de la interfaz. `-k none` desactiva la comprobación de checksums, que en VirtualBox suele fallar por el offloading de la tarjeta virtual:
+   - `sudo` → (ver paso 1); hace falta porque los puertos por debajo de 1024 requieren root.
+   - `python3` → el intérprete de Python 3.
+   - `-m http.server` → ejecuta el módulo `http.server` de la biblioteca estándar como programa: un servidor web que sirve el directorio actual.
+   - `80` → puerto en el que escucha el servidor (por defecto usaría el 8000).
+6. Lanza Suricata como IDS, escuchando una copia del tráfico de la interfaz:
    ```bash
    sudo rm -f /var/log/suricata/fast.log /var/log/suricata/eve.json
    sudo suricata -c /etc/suricata/suricata.yaml -S /etc/suricata/rules/local.rules \
      --set "vars.address-groups.HOME_NET=[192.168.56.0/24]" -k none -i enp0s8
    ```
+   - `rm` → borra archivos.
+   - `-f` → no da error si el archivo no existe y no pide confirmación.
+   - `/var/log/suricata/fast.log` → log de alertas de Suricata en una línea por alerta.
+   - `/var/log/suricata/eve.json` → log de eventos de Suricata en JSON, un objeto por línea.
+   - `-c`, `-S`, `--set`, `\` → (ver paso 4).
+   - `-k none` → desactiva todas las comprobaciones de checksum, que en VirtualBox suelen fallar por el offloading de la tarjeta virtual.
+   - `-i enp0s8` → captura una copia de los paquetes de la interfaz `enp0s8` con el mejor método disponible; Suricata solo observa, no está en el camino.
    Espera a ver `Engine started.` (en versiones antiguas, `all ... packet processing threads ... started`).
 7. Desde `cliente`, genera el tráfico y luego mira las alertas en `sensor`:
    ```bash
