@@ -633,7 +633,7 @@ LAPS → contraseña de admin local única y rotada por equipo.
 
 ### Práctica
 
-- [TryHackMe: módulo Authentication](https://tryhackme.com/module/authentication) — enumeración, fuerza bruta, sesiones, OAuth, MFA y JWT (nodos MFA & 2FA y SSO).
+- [PortSwigger: Authentication vulnerabilities](https://portswigger.net/web-security/authentication) y [OAuth 2.0 authentication vulnerabilities](https://portswigger.net/web-security/oauth) — gratis; teoría y labs de fallos de login, MFA y OAuth (nodos MFA & 2FA y SSO).
 - [TryHackMe: Enumeration & Brute Force](https://tryhackme.com/room/enumerationbruteforce) — gratis; fallos en login, recuperación de contraseña y autenticación (nodos MFA & 2FA y Local Auth).
 - [TryHackMe: OWASP Top 10 2025: IAAA Failures](https://tryhackme.com/room/owasptopten2025one) — gratis; fallos de identificación, autenticación y autorización (nodos Authentication vs Authorization y SSO).
 - [TryHackMe: Monitoring Active Directory](https://tryhackme.com/room/monitoringactivedirectory) — gratis; cómo se ven Kerberos y LDAP en los logs de un dominio (nodos Kerberos y LDAP).

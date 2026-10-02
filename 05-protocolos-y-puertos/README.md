@@ -827,8 +827,8 @@ SAE (WPA3) → reemplaza la PSK de WPA2, resiste diccionario offline.
 ### Práctica
 
 - [Network Services](https://tryhackme.com/room/networkservices) y [Network Services 2](https://tryhackme.com/room/networkservices2) — TryHackMe, gratis; SMB, Telnet, FTP, NFS, SMTP y MySQL en máquinas de laboratorio. Practica "Common Protocols and their Uses".
-- [Networking Secure Protocols](https://tryhackme.com/r/room/networksecurityprotocols) — TryHackMe; TLS, SSH y VPN. Practica "SSL and TLS Basics" y "SSH".
-- [Protocols and Servers](https://tryhackme.com/r/room/protocolsandservers) — TryHackMe; Telnet, HTTP, FTP, SMTP, POP3, IMAP conectándose a mano. Practica "Network Protocols".
+- [Networking Secure Protocols](https://tryhackme.com/room/networksecurityprotocols) — TryHackMe; TLS, SSH y VPN. Practica "SSL and TLS Basics" y "SSH".
+- [Protocols and Servers](https://tryhackme.com/room/protocolsandservers) — TryHackMe; Telnet, HTTP, FTP, SMTP, POP3, IMAP conectándose a mano. Practica "Network Protocols".
 - [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) — wargame que se juega entero por SSH; los primeros niveles enseñan `ssh`, puertos y `openssl s_client`. Practica "SSH" y "SSL / TLS".
 - [SSL Labs Server Test](https://www.ssllabs.com/ssltest/) — analiza versión, suites y cadena de certificados de un sitio; prueba con tu propio dominio o uno público. Practica "SSL and TLS Basics".
 - [badssl.com](https://badssl.com/) — subdominios con certificados rotos a propósito (expirado, autofirmado, nombre equivocado); ábrelos y lee el error del navegador. Practica "Certificados".

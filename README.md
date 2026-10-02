@@ -25,4 +25,4 @@ Cada tema tiene conceptos con analogías y ejemplos, una sección de recursos (v
 | 17 | [Estándares y cumplimiento](17-estandares-y-cumplimiento/) | ISO 27001, NIST, RMF, CIS, CSF, auditoría, gestión de vulnerabilidades |
 | 18 | [Cloud](18-cloud/) | Seguridad en la nube, IaC, serverless, modelos, AWS/GCP/Azure, S3 |
 | 19 | [Programación y hacking práctico](19-programacion-y-hacking-practico/) | Lenguajes para seguridad, herramientas, exploit frameworks, LOLBAS/GTFOBins, reversing, pentesting |
-| 20 | [Certificaciones y CTFs](20-certificaciones-y-ctfs/) | HackTheBox, TryHackMe, certificaciones de entrada y avanzadas |
+| 20 | [Certificaciones y CTFs](20-certificaciones-y-ctfs/) | HackTheBox, TryHackMe, VulnHub, picoCTF, pwn.college, certificaciones de entrada y avanzadas, ruta sugerida |

@@ -950,7 +950,7 @@ Analyzer → interpreta lo guardado.
 
 - [Nmap: The Basics](https://tryhackme.com/room/nmap01) y [Further Nmap](https://tryhackme.com/room/furthernmap) — TryHackMe; descubrimiento, tipos de escaneo, NSE y evasión. Practica "nmap" y "Port Scanners".
 - [TShark](https://tryhackme.com/room/tshark) — TryHackMe, gratis; capturar y filtrar desde la terminal con la versión CLI de Wireshark. Practica "tcpdump" y "Packet Sniffers".
-- [Wireshark: The Basics](https://tryhackme.com/r/room/wiresharkthebasics) — TryHackMe; análisis de PCAP. Practica "Protocol Analyzers".
+- [Wireshark: The Basics](https://tryhackme.com/room/wiresharkthebasics) — TryHackMe; análisis de PCAP. Practica "Protocol Analyzers".
 - [Network Enumeration with Nmap](https://academy.hackthebox.com/course/preview/network-enumeration-with-nmap) — HTB Academy; host discovery, escaneo, NSE, evasión de firewall, con laboratorios. Practica "nmap".
 - [Intro to Network Traffic Analysis](https://academy.hackthebox.com/course/preview/intro-to-network-traffic-analysis) — HTB Academy; tcpdump y Wireshark aplicados. Practica "tcpdump" y "Protocol Analyzers".
 - [scanme.nmap.org](http://scanme.nmap.org/) — host autorizado para practicar escaneos moderados (no más de unas pocas veces al día). Practica "nmap".

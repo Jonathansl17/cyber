@@ -112,6 +112,67 @@ Rutas → Pre Security → Cyber Security 101 → Jr Penetration Tester / SOC Le
 THM → guiado, paso a paso; HTB → más abierto, menos pistas.
 ```
 
+### VulnHub
+
+**VulnHub** es un repositorio gratuito de máquinas virtuales vulnerables a propósito, que se descargan y se ejecutan en tu propio laboratorio para practicar pentesting sin conexión a ninguna plataforma. Existe para practicar sin suscripción ni VPN: bajas la imagen, la importas en VirtualBox o VMware y la atacas desde otra VM de tu red aislada.
+
+Cómo se usa:
+
+- Cada máquina (entry) trae una descripción, su dificultad y a veces una pista; el objetivo suele ser conseguir root y leer una bandera.
+- Se importa en una red host-only o interna, nunca en modo bridged, para que una máquina deliberadamente vulnerable no quede expuesta a tu red de casa (ver [`06-virtualizacion`](../06-virtualizacion/)).
+- Las máquinas son antiguas en su mayoría (el sitio se actualiza poco), lo que las hace buenas para aprender metodología clásica: enumerar, encontrar un servicio viejo, entrar, escalar privilegios.
+- Clásicas para empezar: la serie Kioptrix y Mr-Robot.
+
+Analogía: es comprar un kit de cerraduras de práctica para tu casa en vez de pagar la cuota de un gimnasio de cerrajería: lo tienes para siempre y entrenas a tu ritmo, pero tú montas el banco de trabajo.
+
+Ejemplo: descargas Kioptrix Level 1 (unos 200 MB), la importas en VirtualBox en una red host-only junto a tu VM de ataque, la descubres en la red con un escaneo de tu propio rango y practicas el ciclo completo de un pentest documentando cada paso como si fuera un informe.
+
+```
+VulnHub → VMs vulnerables descargables; gratis, sin conexión; tú montas el laboratorio.
+Red host-only → aísla la VM vulnerable de tu red real.
+```
+
+### picoCTF
+
+**picoCTF** es una competencia gratuita de CTF tipo Jeopardy creada por la Universidad Carnegie Mellon para estudiantes, cuyo archivo de retos queda abierto todo el año en picoGym. Existe para enseñar desde cero: los primeros retos se resuelven con un navegador y una terminal básica, y la dificultad sube poco a poco.
+
+Cómo se organiza:
+
+- picoGym: cientos de retos de ediciones anteriores, siempre disponibles, por categoría: Web Exploitation, Cryptography, Reverse Engineering, Forensics, Binary Exploitation y General Skills.
+- Cada reto da puntos según su dificultad y tiene pistas opcionales.
+- La competencia anual (en primavera) es por equipos y está pensada para estudiantes de secundaria y universidad, aunque cualquiera puede practicar.
+- Incluye una terminal web (webshell), así que no hace falta instalar nada al principio.
+
+Analogía: es el cuaderno de ejercicios graduado de una materia: empiezas por los de una estrella y no pasas a los de cinco hasta resolver los anteriores.
+
+Ejemplo de uso: una semana dedicada a General Skills (comandos de Linux, codificaciones como base64, permisos), la siguiente a Cryptography (cifrados clásicos, XOR) y la siguiente a Forensics (metadatos, archivos ocultos). Cada categoría refuerza un tema de esta guía.
+
+```
+picoCTF → CTF Jeopardy gratuito de Carnegie Mellon; picoGym abierto todo el año.
+Categorías → Web, Crypto, Reversing, Forensics, Binary, General Skills.
+```
+
+### pwn.college
+
+**pwn.college** es una plataforma educativa gratuita de la Universidad Estatal de Arizona que enseña seguridad de sistemas a bajo nivel mediante "dojos": módulos con videos de clase y cientos de retos prácticos que se resuelven en un entorno Linux en el navegador. Existe para cubrir lo que las plataformas de iniciación tocan poco: cómo funcionan de verdad los programas, la memoria y el sistema operativo.
+
+Cómo se organiza:
+
+- Dojos por nivel: los iniciales (Linux Luminarium, Computing 101, Playing With Programs) enseñan terminal, programas y ensamblador básico; los avanzados cubren corrupción de memoria, explotación de binarios, kernel e ingeniería inversa.
+- Cada módulo trae las clases en video del curso universitario real y sus retos, que se resuelven en un contenedor accesible desde el navegador o por SSH.
+- Se cursa con la misma secuencia que siguen los estudiantes de la universidad, y es gratis.
+
+Analogía: si picoCTF es el cuaderno de ejercicios, pwn.college es el curso universitario completo, con clases grabadas y laboratorio incluidos.
+
+Ejemplo: después de leer sobre buffer overflow en [`12-ataques-web-y-de-red`](../12-ataques-web-y-de-red/) y sobre C++ y ensamblador en [`19-programacion-y-hacking-practico`](../19-programacion-y-hacking-practico/), el dojo de corrupción de memoria te hace ver, reto a reto, cómo una copia sin control de longitud llega a cambiar lo que hace un programa.
+
+```
+pwn.college → curso universitario gratuito de seguridad de sistemas en dojos.
+Dojo → módulo con clases en video y retos en un entorno Linux en el navegador.
+VulnHub / picoCTF / pwn.college → laboratorio propio / ejercicios graduados / curso de bajo nivel.
+```
+
+
 ## Beginner Certifications
 
 Las **certificaciones de entrada** son credenciales pensadas para validar la base técnica (hardware, sistemas, redes y conceptos de seguridad) de quien busca su primer empleo en TI o seguridad. Existen porque los filtros de selección de personal usan certificaciones para decidir a quién entrevistar cuando el candidato no tiene experiencia; demuestran que se estudió un temario completo y estándar.
@@ -428,4 +489,186 @@ Precio GIAC → 999 USD la mayoría; reintento 899; renovación 499; validez 4 a
 
 - Emisor: OffSec. Curso asociado: PEN-200 (Penetration Testing with Kali Linux).
 - Enfoque: pentesting práctico de principio a fin: enumeración, explotación, escalada de privilegios en Linux y Windows, y ataque a Active Directory. Su lema histórico es "Try Harder".
-- Nivel: intermedio, con f
+- Nivel: intermedio; no tiene requisitos formales, pero se espera soltura en redes, Linux, Windows y scripting básico.
+- Formato: 23 horas y 45 minutos de examen práctico supervisado por cámara, más 24 horas para entregar el informe. Se aprueba con 70 de 100 puntos: tres máquinas independientes de 20 puntos cada una y un conjunto de Active Directory de 40 puntos. Desde el 1 de noviembre de 2024 ya no hay puntos extra por ejercicios del curso.
+- OSCP+: quien aprueba desde esa fecha recibe OSCP+, que caduca a los 3 años; el OSCP clásico no caduca.
+- Precio verificado: 1.749 USD el paquete con curso, laboratorios y un intento.
+- Rol: pentester junior, red team, consultor de seguridad ofensiva.
+
+Analogía: es el examen práctico de conducir en ciudad real; no basta con saberse las señales, tienes que llegar al destino en un tiempo dado y luego explicar por escrito la ruta.
+
+Ejemplo de preparación: 2 o 3 meses del curso PEN-200 y sus laboratorios, más unas 40 o 50 máquinas de práctica de dificultad fácil y media (TryHackMe, HackTheBox, VulnHub), escribiendo un informe de cada una como si fuera el del examen.
+
+```
+OSCP → examen práctico de 24 h: 3 máquinas (60 pts) + Active Directory (40 pts); aprobar con 70.
+OSCP+ → versión desde nov 2024; caduca a los 3 años.
+Informe → 24 h extra; sin informe no hay certificación.
+```
+
+### CREST
+
+**CREST** es un organismo acreditador sin ánimo de lucro, nacido en el Reino Unido, que certifica tanto a empresas de servicios de seguridad como a profesionales individuales, con exámenes muy valorados para trabajar en pentesting en Reino Unido, Europa, Australia y Asia. Existe para dar a los clientes una garantía independiente de que quien hace la prueba de penetración tiene un nivel mínimo comprobado.
+
+Sus certificaciones de pentesting más comunes forman una escalera:
+
+- CPSA (CREST Practitioner Security Analyst): nivel de entrada; examen teórico de 120 preguntas en 2 horas, sin material, aprobado con el 60 %. Cubre redes, protocolos, Windows, Linux, aplicaciones web y metodología.
+- CRT (CREST Registered Penetration Tester): examen práctico de 2,5 horas más 15 minutos de lectura; exige tener el CPSA y tiene validez de 3 años. Es el requisito habitual para trabajar como pentester en empresas acreditadas por CREST.
+- CCT (CREST Certified Tester), en variantes de infraestructura y de aplicaciones: el nivel senior, mucho más exigente.
+- Rol: pentester en consultoras acreditadas, sobre todo fuera de América.
+
+Analogía: es la licencia de un gremio profesional: el cliente no contrata a cualquiera, contrata a alguien con el sello del colegio.
+
+Ejemplo: una consultora de Londres que quiere hacer pentests a bancos necesita estar acreditada por CREST, y para eso su personal tiene que tener CRT o CCT; por eso esas ofertas de empleo piden CREST antes que otras certificaciones.
+
+```
+CREST → acreditador de empresas y profesionales de pentest; fuerte en Reino Unido y Commonwealth.
+CPSA → teórico de entrada: 120 preguntas, 2 h, 60 %.
+CRT  → práctico de 2,5 h; exige CPSA; válido 3 años.
+CCT  → nivel senior, infraestructura o aplicaciones.
+```
+
+### CISSP
+
+**CISSP** (Certified Information Systems Security Professional) es una certificación de ISC2 que acredita conocimiento amplio de gestión y arquitectura de seguridad en los 8 dominios de su cuerpo de conocimiento, y es la certificación más pedida para puestos senior y de liderazgo en ciberseguridad.
+
+- Emisor: ISC2.
+- Enfoque: amplitud y gestión, no técnica profunda: "piensa como un gerente". Se dice que mide un kilómetro de ancho y un centímetro de profundidad.
+- Requisitos: 5 años de experiencia remunerada en al menos 2 de los 8 dominios (1 año se puede convalidar con un título universitario o con ciertas certificaciones). Quien aprueba sin la experiencia queda como Associate of ISC2 hasta reunirla.
+- Formato: examen adaptativo (CAT) de 100 a 150 preguntas en 3 horas; la dificultad se ajusta según las respuestas.
+- Precio verificado: 749 USD.
+- Los 8 dominios, con su peso en el examen:
+  1. Security and Risk Management, 16 %.
+  2. Asset Security, 10 %.
+  3. Security Architecture and Engineering, 13 %.
+  4. Communication and Network Security, 13 %.
+  5. Identity and Access Management, 13 %.
+  6. Security Assessment and Testing, 12 %.
+  7. Security Operations, 13 %.
+  8. Software Development Security, 10 %.
+- Rol: responsable de seguridad, arquitecto, consultor senior, camino a CISO.
+
+Analogía: es la especialidad de medicina general para jefes de servicio: no te hace cirujano, pero te permite coordinar a todos los especialistas.
+
+Ejemplo: una pregunta típica no pide el comando para aislar un equipo, sino qué debe hacer primero un responsable de seguridad ante un incidente; la respuesta correcta suele ser la que protege a las personas y sigue la política, no la más técnica.
+
+```
+CISSP → ISC2; gestión y arquitectura en 8 dominios; puestos senior.
+Requisito → 5 años en 2 de 8 dominios; sin ellos, Associate of ISC2.
+Examen → adaptativo, 100-150 preguntas, 3 h.
+```
+
+## Ruta sugerida
+
+Una **ruta de certificación** es el orden en que conviene sacar las certificaciones para que cada una se apoye en la anterior y apunte al rol que se busca. No hace falta sacarlas todas: lo que más pesa al buscar trabajo es la combinación de una o dos certificaciones con práctica demostrable (CTFs, laboratorios, un blog con informes).
+
+```
+                 Base (0-12 meses)
+     Network+ ──► Security+         (A+ y Linux+ si vienes de cero en soporte o Linux;
+        │                             CCNA en lugar de Network+ si apuntas a redes)
+        │
+        ├──────────── Ofensivo ─────────────┐
+        │                                   │
+        ▼                                   ▼
+   Defensivo (SOC, IR)               Pentest / red team
+   práctica: TryHackMe SOC L1,       práctica: TryHackMe, HTB, VulnHub,
+   CyberDefenders, BTLO              picoCTF, pwn.college
+        │                                   │
+   GSEC o CySA+                      CEH (si lo pide RR. HH.) ──► OSCP ──► GPEN / CRT / GWAPT
+        │                                   │
+        └──────────► Gestión y senior ◄─────┘
+                     CISA (auditoría) · CISM (gestión) · CISSP (liderazgo)
+```
+
+Ejemplo de primer año: meses 1 a 4, Network+ con práctica de redes; meses 5 a 8, Security+ en paralelo con las rutas gratuitas de TryHackMe; meses 9 a 12, elegir lado y acumular 30 a 50 retos o máquinas resueltas y documentadas.
+
+> [!TIP]
+> Para el primer empleo, Security+ más práctica demostrable abre más puertas que una certificación avanzada sin experiencia; las certificaciones de gestión (CISSP, CISM, CISA) exigen años de experiencia y llegan después.
+
+## Recursos para aprender y practicar
+
+### Videos
+
+- [What is CTF? An introduction to security Capture The Flag competitions](https://www.youtube.com/watch?v=8ev9ZX9J45A) — LiveOverflow; qué es un CTF y cómo se juega (CTFs).
+- [BEGINNER Capture The Flag - PicoCTF 2021 001 "Obedient Cat"](https://www.youtube.com/watch?v=P07NH5F-t3s) — John Hammond; inicio de su serie resolviendo picoCTF (picoCTF).
+- [Introduction: What is pwn.college?](https://www.youtube.com/watch?v=hh4XAU6XYP0) — pwn.college; cómo funciona la plataforma (pwn.college).
+- [Tier 0: HackTheBox Starting Point - 5 Machines - Full Walkthrough](https://www.youtube.com/watch?v=jQ194vU4Qkk) — CryptoCat; las primeras máquinas gratuitas de HackTheBox (HackTheBox).
+- [Free CCNA | Network Devices | Day 1](https://www.youtube.com/watch?v=H8W9oMNSuwo) — Jeremy's IT Lab; inicio del curso completo y gratuito de CCNA (CCNA).
+- [Everyone Is Confused About the OSCP+](https://www.youtube.com/watch?v=Vun7pLuihhI) — Tib3rius; qué cambió con OSCP+ (OSCP).
+- [OSCP vs. GPEN vs. CEH: The Ultimate Guide!](https://www.youtube.com/watch?v=aBqUK9YkjQk) — Luke Gough; comparación de las tres certificaciones ofensivas (CEH, GPEN, OSCP).
+
+El curso completo y gratuito de Security+ y Network+ está en [professormesser.com](https://www.professormesser.com/).
+
+### Lectura y documentación
+
+- [CompTIA A+](https://www.comptia.org/en-us/certifications/a/), [Linux+](https://www.comptia.org/en-us/certifications/linux/), [Network+](https://www.comptia.org/en-us/certifications/network/) y [Security+](https://www.comptia.org/en-us/certifications/security/) — páginas oficiales con objetivos de examen y precios.
+- [Cisco CCNA](https://www.cisco.com/site/us/en/learn/training-certifications/certifications/enterprise/ccna/index.html) — página oficial del CCNA 200-301.
+- [EC-Council CEH](https://www.eccouncil.org/train-certify/certified-ethical-hacker-ceh/) — página oficial del CEH.
+- [ISACA CISA](https://www.isaca.org/credentialing/cisa) y [CISM](https://www.isaca.org/credentialing/cism) — requisitos y dominios.
+- [GIAC](https://www.giac.org/): [GSEC](https://www.giac.org/certifications/security-essentials-gsec/), [GPEN](https://www.giac.org/certifications/penetration-tester-gpen/) y [GWAPT](https://www.giac.org/certifications/web-application-penetration-tester-gwapt/) — objetivos y formato de cada examen.
+- [OffSec PEN-200 (OSCP)](https://www.offsec.com/courses/pen-200/) — curso y examen.
+- [CREST CPSA](https://www.crest-approved.org/skills-certifications-careers/crest-practitioner-security-analyst/) y [CREST CRT](https://www.crest-approved.org/skills-certifications-careers/crest-registered-penetration-tester/) — formato y requisitos.
+- [ISC2 CISSP](https://www.isc2.org/certifications/cissp) y [requisitos de experiencia](https://www.isc2.org/certifications/cissp/cissp-experience-requirements) — dominios y experiencia exigida.
+- [CTFtime](https://ctftime.org/) — calendario de CTFs públicos y clasificación de equipos.
+
+### Práctica
+
+- [HackTheBox Starting Point](https://app.hackthebox.com/starting-point) — máquinas guiadas gratuitas, de nivel 0 a 2, para empezar en HTB.
+- [HTB Academy](https://academy.hackthebox.com/) — módulos de nivel Fundamental gratuitos con laboratorio incluido.
+- [TryHackMe: Pentesting Fundamentals](https://tryhackme.com/room/pentestingfundamentals), [Vulnversity](https://tryhackme.com/room/vulnversity), [Basic Pentesting](https://tryhackme.com/room/basicpentestingjt), [Blue](https://tryhackme.com/room/blue) y [Simple CTF](https://tryhackme.com/room/easyctf) — gratis; las primeras máquinas completas para practicar la metodología del OSCP.
+- [TryHackMe: SOC Fundamentals](https://tryhackme.com/room/socfundamentals) y [SOC L1 Alert Triage](https://tryhackme.com/room/socl1alerttriage) — gratis; el lado defensivo de la ruta.
+- [VulnHub: Kioptrix Level 1](https://www.vulnhub.com/entry/kioptrix-level-1-1,22/) y [Mr-Robot](https://www.vulnhub.com/entry/mr-robot-1,151/) — máquinas clásicas para tu laboratorio local.
+- [picoCTF](https://picoctf.org/) — entra a picoGym y resuelve retos por categoría, empezando por General Skills.
+- [pwn.college](https://pwn.college/) — empieza por los dojos iniciales (Linux Luminarium) antes de pasar a explotación de binarios.
+- [OverTheWire](https://overthewire.org/wargames/) — wargames por niveles: Bandit (Linux), Natas (web), Narnia (binarios).
+- [CyberDefenders](https://cyberdefenders.org/blueteam-ctf-challenges/) — investigaciones defensivas gratuitas con pcaps, logs e imágenes de disco.
+
+## Cuadro resumen
+
+Todo lo visto, en una línea por término.
+
+CTFs (Capture the Flag)
+
+```
+CTF         → competencia de retos de seguridad; cada reto esconde una bandera.
+Jeopardy    → retos independientes por categoría y puntos.
+Attack-Defense → cada equipo defiende sus servicios y ataca los del resto.
+HackTheBox  → máquinas realistas con pocas pistas; Starting Point y Academy para empezar.
+TryHackMe   → salas guiadas con preguntas; para empezar de cero.
+VulnHub     → VMs vulnerables descargables; gratis y sin conexión.
+picoCTF     → CTF Jeopardy gratuito de Carnegie Mellon; picoGym abierto todo el año.
+pwn.college → curso gratuito de seguridad de sistemas en dojos.
+```
+
+Beginner Certifications
+
+```
+CompTIA A+       → soporte técnico: hardware, sistemas operativos y resolución de problemas.
+CompTIA Linux+   → administración de Linux.
+CompTIA Network+ → fundamentos de redes, neutral respecto al fabricante.
+CCNA             → redes con equipos Cisco; configuración práctica.
+CompTIA Security+→ fundamentos de seguridad; la certificación base más pedida.
+```
+
+Advanced Certifications
+
+```
+CEH    → EC-Council; hacking ético, mayormente teórico; muy pedido por RR. HH.
+CISA   → ISACA; auditoría de sistemas de información.
+CISM   → ISACA; gestión de un programa de seguridad.
+GSEC   → GIAC; fundamentos técnicos amplios, con libro abierto impreso.
+GPEN   → GIAC; pentesting de red.
+GWAPT  → GIAC; pentesting de aplicaciones web.
+GIAC   → certificador de SANS; 40+ certificaciones técnicas especializadas.
+OSCP   → examen práctico de 24 h: 3 máquinas (60 pts) + Active Directory (40 pts); aprobar con 70.
+CREST  → acreditador de pentest; CPSA teórico de entrada, CRT práctico.
+CISSP  → ISC2; gestión y arquitectura en 8 dominios; 5 años de experiencia.
+```
+
+Ruta sugerida
+
+```
+Base      → Network+ y Security+ (A+, Linux+ o CCNA según el punto de partida).
+Defensivo → práctica SOC y GSEC o CySA+.
+Ofensivo  → práctica en CTFs y máquinas, OSCP, luego GPEN, CRT o GWAPT.
+Senior    → CISA, CISM o CISSP, con años de experiencia.
+```
