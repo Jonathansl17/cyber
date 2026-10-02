@@ -520,7 +520,6 @@ PTES       → 7 fases: pre-engagement, intelligence, threat modeling, vulnerabi
 - [OverTheWire Narnia](https://overthewire.org/wargames/narnia/) — introducción a fallos de memoria en C, para después de Bandit.
 - [crackmes.one](https://crackmes.one/) — retos de ingeniería inversa por dificultad; empieza por nivel 1.
 - [PortSwigger Web Security Academy](https://portswigger.net/web-security) — labs gratuitos para practicar con Burp.
-- [DVWA](https://github.com/digininja/DVWA) y [OWASP Juice Shop](https://owasp.org/www-project-juice-shop/) — aplicaciones vulnerables para montar en tu propia VM.
 - [TryHackMe: Python Basics](https://tryhackme.com/room/pythonbasics), [Custom Tooling Using Python](https://tryhackme.com/room/customtoolingpython) y [Bash Scripting](https://tryhackme.com/room/bashscripting) — gratis; los lenguajes en contexto de seguridad. Para PowerShell, [Windows Command Line](https://tryhackme.com/room/windowscommandline) (gratis).
 - [TryHackMe: Burp Suite: Repeater](https://tryhackme.com/room/burpsuiterepeater), [Hydra](https://tryhackme.com/room/hydra), [Crack the hash](https://tryhackme.com/room/crackthehash) y [Content Discovery](https://tryhackme.com/room/contentdiscoveryx) — gratis; una sala por tipo de herramienta.
 - [TryHackMe: Metasploit Introduction](https://tryhackme.com/room/metasploitintro) — el framework en un lab guiado.

@@ -779,7 +779,6 @@ Defang → compartir IOCs como hxxp://malo[.]com.
 - [TryHackMe: Log Analysis with SIEM](https://tryhackme.com/room/loganalysiswithsiem) — gratis; investigar alertas correlacionando logs. Nodos: SIEM, Event Logs.
 - [TryHackMe: Windows Logging for SOC](https://tryhackme.com/room/windowsloggingforsoc) e [Intro to Logs](https://tryhackme.com/room/introtologs) — gratis; eventos de Windows, Sysmon y tipos de logs. Nodo: Event Logs.
 - [TryHackMe: Carnage](https://tryhackme.com/room/c2carnage) y [Traffic Analysis Essentials](https://tryhackme.com/room/trafficanalysisessentials) — gratis; investigar un pcap real en Wireshark. Nodo: Packet Captures. Más pcaps para practicar: [Malware-Traffic-Analysis.net](https://www.malware-traffic-analysis.net/training-exercises.html).
-- [Splunk BOTS v1](https://github.com/splunk/botsv1) y [BOTS v3](https://github.com/splunk/botsv3) — conjuntos de datos reales de ataque (Windows, firewall, flujos, Sysmon) para cargar en un Splunk propio y cazar. Nodos: SIEM, Event Logs, Firewall Logs.
 - [CyberDefenders](https://cyberdefenders.org/) — retos azules con pcaps, logs y memoria. Nodos: Packet Captures, Event Logs, SIEM.
 - [Blue Team Labs Online](https://blueteamlabs.online/) — investigaciones de phishing, logs y tráfico. Nodos: herramientas comunes, Packet Captures.
 - [LetsDefend](https://letsdefend.io/) — simulador de SOC con cola de alertas, SIEM y casos. Nodos: SIEM, SOAR, herramientas comunes.

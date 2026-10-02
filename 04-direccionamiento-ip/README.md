@@ -886,8 +886,6 @@ IPAM → inventario y planificación de todas las IP; integra DHCP y DNS.
 - [NTP Pool Project](https://www.ntppool.org/) — servidores NTP públicos y cómo usarlos.
 - [NetBox](https://github.com/netbox-community/netbox) — IPAM e inventario de red de código abierto, para IPAM.
 - [ip-address(8)](https://man.archlinux.org/man/ip-address.8), [dig(1)](https://man.archlinux.org/man/dig.1) e [ipcalc(1)](https://man.archlinux.org/man/ipcalc.1) — páginas de manual de las herramientas de los ejemplos.
-- [Subnetting Mastery](https://www.practicalnetworking.net/stand-alone/subnetting-mastery/) — Practical Networking; la serie completa de 7 videos con la hoja de referencia para descargar.
-- [IP Calculator (ipcalc)](https://jodies.de/ipcalc) — calculadora web para comprobar tus respuestas, no para sustituir el cálculo a mano.
 
 ### Práctica
 

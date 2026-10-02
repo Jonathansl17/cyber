@@ -548,7 +548,6 @@ Backporting → parche aplicado sin cambiar la versión: causa falsos positivos.
 - [NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) — recomendaciones de respuesta a incidentes alineadas con CSF 2.0.
 - [CIS Critical Security Controls v8](https://www.cisecurity.org/controls/v8) y [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks) — los 18 controles, los IG y las guías de configuración descargables.
 - [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework) y [el documento CSF 2.0 (CSWP 29)](https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf) — funciones, categorías, perfiles y niveles.
-- [CVE Program](https://www.cve.org/) y [NVD](https://nvd.nist.gov/) — buscar cualquier CVE y ver su CVSS, CPE y CWE.
 - [CVSS v3.1 Specification](https://www.first.org/cvss/v3.1/specification-document) y [CVSS v4.0 Specification](https://www.first.org/cvss/v4.0/specification-document) — definición oficial de cada métrica y rango.
 - [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) y [FIRST EPSS](https://www.first.org/epss/) — las dos fuentes de probabilidad real de explotación.
 - [NIST SP 800-40 Rev. 4, Enterprise Patch Management](https://csrc.nist.gov/pubs/sp/800/40/r4/final) — el parcheo como mantenimiento preventivo planificado.

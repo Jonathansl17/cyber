@@ -741,10 +741,6 @@ Cabeceras → ni S/MIME ni PGP cifran asunto ni direcciones.
 - [RFC 4033: DNS Security Introduction and Requirements](https://www.rfc-editor.org/rfc/rfc4033) — DNSSEC.
 - [RFC 4513: LDAP Authentication Methods and Security Mechanisms](https://www.rfc-editor.org/rfc/rfc4513) — StartTLS y binds seguros.
 - [RFC 3711: SRTP](https://www.rfc-editor.org/rfc/rfc3711) y [RFC 8551: S/MIME 4.0](https://www.rfc-editor.org/rfc/rfc8551) — voz segura y correo firmado/cifrado.
-- [CyberChef](https://gchq.github.io/CyberChef/) — de GCHQ; codifica/decodifica base64, calcula hashes, cifra con AES y encadena operaciones para ver la diferencia entre codificar, cifrar y hashear (nodos Obfuscation y Hashing).
-- [hashcat](https://hashcat.net/hashcat/) con su lista de [hashes de ejemplo](https://hashcat.net/wiki/doku.php?id=example_hashes) — en tu laboratorio, genera hashes MD5 y bcrypt de 20 contraseñas propias y compara cuánto tarda `hashcat -m 0` frente a `hashcat -m 3200` con el mismo diccionario (nodos Hashing y Salting).
-- [SSL Labs Server Test](https://www.ssllabs.com/ssltest/) — analiza la configuración TLS de un sitio público: versiones, suites, cadena de certificados (nodos SSL vs TLS y PKI).
-- [DNSViz](https://dnsviz.net/) — dibuja la cadena DNSSEC de cualquier dominio, de la raíz a la zona (nodo DNSSEC).
 
 ### Práctica
 

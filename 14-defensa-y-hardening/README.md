@@ -958,7 +958,6 @@ Honeytoken → dato o credencial falsa cuyo uso delata un acceso.
 - [MITRE D3FEND](https://d3fend.mitre.org/) — catálogo de técnicas defensivas, el contrapunto de ATT&CK.
 - [MITRE ATT&CK Mitigations](https://attack.mitre.org/mitigations/enterprise/) — qué control mitiga qué técnica.
 - [CISA Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) — para priorizar qué parchear primero.
-- [T-Pot](https://github.com/telekom-security/tpotce) — plataforma con decenas de honeypots y paneles listos.
 
 ### Práctica
 
@@ -967,7 +966,6 @@ Honeytoken → dato o credencial falsa cuyo uso delata un acceso.
 - [TryHackMe: Network Security Essentials](https://tryhackme.com/room/networksecurityessentials) e [Intro to Endpoint Security](https://tryhackme.com/room/introtoendpointsecurity) — gratis; firewalls, segmentación y protección de endpoints.
 - [TryHackMe: Intro to Antivirus](https://tryhackme.com/room/introtoav) — cómo detecta un antivirus.
 - [TryHackMe: Introduction to Honeypots](https://tryhackme.com/room/introductiontohoneypots) — montar y leer un honeypot.
-- [Cowrie](https://github.com/cowrie/cowrie) — honeypot SSH de interacción media; móntalo en una VM aislada y mira qué intentan los bots.
 - Ejercicio en casa: aplica el CIS Benchmark de nivel 1 a una VM con tu distribución, documenta cada cambio y comprueba con `ss -tlnp` antes y después cuántos puertos quedaron abiertos.
 - Ejercicio en casa: entra al panel de tu router, comprueba que usa WPA3 o WPA2-AES (nunca WEP ni TKIP) y que WPS está desactivado.
 

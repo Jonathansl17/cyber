@@ -823,8 +823,6 @@ SAE (WPA3) → reemplaza la PSK de WPA2, resiste diccionario offline.
 - [An overview of HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview) — MDN; peticiones, respuestas, versiones. Y [RFC 9110 — HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110) para métodos y códigos.
 - [How It Works — Let's Encrypt](https://letsencrypt.org/how-it-works/) — emisión automática de certificados DV con ACME.
 - [Mozilla SSL Configuration Generator](https://ssl-config.mozilla.org/) — configuraciones TLS recomendadas por servidor.
-- [SSL Labs Server Test](https://www.ssllabs.com/ssltest/) — analiza versión, suites y cadena de certificados de un sitio; prueba con tu propio dominio o uno público. Practica "SSL and TLS Basics".
-- [badssl.com](https://badssl.com/) — subdominios con certificados rotos a propósito (expirado, autofirmado, nombre equivocado); ábrelos y lee el error del navegador. Practica "Certificados".
 
 ### Práctica
 
