@@ -766,10 +766,10 @@ Triaje → revisar una alerta para decidir si es real; no es hunting.
 - [TryHackMe: Intro to Threat Hunting](https://tryhackme.com/room/threathuntingintroduction) — mentalidad del cazador, hipótesis y diferencia con respuesta a incidentes. Nodos: Threat Hunting, hipótesis, hunting vs monitoreo.
 - [TryHackMe: OhSINT](https://tryhackme.com/room/ohsint), [Sakura Room](https://tryhackme.com/room/sakura) y [Searchlight - IMINT](https://tryhackme.com/room/searchlightosint) — gratis; encadenar fuentes públicas a partir de un solo dato. Nodo: OSINT.
 - [CyberDefenders: Blue Team CTF Challenges](https://cyberdefenders.org/blueteam-ctf-challenges/) — retos de análisis con categoría de Threat Intel y de Threat Hunting sobre logs reales.
-- Ejercicio en casa (pirámide del dolor): toma un hash de malware publicado hoy en MalwareBazaar, búscalo en VirusTotal y anota cuántos otros archivos de la misma familia tienen hashes distintos. Escribe una línea explicando por qué bloquear ese hash no basta.
-- Ejercicio en casa (ATT&CK Navigator): crea una capa con las técnicas de APT28 (G0007) y otra donde marques en verde las técnicas que detectarías con Sysmon instalado en tu propia máquina; superponlas y lista 3 huecos.
-- Ejercicio en casa (OSINT defensivo): sobre un dominio propio o de una organización que te autorice, busca sus subdominios en Certificate Transparency y sus servicios expuestos en Shodan; anota cuáles no deberían estar públicos.
-- Ejercicio en casa (hunting por hipótesis): instala Sysmon en una VM Windows de laboratorio, crea una tarea programada con `schtasks /create` que ejecute un binario desde `C:\Users\Public`, y escribe la hipótesis y la consulta que la encontraría entre el evento 1 de Sysmon y el evento 4698 de Windows Security (tarea programada creada, requiere activar esa auditoría).
+- [Ejercicio 1: Por qué bloquear un hash no basta](ejercicios.md#ejercicio-1-por-qué-bloquear-un-hash-no-basta) — contar en MalwareBazaar los hashes distintos de una familia y justificar con ese número por qué el hash está en la base de la pirámide.
+- [Ejercicio 2: Huecos de cobertura de Sysmon frente a APT28](ejercicios.md#ejercicio-2-huecos-de-cobertura-de-sysmon-frente-a-apt28) — superponer en el ATT&CK Navigator las capas de APT28 y de Sysmon y explicar 3 técnicas sin cobertura.
+- [Ejercicio 3: Superficie expuesta de tu dominio con OSINT](ejercicios.md#ejercicio-3-superficie-expuesta-de-tu-dominio-con-osint) — listar subdominios propios en Certificate Transparency, ver sus puertos en Shodan y señalar lo que no debería ser público.
+- [Ejercicio 4: Caza por hipótesis de una tarea programada sospechosa](ejercicios.md#ejercicio-4-caza-por-hipótesis-de-una-tarea-programada-sospechosa) — escribir una hipótesis sobre T1053.005 y confirmarla cruzando el evento 1 de Sysmon con el 4698 de Security.
 
 ## Cuadro resumen
 

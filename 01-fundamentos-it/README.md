@@ -296,9 +296,9 @@ OSI (7) / TCP/IP (4) → modelos de capas para ubicar funciones y fallos.
 - [TryHackMe: Intro to LAN](https://tryhackme.com/room/introtolan) — topologías, subredes y DHCP en una LAN. Basics of Computer Networking.
 - [TryHackMe: MAL: Malware Introductory](https://tryhackme.com/room/malmalintroductory) — gratis; tipos de malware y análisis estático básico, incluido el de documentos. Understand Basics of Popular Suites.
 - [CyberDefenders: MalDoc101](https://cyberdefenders.org/blueteam-ctf-challenges/maldoc101/) — reto blue team de análisis de un documento con macros. Understand Basics of Popular Suites.
-- Ejercicio en casa (Troubleshooting): desconecta a propósito el DNS de una VM (por ejemplo, pon un servidor DNS inexistente) y diagnostícalo solo con `ping` a la puerta de enlace, a una IP pública y a un nombre, anotando qué descarta cada prueba.
-- Ejercicio en casa (Suites): en LibreOffice crea un documento con una macro inofensiva que muestre un mensaje, guárdalo y pásalo por `olevba` en una VM; compara la salida con la de un documento sin macros.
-- Ejercicio en casa (Networking): ejecuta `traceroute -n` (o `tracert -d` en Windows) hacia tres destinos distintos e identifica tu gateway, el primer router de tu proveedor y cuántos saltos hay hasta cada uno.
+- [Ejercicio 1: Diagnostica un fallo de DNS con el método por capas](ejercicios.md#ejercicio-1-diagnostica-un-fallo-de-dns-con-el-método-por-capas) — rompe el DNS de una VM a propósito y aísla la causa con tres pings encadenados.
+- [Ejercicio 2: Extrae la macro de un documento con olevba](ejercicios.md#ejercicio-2-extrae-la-macro-de-un-documento-con-olevba) — crea un documento con macro inofensiva y confirma con olevba que se ejecuta sola al abrir.
+- [Ejercicio 3: Rastrea la ruta a tres destinos con traceroute](ejercicios.md#ejercicio-3-rastrea-la-ruta-a-tres-destinos-con-traceroute) — identifica tu gateway, el primer router del proveedor y los saltos hasta cada destino.
 
 ## Cuadro resumen
 

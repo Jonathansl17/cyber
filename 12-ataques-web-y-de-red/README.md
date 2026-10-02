@@ -1027,9 +1027,9 @@ Canonicalización → resolver la ruta final real antes de decidir si se permite
 - [TryHackMe: L2 MAC Flooding & ARP Spoofing](https://tryhackme.com/room/layer2) — ataques de capa 2 en un entorno aislado (nodos Spoofing y MITM).
 - [TryHackMe: Wifi Hacking 101](https://tryhackme.com/room/wifihacking101) — WPA, handshake y deauth (nodos Deauth Attack y Evil Twin).
 - [TryHackMe: PWN101](https://tryhackme.com/room/pwn101) — gratis; desbordamientos de pila en binarios de práctica (nodo Buffer Overflow). Más práctica de memoria: [pwn.college](https://pwn.college/) (gratis, por módulos) y [Exploit Education Phoenix](https://exploit.education/phoenix/).
-- Ejercicio en casa (Memory Leak y Buffer Overflow): compila el ejemplo vulnerable de `handle` y de `greet` con `-fsanitize=address -g`, ejecútalos con una entrada larga e inválida, lee el informe de ASan y comprueba que la versión corregida sale limpia.
-- Ejercicio en casa (VLAN Hopping): en Packet Tracer, monta dos switches con un trunk y dos VLAN; ejecuta `show interfaces trunk`, aplica la configuración endurecida de la sección y verifica que ningún puerto de acceso negocia trunk.
-- Ejercicio en casa (DNS Poisoning): ejecuta `dig +dnssec` contra un dominio firmado y contra `dnssec-failed.org`, y compara la bandera `ad` y el `SERVFAIL`.
+- [Ejercicio 1: Reproduce un desbordamiento y una fuga de memoria con AddressSanitizer](ejercicios.md#ejercicio-1-reproduce-un-desbordamiento-y-una-fuga-de-memoria-con-addresssanitizer) — compila `greet` y `handle` con ASan, lee el informe hasta la línea culpable y comprueba que la versión corregida sale limpia.
+- [Ejercicio 2: Endurece los trunks contra VLAN hopping en Packet Tracer](ejercicios.md#ejercicio-2-endurece-los-trunks-contra-vlan-hopping-en-packet-tracer) — aplica la configuración endurecida de la sección y verifica que ningún puerto de acceso negocia trunk.
+- [Ejercicio 3: Compara DNSSEC en un dominio firmado y en uno que falla](ejercicios.md#ejercicio-3-compara-dnssec-en-un-dominio-firmado-y-en-uno-que-falla) — usa `dig +dnssec` y compara la bandera `ad` del dominio firmado con el `SERVFAIL` de `dnssec-failed.org`.
 
 ## Cuadro resumen
 

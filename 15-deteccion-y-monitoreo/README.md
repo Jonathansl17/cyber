@@ -782,11 +782,11 @@ Defang → compartir IOCs como hxxp://malo[.]com.
 - [CyberDefenders](https://cyberdefenders.org/) — retos azules con pcaps, logs y memoria. Nodos: Packet Captures, Event Logs, SIEM.
 - [Blue Team Labs Online](https://blueteamlabs.online/) — investigaciones de phishing, logs y tráfico. Nodos: herramientas comunes, Packet Captures.
 - [LetsDefend](https://letsdefend.io/) — simulador de SOC con cola de alertas, SIEM y casos. Nodos: SIEM, SOAR, herramientas comunes.
-- Ejercicio en casa: en dos máquinas virtuales de VirtualBox en red solo-anfitrión, instala Suricata en una, carga las dos reglas de esta nota y genera el tráfico con `ping` y `curl` desde la otra; luego cambia `alert` por `drop` y ejecuta Suricata en modo IPS con NFQUEUE para ver el bloqueo. Nodos: Basics of IDS and IPS, NIPS.
-- Ejercicio en casa: en una VM Windows de evaluación activa la auditoría de creación de procesos con línea de comandos, instala Sysmon, falla 5 veces el login, crea un usuario y añádelo a Administradores; después encuentra 4625, 4720, 4732 y 4688 con `Get-WinEvent`. Nodo: Event Logs.
-- Ejercicio en casa: con `logger -p auth.warning "prueba de syslog"` escribe un mensaje y encuéntralo con `journalctl -p warning`; calcula a mano su PRI. Nodo: syslogs.
-- Ejercicio en casa: captura con `tcpdump` tu propia navegación durante 5 minutos, ábrela en Wireshark y responde con filtros: cuántos dominios distintos consultaste por DNS y a qué SNI fue cada conexión TLS. Nodo: Packet Captures.
-- Ejercicio en casa: busca en VirusTotal (por hash, sin subir nada) el SHA-256 de un archivo de prueba EICAR y lee su informe; luego consulta en lookup.icann.org la fecha de creación de tres dominios que conozcas. Nodos: VirusTotal, WHOIS.
+- [Ejercicio 1: Suricata como IDS y luego como IPS](ejercicios.md#ejercicio-1-suricata-como-ids-y-luego-como-ips) — cargar las dos reglas de la nota en Suricata, ver sus alertas y bloquear el mismo tráfico con `drop` inline por NFQUEUE.
+- [Ejercicio 2: Rastrea un ataque simulado en los Event Logs](ejercicios.md#ejercicio-2-rastrea-un-ataque-simulado-en-los-event-logs) — activar auditoría y Sysmon, simular fuerza bruta y alta de un administrador y encontrar 4625, 4720, 4732 y 4688 con `Get-WinEvent`.
+- [Ejercicio 3: Escribe un mensaje syslog y calcula su PRI](ejercicios.md#ejercicio-3-escribe-un-mensaje-syslog-y-calcula-su-pri) — encontrar un mensaje `auth.warning` con `journalctl -p warning` y comprobar su PRI 36 en el mensaje RFC 5424 enviado por UDP.
+- [Ejercicio 4: Analiza DNS y SNI de tu propia navegación](ejercicios.md#ejercicio-4-analiza-dns-y-sni-de-tu-propia-navegación) — contar con filtros de Wireshark los dominios consultados por DNS y el SNI de cada conexión TLS en 5 minutos de tráfico propio.
+- [Ejercicio 5: Enriquece un hash y tres dominios sin subir nada](ejercicios.md#ejercicio-5-enriquece-un-hash-y-tres-dominios-sin-subir-nada) — leer el informe de EICAR en VirusTotal buscando por hash y sacar la fecha de creación de tres dominios por RDAP.
 
 ## Cuadro resumen
 

@@ -638,10 +638,10 @@ SOAR → plataforma que automatiza runbooks.
 - [TryHackMe: Windows PrivEsc](https://tryhackme.com/room/windows10privesc) — gratis; servicios, tareas y permisos mal configurados en Windows. Nodo: Privilege Escalation.
 - [PortSwigger Web Security Academy: Access control](https://portswigger.net/web-security/access-control) — laboratorios gratuitos de escalada vertical y horizontal en aplicaciones web. Nodo: Privilege Escalation.
 - [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) — los niveles con binarios SUID enseñan cómo un permiso mal dado entrega privilegios. Nodo: Privilege Escalation.
-- Ejercicio en casa con [restic](https://restic.readthedocs.io/en/stable/): aplica 3-2-1 a una carpeta de prueba (copia en disco local, en un USB y en un almacenamiento remoto), borra la carpeta y mide cuánto tardas en restaurarla; ese tiempo es tu RTO real y la hora del último snapshot fija tu RPO. Nodo: Backups and Resiliency.
-- Ejercicio en casa: calcula SLE, ALE y el valor de un control para tres activos tuyos (portátil, móvil, disco de fotos) con un AV, EF y ARO inventados, y decide qué respuesta al riesgo aplicarías a cada uno. Nodo: Definition of Risk.
-- Ejercicio en casa: en una red de laboratorio con VirtualBox o Proxmox, crea tres redes (DMZ, usuarios, servidores) separadas por un firewall pfSense o OPNsense, escribe las reglas de esta nota y comprueba con `nmap` desde cada zona qué puertos ves. Nodo: Perimiter vs DMZ vs Segmentation.
-- Ejercicio en casa: escribe un runbook de una página para "restaurar mi carpeta de proyectos desde backup" y pídele a otra persona que lo siga sin ayuda; cada duda que tenga es un paso que falta. Nodo: Runbooks.
+- [Ejercicio 1: Aplica la regla 3-2-1 y mide tu RPO y RTO](ejercicios.md#ejercicio-1-aplica-la-regla-3-2-1-y-mide-tu-rpo-y-rto) — copia una carpeta con restic en 3 copias, 2 soportes y 1 fuera del sitio, bórrala y mide el tiempo de restauración.
+- [Ejercicio 2: Calcula SLE ALE y el valor de un control](ejercicios.md#ejercicio-2-calcula-sle-ale-y-el-valor-de-un-control) — pon en dinero el riesgo de tres activos tuyos y decide con el número qué respuesta al riesgo aplicas.
+- [Ejercicio 3: Segmenta una red de laboratorio y compruébala con nmap](ejercicios.md#ejercicio-3-segmenta-una-red-de-laboratorio-y-compruébala-con-nmap) — monta DMZ, usuarios y servidores tras un firewall y demuestra con nmap que solo ves los puertos permitidos.
+- [Ejercicio 4: Escribe un runbook de restauración y pruébalo](ejercicios.md#ejercicio-4-escribe-un-runbook-de-restauración-y-pruébalo) — vuelve "restaurar proyectos desde backup" un runbook de una página y valídalo con otra persona.
 
 ## Cuadro resumen
 

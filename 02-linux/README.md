@@ -588,10 +588,10 @@ man → manual oficial del comando.
 - [TryHackMe: Linux Strength Training](https://tryhackme.com/room/linuxstrengthtraining) — retos de búsqueda de archivos, permisos y procesado de texto. Nodo Common Commands.
 - [TryHackMe: Linux Privilege Escalation](https://tryhackme.com/room/linprivesc) — SUID, sudo, cron y capabilities en un laboratorio legal. Nodo Understand Permissions.
 - [TryHackMe: Linux Logging for SOC](https://tryhackme.com/room/linuxloggingforsoc) — gratis; /var/log, auth.log, journal y auditd desde el punto de vista del analista. Nodo Troubleshooting.
-- Ejercicio en casa (Permissions): en una VM crea dos usuarios y un grupo compartido; arma una carpeta con SGID (2770) y sticky para que ambos escriban pero ninguno borre lo del otro, y comprueba con `ls -l` el grupo heredado.
-- Ejercicio en casa (Permissions): ejecuta `find / -perm -4000 -type f 2>/dev/null` en tu VM, guarda la lista y busca cada binario en GTFOBins para saber cuáles serían peligrosos si se les pusiera SUID.
-- Ejercicio en casa (Troubleshooting): instala nginx, ocupa el puerto 80 con `python3 -m http.server 80` y diagnostica el fallo usando solo `systemctl status`, `journalctl -u nginx` y `ss -tulpn`.
-- Ejercicio en casa (Common Commands): intenta varios logins SSH fallidos contra tu propia VM y reproduce la cadena `grep | awk | sort | uniq -c | sort -rn` para contar intentos por IP en `auth.log` o en `journalctl -u ssh`.
+- [Ejercicio 1: Carpeta de equipo con SGID y sticky bit](ejercicios.md#ejercicio-1-carpeta-de-equipo-con-sgid-y-sticky-bit) — monta una carpeta compartida donde ambos escriben pero nadie borra lo del otro, y comprueba el grupo heredado.
+- [Ejercicio 2: Inventario de binarios SUID y cotejo con GTFOBins](ejercicios.md#ejercicio-2-inventario-de-binarios-suid-y-cotejo-con-gtfobins) — lista los SUID de tu VM y revisa cuáles serían abusables según GTFOBins.
+- [Ejercicio 3: Diagnostica un puerto ocupado con systemctl, journalctl y ss](ejercicios.md#ejercicio-3-diagnostica-un-puerto-ocupado-con-systemctl-journalctl-y-ss) — provoca que nginx no arranque y encuentra al proceso que tiene el puerto 80.
+- [Ejercicio 4: Cuenta intentos de login fallidos por IP en los logs](ejercicios.md#ejercicio-4-cuenta-intentos-de-login-fallidos-por-ip-en-los-logs) — genera logins SSH fallidos y reconstruye la cadena `grep | awk | sort | uniq -c | sort -rn`.
 
 ## Cuadro resumen
 

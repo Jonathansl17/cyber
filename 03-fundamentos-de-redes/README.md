@@ -179,6 +179,52 @@ Firewall stateful → capa 4; filtra por IP, puerto y estado de conexión.
 WAF → capa 7; filtra contenido HTTP.
 ```
 
+### TCP y UDP
+
+**TCP** (Transmission Control Protocol) es un protocolo de la capa de transporte (capa 4) que entrega los datos completos, en orden y sin errores, estableciendo antes una conexión entre los dos extremos. **UDP** (User Datagram Protocol) es un protocolo de la misma capa que envía cada mensaje suelto, sin conexión previa y sin comprobar que llegue, a cambio de ser más rápido y ligero.
+
+Existen los dos porque las aplicaciones necesitan cosas distintas. Descargar un archivo o cargar una web no tolera que falte un solo byte: más vale tardar un poco y que llegue todo. Una llamada de voz o un videojuego prefieren perder un paquete a esperarlo: un trozo de audio que llega medio segundo tarde ya no sirve.
+
+Analogía: TCP es una llamada telefónica. Primero se establece la comunicación ("¿me oyes?", "sí, te oigo"), luego se habla en orden y, si algo no se entiende, se pide que lo repitan. UDP es mandar postales: cada una va por su cuenta, pueden llegar desordenadas, alguna se puede perder y el que las envía nunca se entera.
+
+Cómo lo consigue TCP:
+
+- Conexión con handshake de tres pasos (SYN, SYN-ACK, ACK) antes de enviar datos; el detalle está en [`05-protocolos-y-puertos`](../05-protocolos-y-puertos/).
+- Número de secuencia en cada segmento, para que el receptor reordene lo que llegue desordenado.
+- Acuses de recibo (ACK): el receptor confirma lo recibido y el emisor retransmite lo que no se confirmó a tiempo.
+- Control de flujo (ventana) y de congestión: el emisor baja el ritmo si el receptor o la red se saturan.
+- Cierre ordenado de la conexión con FIN.
+
+Todo eso cuesta: una cabecera de 20 bytes como mínimo y al menos un viaje de ida y vuelta antes del primer dato. UDP no hace nada de lo anterior: su cabecera tiene 8 bytes (puerto de origen, puerto de destino, longitud y checksum) y el primer paquete ya lleva datos. Si la aplicación necesita fiabilidad sobre UDP, la implementa ella misma; es lo que hace QUIC, el transporte de HTTP/3.
+
+```
+              TCP                                   UDP
+Conexión      Sí (handshake de 3 pasos)             No
+Entrega       Garantizada, retransmite              No garantizada
+Orden         Garantizado (números de secuencia)    No garantizado
+Cabecera      20 bytes mínimo                       8 bytes
+Velocidad     Más lento, más sobrecarga             Más rápido, menos sobrecarga
+Unidad (PDU)  Segmento                              Datagrama
+Usos          Web (HTTP/HTTPS), SSH, correo, FTP    DNS, DHCP, VoIP, streaming, juegos, NTP, SNMP
+```
+
+Ejemplo: al abrir `https://ejemplo.com`, el navegador primero pregunta la IP al DNS por UDP 53 (una pregunta y una respuesta de unos 100 bytes; si se pierde, simplemente pregunta otra vez) y luego abre una conexión TCP al puerto 443 para descargar la página, donde perder un byte rompería el HTML. Dos protocolos en el mismo clic, cada uno donde encaja.
+
+Desde seguridad importan tres consecuencias:
+
+- Un escaneo de puertos TCP es fiable porque el handshake responde siempre (SYN-ACK si está abierto, RST si está cerrado); en UDP un puerto abierto a menudo no responde nada, así que el escaneo UDP es lento y ambiguo.
+- Como UDP no tiene handshake, la IP de origen se puede falsificar con facilidad; por eso los ataques de amplificación (DNS, NTP, memcached) usan UDP (ver [`12-ataques-web-y-de-red`](../12-ataques-web-y-de-red/)).
+- Un firewall con estado sigue las conexiones TCP por sus banderas; en UDP solo puede aproximarlo con temporizadores.
+
+> [!TIP]
+> Si una aplicación necesita que llegue todo y en orden, usa TCP; si necesita inmediatez y tolera pérdidas, usa UDP. DNS es la excepción que confirma la regla: usa UDP para consultas pequeñas y pasa a TCP cuando la respuesta es grande o en transferencias de zona.
+
+```
+TCP → orientado a conexión; fiable, ordenado; handshake y retransmisión; web, SSH, correo.
+UDP → sin conexión; rápido, sin garantías; cabecera de 8 bytes; DNS, DHCP, VoIP, juegos.
+Segmento → PDU de TCP.  Datagrama → PDU de UDP.
+```
+
 ## Network Topologies
 
 Una **topología de red** es la forma en que se conectan los nodos de una red. La topología física describe por dónde van los cables; la lógica describe cómo circulan realmente los datos, y no tienen por qué coincidir. Las cuatro clásicas son Star, Ring, Mesh y Bus; las redes reales suelen ser híbridas (una estrella de estrellas, por ejemplo).
@@ -451,6 +497,8 @@ LUN → disco lógico que la SAN presenta a un servidor.
 - [Network Topologies (Star, Bus, Ring, Mesh, Ad hoc, Infrastructure, & Wireless Mesh Topology)](https://www.youtube.com/watch?v=zbqrNg4C98U) — PowerCert Animated Videos; las cuatro topologías del roadmap animadas, para Star, Ring, Mesh y Bus.
 - [Network Types: LAN, WAN, PAN, CAN, MAN, SAN, WLAN](https://www.youtube.com/watch?v=4_zSIXb7tLQ) — PowerCert Animated Videos; todos los tipos de red por alcance, para MAN, LAN, WAN y WLAN.
 - [NAS vs SAN - Network Attached Storage vs Storage Area Network](https://www.youtube.com/watch?v=3yZDDr0JKVc) — PowerCert Animated Videos; diferencia archivo frente a bloque, para Basics of NAS and SAN.
+- [TCP vs UDP Comparison](https://www.youtube.com/watch?v=uwoD5YsGACg) — PowerCert Animated Videos; TCP frente a UDP con animaciones (TCP y UDP).
+- [TCP vs UDP - Explaining Facts and Debunking Myths](https://www.youtube.com/watch?v=jE_FcgpQ7Co) — Practical Networking; cómo funcionan por dentro y mitos comunes (TCP y UDP).
 
 ### Lectura y documentación
 
@@ -504,6 +552,8 @@ WAF → capa 7; filtra contenido HTTP.
 Ataques capa 2 → ARP spoofing, MAC flooding, VLAN hopping; solo en la LAN.
 Ataques capa 3-4 → IP spoofing, ICMP flood, SYN flood, port scanning.
 Ataques capa 7 → SQLi, XSS, phishing, HTTP flood.
+TCP → orientado a conexión; fiable, ordenado; handshake y retransmisión; web, SSH, correo.
+UDP → sin conexión; rápido, sin garantías; cabecera de 8 bytes; DNS, DHCP, VoIP, juegos.
 ```
 
 Network Topologies

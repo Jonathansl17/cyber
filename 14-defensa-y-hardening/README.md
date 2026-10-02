@@ -966,8 +966,8 @@ Honeytoken → dato o credencial falsa cuyo uso delata un acceso.
 - [TryHackMe: Network Security Essentials](https://tryhackme.com/room/networksecurityessentials) e [Intro to Endpoint Security](https://tryhackme.com/room/introtoendpointsecurity) — gratis; firewalls, segmentación y protección de endpoints.
 - [TryHackMe: Intro to Antivirus](https://tryhackme.com/room/introtoav) — cómo detecta un antivirus.
 - [TryHackMe: Introduction to Honeypots](https://tryhackme.com/room/introductiontohoneypots) — montar y leer un honeypot.
-- Ejercicio en casa: aplica el CIS Benchmark de nivel 1 a una VM con tu distribución, documenta cada cambio y comprueba con `ss -tlnp` antes y después cuántos puertos quedaron abiertos.
-- Ejercicio en casa: entra al panel de tu router, comprueba que usa WPA3 o WPA2-AES (nunca WEP ni TKIP) y que WPS está desactivado.
+- [Ejercicio 1: Aplica un subconjunto del CIS nivel 1 a una VM](ejercicios.md#ejercicio-1-aplica-un-subconjunto-del-cis-nivel-1-a-una-vm) — endurecer una VM Ubuntu con siete grupos de controles CIS y medir con `ss`, `nmap` y Lynis la superficie antes y después.
+- [Ejercicio 2: Audita el cifrado y el WPS de tu router](ejercicios.md#ejercicio-2-audita-el-cifrado-y-el-wps-de-tu-router) — demostrar con `nmcli` e `iw` que tu red solo anuncia AES-CCMP con WPA2 o WPA3 y que WPS está apagado.
 
 ## Cuadro resumen
 

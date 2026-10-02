@@ -558,11 +558,11 @@ Backporting → parche aplicado sin cambiar la versión: causa falsos positivos.
 - [TryHackMe: Vulnerabilities 101](https://tryhackme.com/room/vulnerabilities101) — qué es una vulnerabilidad, cómo se puntúa y bases de datos como NVD. Nodo: CVE y CVSS.
 - [TryHackMe: Vulnerability Scanning Tools](https://tryhackme.com/room/vulnerabilityscanningtools), [OpenVAS](https://tryhackme.com/room/openvas) y [Understanding Vulnerability Databases](https://tryhackme.com/room/understandingvulnerabilitydatabases) — gratis; escanear, leer CVE/CVSS y priorizar. Nodo: Basics of Vulnerability Management.
 - [TryHackMe: OpenVAS](https://tryhackme.com/room/openvas) — montar y usar un escáner de vulnerabilidades. Nodo: Escáneres.
-- Ejercicio con la [calculadora CVSS 3.1](https://www.first.org/cvss/calculator/3.1) y la [4.0](https://www.first.org/cvss/calculator/4.0): toma 3 CVE de NVD, borra el vector, recalcúlalo tú leyendo la descripción y compara tu nota con la oficial. Nodo: CVSS.
-- Ejercicio en casa con [Greenbone Community Edition](https://greenbone.github.io/docs/latest/): escanea una máquina virtual propia vulnerable (por ejemplo, Metasploitable en una red solo-anfitrión) sin y con credenciales, compara el número de hallazgos y prioriza los 5 primeros cruzándolos con KEV y EPSS. Nodo: Basics of Vulnerability Management.
-- Ejercicio en casa con el script [`vulners` de Nmap](https://nmap.org/nsedoc/scripts/vulners.html) contra tu propia VM: reproduce la salida de esta nota y escribe para cada hallazgo si corriges, mitigas o aceptas. Nodo: Ciclo de gestión de vulnerabilidades.
-- Ejercicio en casa con [Lynis](https://cisofy.com/lynis/): ejecuta `lynis audit system` en tu Linux, mira el "hardening index" y compara 5 sugerencias con el CIS Benchmark de tu distribución. Nodo: CIS.
-- Ejercicio en casa: haz un perfil actual y uno objetivo del CSF 2.0 para tu propio equipo doméstico (portátil, móvil, router), una línea por función, y deduce el plan de trabajo de la diferencia. Nodo: CSF.
+- [Ejercicio 1: Recalcula el vector CVSS de tres CVE](ejercicios.md#ejercicio-1-recalcula-el-vector-cvss-de-tres-cve) — reconstruye el vector 3.1 de 3 CVE de NVD y compara tu franja de severidad con la oficial.
+- [Ejercicio 2: Escaneo con y sin credenciales usando Greenbone](ejercicios.md#ejercicio-2-escaneo-con-y-sin-credenciales-usando-greenbone) — escanea una VM propia sin y con credenciales y prioriza los 5 primeros con KEV y EPSS.
+- [Ejercicio 3: Decide corregir, mitigar o aceptar con Nmap vulners](ejercicios.md#ejercicio-3-decide-corregir-mitigar-o-aceptar-con-nmap-vulners) — reproduce la salida de `vulners` contra tu VM y escribe una decisión de tratamiento por hallazgo.
+- [Ejercicio 4: Audita tu Linux con Lynis y contrástalo con el CIS Benchmark](ejercicios.md#ejercicio-4-audita-tu-linux-con-lynis-y-contrástalo-con-el-cis-benchmark) — mira tu "hardening index" y mapea 5 sugerencias a controles CIS.
+- [Ejercicio 5: Perfil CSF 2.0 actual y objetivo de tu casa](ejercicios.md#ejercicio-5-perfil-csf-20-actual-y-objetivo-de-tu-casa) — construye perfil actual y objetivo de tus dispositivos y deduce el plan de trabajo.
 
 ## Cuadro resumen
 

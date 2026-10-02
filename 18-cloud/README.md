@@ -479,8 +479,8 @@ Block Public Access → anula políticas/ACL públicas; activado por defecto des
 - [TryHackMe: First Steps Into AWS](https://tryhackme.com/room/awsfirststeps) — consola y CLI de AWS en un entorno provisto (AWS).
 - [TryHackMe: AWS Security - S3cret Santa](https://tryhackme.com/room/cloudenum-aoc2025-y4u7i0o3p6) — gratis; enumerar y asegurar buckets S3 mal configurados (S3).
 - [TryHackMe: Intro to IaC](https://tryhackme.com/room/introtoiac) — gratis; Infrastructure as Code y sus riesgos (IaC). Para serverless, el escenario de Lambda de [CloudGoat](https://github.com/RhinoSecurityLabs/cloudgoat) se monta en tu propia cuenta.
-- Ejercicio en casa: con la capa gratuita de [AWS](https://aws.amazon.com/free/), crea con Terraform un bucket con `aws_s3_bucket_public_access_block`, pasa `checkov -d .`, luego quita el bloque y compara el informe. Destruye todo con `terraform destroy` (IaC, S3).
-- Ejercicio en casa: desde una máquina sin credenciales ejecuta `aws s3 ls s3://<tu-bucket> --no-sign-request` antes y después de poner una bucket policy con `"Principal": "*"` y desactivar Block Public Access; vuelve a activarlo y confirma el `AccessDenied` (S3).
+- [Ejercicio 1: Bucket S3 con Terraform y escaneo con Checkov](ejercicios.md#ejercicio-1-bucket-s3-con-terraform-y-escaneo-con-checkov) — crea un bucket privado con la capa gratuita de [AWS](https://aws.amazon.com/free/), míralo pasar y luego fallar en `checkov`, y destrúyelo con `terraform destroy` (IaC, S3).
+- [Ejercicio 2: Observa cuándo un bucket se vuelve público y ciérralo](ejercicios.md#ejercicio-2-observa-cuándo-un-bucket-se-vuelve-público-y-ciérralo) — comprueba el `AccessDenied` anónimo, ábrelo con una bucket policy `"Principal": "*"` y vuelve a cerrarlo, todo en tu cuenta y con limpieza (S3).
 
 ## Cuadro resumen
 

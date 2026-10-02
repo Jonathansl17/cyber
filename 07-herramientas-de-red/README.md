@@ -952,9 +952,9 @@ Analyzer → interpreta lo guardado.
 - [TShark](https://tryhackme.com/room/tshark) — TryHackMe, gratis; capturar y filtrar desde la terminal con la versión CLI de Wireshark. Practica "tcpdump" y "Packet Sniffers".
 - [Carnage](https://tryhackme.com/room/c2carnage) — TryHackMe, gratis; investigar un pcap real de una infección con Wireshark. Practica "Protocol Analyzers".
 - [Malware-Traffic-Analysis.net training exercises](https://www.malware-traffic-analysis.net/training-exercises.html) — pcaps de infecciones reales con preguntas y respuestas. Practica "Protocol Analyzers" con mirada de SOC.
-- Ejercicio en casa: en una terminal `sudo tcpdump -nn -i any 'host 192.168.1.X'` y en otra `nmap -sS -p 1-100 192.168.1.X` contra otra máquina tuya; identifica en la captura los `[S]`, `[S.]` y `[R]` y relaciónalos con los estados open y closed. Repite con `-sT` y nota el `[.]` extra que completa el handshake. Practica "nmap" y "tcpdump".
-- Ejercicio en casa: corre `ss -tulnp` (Linux) o `netstat -ano` (Windows), identifica el proceso de cada puerto que escucha y decide si debería estar expuesto; luego bloquea uno con `iptables`/`ufw` y comprueba desde otra máquina con `nc -zv` que pasa de open a filtered. Practica "netstat", "iptables" y "Port Scanners".
-- Ejercicio en casa: compara `traceroute 1.1.1.1`, `traceroute -I 1.1.1.1` y `sudo traceroute -T -p 443 1.1.1.1`, y explica por qué los asteriscos cambian entre uno y otro. Practica "tracert".
+- [Ejercicio 1: Observa un escaneo SYN y uno connect con tcpdump](ejercicios.md#ejercicio-1-observa-un-escaneo-syn-y-uno-connect-con-tcpdump) — relacionar los `[S]`, `[S.]`, `[R]` y el `[.]` extra de `-sT` con los estados open y closed de nmap.
+- [Ejercicio 2: Audita los puertos expuestos y filtra uno con iptables](ejercicios.md#ejercicio-2-audita-los-puertos-expuestos-y-filtra-uno-con-iptables) — inventariar con `ss -tulnp`, bloquear un puerto y ver con `nc` y nmap cómo pasa a filtered (DROP) o closed (REJECT).
+- [Ejercicio 3: Compara traceroute con UDP, ICMP y TCP](ejercicios.md#ejercicio-3-compara-traceroute-con-udp-icmp-y-tcp) — trazar la ruta a 1.1.1.1 con los tres tipos de sonda y explicar por qué cambian los asteriscos.
 
 ## Cuadro resumen
 

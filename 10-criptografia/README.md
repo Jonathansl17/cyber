@@ -747,12 +747,13 @@ Cabeceras → ni S/MIME ni PGP cifran asunto ni direcciones.
 - [TryHackMe: Cryptography Basics](https://tryhackme.com/room/cryptographybasics), [Cryptography Concepts](https://tryhackme.com/room/cryptographyconcepts) y [Encryption - Crypto 101](https://tryhackme.com/room/encryptioncrypto101) — gratis; simétrica, asimétrica, intercambio de claves y PKI.
 - [TryHackMe: Crack the hash](https://tryhackme.com/room/crackthehash) y [Breaking Crypto the Simple Way](https://tryhackme.com/room/breakingcryptothesimpleway) — gratis; identificar y crackear hashes en laboratorio (nodo Hashing). Retos de cripto por niveles en [picoGym](https://picoctf.org/) (categoría Cryptography).
 - [cryptopals](https://cryptopals.com/) — retos de programación de criptografía; el [set 1](https://cryptopals.com/sets/1) arranca con hex, base64 y XOR y avanza hasta romper AES-ECB (nodos Obfuscation y Private vs Public Keys).
-- Ejercicio en casa: haz el Diffie-Hellman de la nota a mano y luego en Python con `pow(5, 6, 23)`; repite con `p` de 2048 bits generado con `openssl dhparam 2048` (nodo Key Exchange).
-- Ejercicio en casa: crea una CA raíz, una intermedia y un certificado hoja con `openssl`; verifica la cadena con `openssl verify -CAfile raiz.crt -untrusted intermedia.crt hoja.crt`, revoca la hoja y genera la CRL (nodo PKI).
-- Ejercicio en casa: en dos VMs propias, sube un archivo por FTP (vsftpd) y por SFTP mientras capturas con Wireshark; busca `PASS` en la captura de FTP (nodo FTP vs SFTP).
-- Ejercicio en casa: levanta un túnel IPsec entre dos VMs con strongSwan y compara en Wireshark el tráfico ESP con el ping en claro (nodo IPSEC).
 - [CryptoHack](https://cryptohack.org/) — gratis; retos de criptografía por niveles, desde codificaciones y XOR hasta RSA y Diffie-Hellman mal implementados (nodos Key Exchange y Private vs Public Keys).
 - [picoCTF](https://picoctf.org/) — en picoGym, categoría Cryptography: retos de cifrados clásicos, codificaciones y RSA para resolver (nodos Obfuscation y Hashing).
+- [Ejercicio 1: Haz Diffie-Hellman a mano y en Python](ejercicios.md#ejercicio-1-haz-diffie-hellman-a-mano-y-en-python) — reproduce el intercambio de la nota y repítelo con un primo de 2048 bits de `openssl dhparam`.
+- [Ejercicio 2: Crea una PKI con openssl y revoca un certificado](ejercicios.md#ejercicio-2-crea-una-pki-con-openssl-y-revoca-un-certificado) — monta raíz, intermedia y hoja, verifica la cadena, revoca y genera la CRL.
+- [Ejercicio 3: Compara FTP y SFTP en Wireshark](ejercicios.md#ejercicio-3-compara-ftp-y-sftp-en-wireshark) — sube un archivo por cada uno entre dos VMs y ve `USER`/`PASS` en claro solo en FTP.
+- [Ejercicio 4: Levanta un túnel IPsec y observa ESP en Wireshark](ejercicios.md#ejercicio-4-levanta-un-túnel-ipsec-y-observa-esp-en-wireshark) — une dos VMs con strongSwan y compara el ping en claro con el tráfico ESP del túnel.
+- [Ejercicio 5: Mide el coste de MD5 frente a bcrypt](ejercicios.md#ejercicio-5-mide-el-coste-de-md5-frente-a-bcrypt) — genera tus hashes y mide con hashcat cuántos por segundo prueba cada algoritmo y por qué bcrypt protege mejor.
 
 ## Cuadro resumen
 

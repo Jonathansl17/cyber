@@ -618,6 +618,8 @@ El curso completo y gratuito de Security+ y Network+ está en [professormesser.c
 - [pwn.college](https://pwn.college/) — empieza por los dojos iniciales (Linux Luminarium) antes de pasar a explotación de binarios.
 - [OverTheWire](https://overthewire.org/wargames/) — wargames por niveles: Bandit (Linux), Natas (web), Narnia (binarios).
 - [CyberDefenders](https://cyberdefenders.org/blueteam-ctf-challenges/) — investigaciones defensivas gratuitas con pcaps, logs e imágenes de disco.
+- [Ejercicio 1: Monta el laboratorio local y descubre la máquina objetivo](ejercicios.md#ejercicio-1-monta-el-laboratorio-local-y-descubre-la-máquina-objetivo) — deja Kioptrix Level 1 y una VM de ataque en una red host-only aislada y enumera sus servicios.
+- [Ejercicio 2: Compromete Kioptrix Level 1 y redacta el informe](ejercicios.md#ejercicio-2-compromete-kioptrix-level-1-y-redacta-el-informe) — haz el ciclo completo hasta root y documéntalo con la plantilla de informe del OSCP.
 
 ## Cuadro resumen
 

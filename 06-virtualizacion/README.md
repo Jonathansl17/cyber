@@ -517,8 +517,8 @@ Atacante / víctimas / SIEM → los tres roles mínimos del lab.
 - [TryHackMe: Hosted Hypervisors](https://tryhackme.com/room/hostedhypervisors) — gratis; hipervisores tipo 2, VMs y su superficie de ataque (Basics of Virtualization).
 - [TryHackMe: Hypervisor Internals](https://tryhackme.com/room/hypervisorinternals) — gratis; cómo aísla un hipervisor por dentro (Isolation).
 - [TryHackMe: Intro to Containerisation](https://tryhackme.com/room/introtocontainerisation) e [Intro to Docker](https://tryhackme.com/room/introtodockerk8pdqk) — gratis; contenedores frente a VMs y su aislamiento (Contenedores).
-- Ejercicio en casa: crea dos VMs en una red "internal", toma un snapshot `limpio` de la víctima, bórrale `/etc/passwd` desde la shell, y restaura. Mide cuánto tarda (Snapshots para labs).
-- Ejercicio en casa: dentro de un contenedor `docker run --rm -it alpine sh` ejecuta `uname -r` y compáralo con el del host; luego en una VM haz lo mismo. Explica la diferencia (Isolation).
+- [Ejercicio 1: Rompe y restaura una VM con un snapshot](ejercicios.md#ejercicio-1-rompe-y-restaura-una-vm-con-un-snapshot) — dos VMs en red internal, snapshot `limpio`, borrar `/etc/passwd` de la víctima y medir cuánto tarda en volver.
+- [Ejercicio 2: Compara el kernel de un contenedor y de una VM](ejercicios.md#ejercicio-2-compara-el-kernel-de-un-contenedor-y-de-una-vm) — demostrar con `uname -r` que el contenedor comparte el kernel del host y la VM tiene el suyo.
 
 ## Cuadro resumen
 

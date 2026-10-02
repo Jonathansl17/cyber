@@ -702,9 +702,9 @@ El curso completo de Security+ SY0-701 de Professor Messer, ordenado por objetiv
 - [TryHackMe: Phishing Emails 1](https://tryhackme.com/room/phishingemails1tryoe) — analizar cabeceras y contenido de correos reales de phishing.
 - [TryHackMe: MAL: Malware Introductory](https://tryhackme.com/room/malmalintroductory) y [Malware Classification](https://tryhackme.com/room/malwareclassification) — gratis; tipos de malware y primeros pasos de análisis en entorno seguro.
 - [TryHackMe: Brute It](https://tryhackme.com/room/bruteit) y [Hydra](https://tryhackme.com/room/hydra) — gratis; fuerza bruta y diccionario contra máquinas de laboratorio, para ver qué rastro deja en los logs.
-- Ejercicio en casa: con los logs de autenticación de tu propio equipo o servidor de laboratorio (`journalctl -u ssh` o el visor de eventos con ID 4625), cuenta fallos por cuenta y cuentas distintas por IP, y decide si el patrón se parece más a fuerza bruta o a spray.
 - [TryHackMe: Phishing Emails in Action](https://tryhackme.com/room/phishingemails2rytmuv) y [Phishing Basics](https://tryhackme.com/room/phishingbasics) — gratis; analizar correos reales y reconocer las técnicas (nodos Phishing y Social Engineering).
 - [CyberDefenders](https://cyberdefenders.org/blueteam-ctf-challenges/) — retos defensivos gratuitos; filtra por la categoría de threat intel o de análisis de correo y resuelve uno de dificultad fácil.
+- [Ejercicio 1: Distingue fuerza bruta de password spray en tus logs](ejercicios.md#ejercicio-1-distingue-fuerza-bruta-de-password-spray-en-tus-logs) — cuenta en tus propios logs los fallos por cuenta y las cuentas distintas por IP para etiquetar cada patrón.
 
 ## Cuadro resumen
 

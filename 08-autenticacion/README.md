@@ -638,10 +638,10 @@ LAPS → contraseña de admin local única y rotada por equipo.
 - [TryHackMe: OWASP Top 10 2025: IAAA Failures](https://tryhackme.com/room/owasptopten2025one) — gratis; fallos de identificación, autenticación y autorización (nodos Authentication vs Authorization y SSO).
 - [TryHackMe: Monitoring Active Directory](https://tryhackme.com/room/monitoringactivedirectory) — gratis; cómo se ven Kerberos y LDAP en los logs de un dominio (nodos Kerberos y LDAP).
 - [TryHackMe: Attacktive Directory](https://tryhackme.com/room/attacktivedirectory) — gratis; Kerberos en un dominio de laboratorio de punta a punta (nodo Kerberos).
-- Ejercicio en casa: instala `oath-toolkit` y reproduce el vector `94287082` de RFC 6238; luego genera tu propio secreto, cárgalo en una app autenticadora y compara los códigos (nodo MFA & 2FA).
-- Ejercicio en casa: levanta [FreeRADIUS](https://www.freeradius.org/) en un contenedor, crea un usuario en `users` y prueba `radtest`; captura el tráfico con tcpdump en UDP 1812 y observa qué viaja en claro (nodo RADIUS).
-- Ejercicio en casa: levanta OpenLDAP ([guía del administrador](https://www.openldap.org/doc/admin26/)), crea dos OUs y tres usuarios, y haz `ldapsearch` con bind simple sin TLS mientras capturas con Wireshark para ver la contraseña en claro (nodo LDAP).
-- Ejercicio en casa: crea una CA propia con `openssl`, emite un certificado de cliente y configura nginx con `ssl_verify_client on`; prueba con y sin `curl --cert` (nodo Certificates).
+- [Ejercicio 1: Reproduce y genera códigos TOTP](ejercicios.md#ejercicio-1-reproduce-y-genera-códigos-totp) — reproducir el vector `94287082` de RFC 6238 y comprobar que tu terminal y una app autenticadora dan el mismo código (nodo MFA & 2FA).
+- [Ejercicio 2: Autentica contra FreeRADIUS y captura el tráfico](ejercicios.md#ejercicio-2-autentica-contra-freeradius-y-captura-el-tráfico) — Accept y Reject con `radtest` y ver en la captura de UDP 1812 qué va en claro y qué protege el shared secret (nodo RADIUS).
+- [Ejercicio 3: Monta OpenLDAP y observa un bind simple en claro](ejercicios.md#ejercicio-3-monta-openldap-y-observa-un-bind-simple-en-claro) — directorio con dos OUs y tres usuarios, y la contraseña del bind leída en Wireshark (nodo LDAP).
+- [Ejercicio 4: Exige certificado de cliente en nginx con mTLS](ejercicios.md#ejercicio-4-exige-certificado-de-cliente-en-nginx-con-mtls) — CA propia con `openssl` y tres pruebas con curl: sin certificado, con el tuyo y con uno de otra CA (nodo Certificates).
 
 ## Cuadro resumen
 

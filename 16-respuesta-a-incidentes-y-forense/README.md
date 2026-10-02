@@ -1058,9 +1058,9 @@ Actualización → sabemos / hecho / necesitamos / próxima actualización.
 - [TryHackMe: Intro to Digital Forensics](https://tryhackme.com/room/introdigitalforensics), [Disk Analysis & Autopsy](https://tryhackme.com/room/autopsy2ze0), [Memory Analysis Introduction](https://tryhackme.com/room/memoryanalysisintroduction) y [Volatility Essentials](https://tryhackme.com/room/volatilityessentials) — gratis; forense de disco y memoria paso a paso. Casos completos gratis en [CyberDefenders](https://cyberdefenders.org/blueteam-ctf-challenges/). Todos los nodos de herramientas.
 - [CyberDefenders](https://cyberdefenders.org/blueteam-ctf-challenges/) — laboratorios gratuitos de DFIR con pcaps, volcados e imágenes reales. Nodos Wireshark, memdump, autopsy.
 - [Blue Team Labs Online](https://blueteamlabs.online/) — retos defensivos de investigación y forense. Nodos de forense y logs.
-- Ejercicio en casa (imagen y hash): conecta una USB vieja, calcula `sha256sum /dev/sdX`, crea la imagen con `dd ... conv=noerror,sync status=progress`, recalcula el hash de la imagen y ábrela en Autopsy para recuperar algo que hayas borrado antes. Nodos dd, Evidence hashing, autopsy.
-- Ejercicio en casa (memoria): en una VM Linux propia, abre una conexión con `nc` a otra VM y deja un comando en bash; vuelca la RAM con AVML y encuentra la conexión y el comando con `linux.pslist` y `linux.bash` de Volatility 3. Nodo memdump.
-- Ejercicio en casa (triaje): expón una VM con SSH a tu red local, lanza 100 intentos fallidos desde otra VM con un script y encuentra la IP atacante en `auth.log` con la tubería `grep | sort | uniq -c | sort -rn | head`. Nodos grep, tail, head.
+- [Ejercicio 1: Imagen forense de un disco y recuperación de un archivo borrado](ejercicios.md#ejercicio-1-imagen-forense-de-un-disco-y-recuperación-de-un-archivo-borrado) — imagina un medio propio con `dd`, verifica con SHA-256 y recupera un archivo borrado en Autopsy.
+- [Ejercicio 2: Volcado de RAM con AVML y análisis con Volatility 3](ejercicios.md#ejercicio-2-volcado-de-ram-con-avml-y-análisis-con-volatility-3) — captura la memoria de una VM y encuentra el proceso, la conexión y los comandos con `linux.pslist`, `linux.sockstat` y `linux.bash`.
+- [Ejercicio 3: Triaje de un log de autenticación con la tubería grep sort uniq](ejercicios.md#ejercicio-3-triaje-de-un-log-de-autenticación-con-la-tubería-grep-sort-uniq) — provoca logins SSH fallidos en tu laboratorio e identifica la IP más ruidosa con `grep | sort | uniq -c | sort -rn | head`.
 
 ## Cuadro resumen
 

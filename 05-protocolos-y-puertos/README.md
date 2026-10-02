@@ -828,8 +828,8 @@ SAE (WPA3) → reemplaza la PSK de WPA2, resiste diccionario offline.
 
 - [Network Services](https://tryhackme.com/room/networkservices) y [Network Services 2](https://tryhackme.com/room/networkservices2) — TryHackMe, gratis; SMB, Telnet, FTP, NFS, SMTP y MySQL en máquinas de laboratorio. Practica "Common Protocols and their Uses".
 - [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) — wargame que se juega entero por SSH; los primeros niveles enseñan `ssh`, puertos y `openssl s_client`. Practica "SSH" y "SSL / TLS".
-- Ejercicio en casa: captura tu propio handshake con `sudo tcpdump -i <interfaz> -nn -w hs.pcap 'tcp port 443'` mientras abres una web, y ábrelo en Wireshark: identifica SYN/SYN-ACK/ACK, el ClientHello (filtro `tls.handshake.type == 1`) con su SNI, la versión negociada en el ServerHello y los cuatro segmentos FIN/ACK del cierre. Practica "Understand Handshakes".
-- Ejercicio en casa: ejecuta `ss -tuln` y `ss -tan state time-wait` en tu equipo y nombra cada puerto que escucha con ayuda de `/etc/services`. Practica "Common Ports and their Uses".
+- [Ejercicio 1: Captura un handshake TCP y TLS](ejercicios.md#ejercicio-1-captura-un-handshake-tcp-y-tls) — grabar una conexión HTTPS propia y señalar SYN/SYN-ACK/ACK, el SNI, la versión TLS negociada y el cierre FIN.
+- [Ejercicio 2: Identifica los puertos que escucha tu equipo](ejercicios.md#ejercicio-2-identifica-los-puertos-que-escucha-tu-equipo) — inventariar con `ss` y `/etc/services` cada puerto abierto, su proceso y las conexiones en TIME_WAIT.
 
 ## Cuadro resumen
 

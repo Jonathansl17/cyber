@@ -526,7 +526,7 @@ PTES       → 7 fases: pre-engagement, intelligence, threat modeling, vulnerabi
 - [TryHackMe: Linux Privilege Escalation](https://tryhackme.com/room/linprivesc) y [Linux PrivEsc](https://tryhackme.com/room/linuxprivesc) — gratis; GTFOBins en práctica. Para LOLBins de Windows, [Windows PrivEsc](https://tryhackme.com/room/windows10privesc) (gratis).
 - [TryHackMe: Basic Malware RE](https://tryhackme.com/room/basicmalwarere) — primeros pasos de ingeniería inversa.
 - [TryHackMe: Pentesting Fundamentals](https://tryhackme.com/room/pentestingfundamentals) — metodologías y reglas de enfrentamiento.
-- Ejercicio en casa: corre los scripts de esta nota (hashes, puertos, 404, SSH, 4625) sobre tus propios equipos y conviértelos en una tarea programada que te avise por correo.
+- [Ejercicio 1: Corre los cinco scripts de la nota y prográmalos](ejercicios.md#ejercicio-1-corre-los-cinco-scripts-de-la-nota-y-prográmalos) — ejecuta los scripts de hashes, puertos, 404, SSH y 4625 sobre tus equipos y déjalos corriendo solos con cron o el Programador de tareas, avisándote por correo.
 
 ## Cuadro resumen
 
