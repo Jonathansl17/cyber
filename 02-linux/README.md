@@ -584,7 +584,6 @@ man → manual oficial del comando.
 ### Práctica
 
 - [OverTheWire: Bandit](https://overthewire.org/wargames/bandit/) — wargame por SSH, cada nivel exige un comando o permiso nuevo (find, grep, sort, uniq, base64, SUID, ssh). Nodos Common Commands, Navigating y Understand Permissions.
-- [TryHackMe: Linux Fundamentals Part 1](https://tryhackme.com/room/linuxfundamentalspart1) — primeros comandos, navegación, find y grep en una máquina en el navegador. Nodos Navigating y Common Commands.
 - [TryHackMe: Linux Fundamentals Part 1](https://tryhackme.com/room/linuxfundamentalspart1) — gratis; terminal, rutas y comandos básicos. Las partes 2 y 3 son de pago: lo mismo se practica gratis en [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) y en [Linux Strength Training](https://tryhackme.com/room/linuxstrengthtraining). Nodos Understand Permissions, Troubleshooting y Common Commands.
 - [TryHackMe: Linux Strength Training](https://tryhackme.com/room/linuxstrengthtraining) — retos de búsqueda de archivos, permisos y procesado de texto. Nodo Common Commands.
 - [TryHackMe: Linux Privilege Escalation](https://tryhackme.com/room/linprivesc) — SUID, sudo, cron y capabilities en un laboratorio legal. Nodo Understand Permissions.

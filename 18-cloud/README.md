@@ -477,10 +477,8 @@ Block Public Access → anula políticas/ACL públicas; activado por defecto des
 - [CloudGoat](https://github.com/RhinoSecurityLabs/cloudgoat) — Rhino Security Labs; despliega con Terraform escenarios vulnerables en tu propia cuenta de AWS (IAM, Lambda, S3). Practica IaC y AWS a la vez. Usa una cuenta dedicada, pon una alerta de facturación y ejecuta `cloudgoat destroy` al terminar. Complemento: [Pacu](https://github.com/RhinoSecurityLabs/pacu), el framework de explotación de AWS de los mismos autores.
 - [TryHackMe: Cloud Security Pitfalls](https://tryhackme.com/room/cloudsecuritypitfalls) — gratis; errores típicos de configuración en la nube (Security in the Cloud).
 - [TryHackMe: First Steps Into AWS](https://tryhackme.com/room/awsfirststeps) — consola y CLI de AWS en un entorno provisto (AWS).
-- [flaws2.cloud](http://flaws2.cloud/) — gratis; continuación de flaws.cloud con un camino de atacante y otro de defensor, centrado en IAM y logs (AWS).
 - [TryHackMe: AWS Security - S3cret Santa](https://tryhackme.com/room/cloudenum-aoc2025-y4u7i0o3p6) — gratis; enumerar y asegurar buckets S3 mal configurados (S3).
 - [TryHackMe: Intro to IaC](https://tryhackme.com/room/introtoiac) — gratis; Infrastructure as Code y sus riesgos (IaC). Para serverless, el escenario de Lambda de [CloudGoat](https://github.com/RhinoSecurityLabs/cloudgoat) se monta en tu propia cuenta.
-- [TryHackMe: Intro to IaC](https://tryhackme.com/room/introtoiac) — Infrastructure as Code y su seguridad (Infrastructure as Code).
 - Ejercicio en casa: con la capa gratuita de [AWS](https://aws.amazon.com/free/), crea con Terraform un bucket con `aws_s3_bucket_public_access_block`, pasa `checkov -d .`, luego quita el bloque y compara el informe. Destruye todo con `terraform destroy` (IaC, S3).
 - Ejercicio en casa: desde una máquina sin credenciales ejecuta `aws s3 ls s3://<tu-bucket> --no-sign-request` antes y después de poner una bucket policy con `"Principal": "*"` y desactivar Block Public Access; vuelve a activarlo y confirma el `AccessDenied` (S3).
 

@@ -511,17 +511,15 @@ Atacante / víctimas / SIEM → los tres roles mínimos del lab.
 - [Docker Engine security](https://docs.docker.com/engine/security/) — namespaces, cgroups, capabilities y seccomp (Contenedores).
 - [MITRE ATT&CK T1611, Escape to Host](https://attack.mitre.org/techniques/T1611/) y [T1497, Virtualization/Sandbox Evasion](https://attack.mitre.org/techniques/T1497/) — técnicas de escape y evasión (VM escape, Sandboxing).
 - [NVD: CVE-2015-3456 (VENOM)](https://nvd.nist.gov/vuln/detail/CVE-2015-3456) y [análisis de CrowdStrike](https://www.crowdstrike.com/en-us/blog/venom-vulnerability-details/) — el escape clásico vía controlador de disquete (VM escape).
+- [pfSense](https://www.pfsense.org/download/), [Wazuh](https://documentation.wazuh.com/current/index.html) y [Security Onion](https://securityonionsolutions.com/) — firewall y SIEM del lab (homelab).
+- [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter) — ISOs de evaluación de Windows Server para montar un dominio de laboratorio (homelab).
 
 ### Práctica
 
 - [TryHackMe: Hosted Hypervisors](https://tryhackme.com/room/hostedhypervisors) — gratis; hipervisores tipo 2, VMs y su superficie de ataque (Basics of Virtualization).
 - [TryHackMe: Hypervisor Internals](https://tryhackme.com/room/hypervisorinternals) — gratis; cómo aísla un hipervisor por dentro (Isolation).
-- [TryHackMe: Hypervisor Internals](https://tryhackme.com/room/hypervisorinternals) — componentes internos del hypervisor (Hypervisor).
-- [TryHackMe: Intro to Containerisation](https://tryhackme.com/room/introtocontainerisation) e [Intro to Docker](https://tryhackme.com/room/introtodockerk8pdqk) — namespaces y contenedores (Contenedores).
 - [TryHackMe: Intro to Containerisation](https://tryhackme.com/room/introtocontainerisation) e [Intro to Docker](https://tryhackme.com/room/introtodockerk8pdqk) — gratis; contenedores frente a VMs y su aislamiento (Contenedores).
 - [Metasploitable 3](https://github.com/rapid7/metasploitable3) y [DVWA](https://github.com/digininja/DVWA) — víctimas vulnerables para tu red interna (homelab).
-- [pfSense](https://www.pfsense.org/download/), [Wazuh](https://documentation.wazuh.com/current/index.html) y [Security Onion](https://securityonionsolutions.com/) — firewall y SIEM del lab (homelab).
-- [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter) — ISOs de evaluación de Windows Server para montar un dominio de laboratorio (homelab).
 - Ejercicio en casa: crea dos VMs en una red "internal", toma un snapshot `limpio` de la víctima, bórrale `/etc/passwd` desde la shell, y restaura. Mide cuánto tarda (Snapshots para labs).
 - Ejercicio en casa: dentro de un contenedor `docker run --rm -it alpine sh` ejecuta `uname -r` y compáralo con el del host; luego en una VM haz lo mismo. Explica la diferencia (Isolation).
 

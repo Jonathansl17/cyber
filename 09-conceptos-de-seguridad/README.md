@@ -633,7 +633,6 @@ SOAR → plataforma que automatiza runbooks.
 
 - [TryHackMe: Security Principles](https://tryhackme.com/room/securityprinciples) — gratis; CIA, DAD, defensa en profundidad, Zero Trust y modelos de seguridad. Nodos: CIA Triad, Defense in Depth, Zero Trust.
 - [TryHackMe: Red Team Fundamentals](https://tryhackme.com/room/redteamfundamentals) — qué es un compromiso de red team, roles y diferencias con un pentest. Nodo: Blue / Red / Purple Teams.
-- [TryHackMe: SOC L1 Alert Triage](https://tryhackme.com/room/socl1alerttriage) — clasificar alertas como verdaderos o falsos positivos. Nodos: FN/FP y TN/TP.
 - [TryHackMe: SOC L1 Alert Triage](https://tryhackme.com/room/socl1alerttriage) — gratis; clasificar alertas como verdaderos o falsos positivos. Nodos: FN/FP y TN/TP.
 - [TryHackMe: Linux Privilege Escalation](https://tryhackme.com/room/linprivesc) — vectores de escalada en Linux en una máquina de laboratorio. Nodo: Privilege Escalation.
 - [TryHackMe: Windows PrivEsc](https://tryhackme.com/room/windows10privesc) — gratis; servicios, tareas y permisos mal configurados en Windows. Nodo: Privilege Escalation.

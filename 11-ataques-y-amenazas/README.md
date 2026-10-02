@@ -695,6 +695,9 @@ El curso completo de Security+ SY0-701 de Professor Messer, ordenado por objetiv
 - [CISA: Recognize and report phishing](https://www.cisa.gov/secure-our-world/recognize-and-report-phishing) — señales de phishing para usuarios.
 - [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html) — recomendaciones oficiales sobre contraseñas, bloqueo y listas de contraseñas filtradas.
 - [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) y [Blocking Brute Force Attacks](https://owasp.org/www-community/controls/Blocking_Brute_Force_Attacks) — defensas contra ataques de contraseñas.
+- [dnstwist](https://dnstwist.it/) ([código](https://github.com/elceef/dnstwist)) — genera las variantes de typosquatting de un dominio; pruébalo con el dominio de tu universidad o empresa y mira cuántas están registradas.
+- [Have I Been Pwned](https://haveibeenpwned.com/) — comprueba si tu correo aparece en filtraciones; enseña por qué funciona el credential stuffing.
+- [CVE.org](https://www.cve.org/) — busca una vulnerabilidad famosa y sigue su historia desde zero day hasta parche.
 
 ### Práctica
 
@@ -702,10 +705,9 @@ El curso completo de Security+ SY0-701 de Professor Messer, ordenado por objetiv
 - [TryHackMe: Phishing Emails 1](https://tryhackme.com/room/phishingemails1tryoe) — analizar cabeceras y contenido de correos reales de phishing.
 - [TryHackMe: MAL: Malware Introductory](https://tryhackme.com/room/malmalintroductory) y [Malware Classification](https://tryhackme.com/room/malwareclassification) — gratis; tipos de malware y primeros pasos de análisis en entorno seguro.
 - [TryHackMe: Brute It](https://tryhackme.com/room/bruteit) y [Hydra](https://tryhackme.com/room/hydra) — gratis; fuerza bruta y diccionario contra máquinas de laboratorio, para ver qué rastro deja en los logs.
-- [dnstwist](https://dnstwist.it/) ([código](https://github.com/elceef/dnstwist)) — genera las variantes de typosquatting de un dominio; pruébalo con el dominio de tu universidad o empresa y mira cuántas están registradas.
-- [Have I Been Pwned](https://haveibeenpwned.com/) — comprueba si tu correo aparece en filtraciones; enseña por qué funciona el credential stuffing.
-- [CVE.org](https://www.cve.org/) — busca una vulnerabilidad famosa y sigue su historia desde zero day hasta parche.
 - Ejercicio en casa: con los logs de autenticación de tu propio equipo o servidor de laboratorio (`journalctl -u ssh` o el visor de eventos con ID 4625), cuenta fallos por cuenta y cuentas distintas por IP, y decide si el patrón se parece más a fuerza bruta o a spray.
+- [TryHackMe: Phishing Emails in Action](https://tryhackme.com/room/phishingemails2rytmuv) y [Phishing Basics](https://tryhackme.com/room/phishingbasics) — gratis; analizar correos reales y reconocer las técnicas (nodos Phishing y Social Engineering).
+- [CyberDefenders](https://cyberdefenders.org/blueteam-ctf-challenges/) — retos defensivos gratuitos; filtra por la categoría de threat intel o de análisis de correo y resuelve uno de dificultad fácil.
 
 ## Cuadro resumen
 

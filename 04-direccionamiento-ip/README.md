@@ -886,14 +886,14 @@ IPAM → inventario y planificación de todas las IP; integra DHCP y DNS.
 - [NTP Pool Project](https://www.ntppool.org/) — servidores NTP públicos y cómo usarlos.
 - [NetBox](https://github.com/netbox-community/netbox) — IPAM e inventario de red de código abierto, para IPAM.
 - [ip-address(8)](https://man.archlinux.org/man/ip-address.8), [dig(1)](https://man.archlinux.org/man/dig.1) e [ipcalc(1)](https://man.archlinux.org/man/ipcalc.1) — páginas de manual de las herramientas de los ejemplos.
+- [Subnetting Mastery](https://www.practicalnetworking.net/stand-alone/subnetting-mastery/) — Practical Networking; la serie completa de 7 videos con la hoja de referencia para descargar.
+- [IP Calculator (ipcalc)](https://jodies.de/ipcalc) — calculadora web para comprobar tus respuestas, no para sustituir el cálculo a mano.
 
 ### Práctica
 
 - [subnettingpractice.com](https://subnettingpractice.com/) — preguntas de subnetting generadas sin fin, con solución; practica Basics of Subnetting.
 - [subnetting.net](https://www.subnetting.net/) — preguntas de práctica, tutoriales y un juego contrarreloj; practica Basics of Subnetting y CIDR.
 - [subnetipv4.com](https://subnetipv4.com/) — problemas aleatorios con autocorrección, del autor de Subnetting Mastery; practica los siete datos de un problema.
-- [Subnetting Mastery](https://www.practicalnetworking.net/stand-alone/subnetting-mastery/) — Practical Networking; la serie completa de 7 videos con la hoja de referencia para descargar.
-- [IP Calculator (ipcalc)](https://jodies.de/ipcalc) — calculadora web para comprobar tus respuestas, no para sustituir el cálculo a mano.
 - [TryHackMe: Intro to LAN](https://tryhackme.com/room/introtolan) — subnetting, ARP y DHCP con preguntas; practica Basics of Subnetting, ARP y DHCP.
 - [TryHackMe: Secure Network Architecture](https://tryhackme.com/room/introtosecurityarchitecture) — gratis; VLAN, DMZ, segmentación, firewalls y routing; practica VLAN, DMZ, Router y Switch. Para DNS a fondo: [DNS in Detail](https://tryhackme.com/room/dnsindetail) (gratis).
 - [TryHackMe: DNS in Detail](https://tryhackme.com/room/dnsindetail) — jerarquía, tipos de registro y consultas; practica DNS.

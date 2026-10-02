@@ -633,13 +633,12 @@ LAPS → contraseña de admin local única y rotada por equipo.
 
 ### Práctica
 
-- [PortSwigger: Authentication vulnerabilities](https://portswigger.net/web-security/authentication) y [OAuth 2.0 authentication vulnerabilities](https://portswigger.net/web-security/oauth) — gratis; teoría y labs de fallos de login, MFA y OAuth (nodos MFA & 2FA y SSO).
+- [PortSwigger Web Security Academy: Authentication](https://portswigger.net/web-security/authentication) (incluye [labs de MFA](https://portswigger.net/web-security/authentication/multi-factor)) y [OAuth 2.0](https://portswigger.net/web-security/oauth) — labs gratuitos de login, 2FA y OAuth (nodos MFA & 2FA y SSO).
 - [TryHackMe: Enumeration & Brute Force](https://tryhackme.com/room/enumerationbruteforce) — gratis; fallos en login, recuperación de contraseña y autenticación (nodos MFA & 2FA y Local Auth).
 - [TryHackMe: OWASP Top 10 2025: IAAA Failures](https://tryhackme.com/room/owasptopten2025one) — gratis; fallos de identificación, autenticación y autorización (nodos Authentication vs Authorization y SSO).
 - [TryHackMe: Monitoring Active Directory](https://tryhackme.com/room/monitoringactivedirectory) — gratis; cómo se ven Kerberos y LDAP en los logs de un dominio (nodos Kerberos y LDAP).
 - [TryHackMe: Attacktive Directory](https://tryhackme.com/room/attacktivedirectory) — gratis; Kerberos en un dominio de laboratorio de punta a punta (nodo Kerberos).
-- [HTB Academy: Introduction to Active Directory](https://academy.hackthebox.com/course/preview/introduction-to-active-directory) y [HTB Academy: Kerberos Attacks](https://academy.hackthebox.com/course/preview/kerberos-attacks) — AD y ataques a Kerberos con más profundidad (nodo Kerberos).
-- [PortSwigger Web Security Academy: Authentication](https://portswigger.net/web-security/authentication) (incluye [labs de MFA](https://portswigger.net/web-security/authentication/multi-factor)) y [OAuth 2.0](https://portswigger.net/web-security/oauth) — labs gratuitos de login, 2FA y OAuth (nodos MFA & 2FA y SSO).
+- [HTB Academy: Introduction to Active Directory](https://academy.hackthebox.com/course/preview/introduction-to-active-directory) — módulo de nivel Fundamental; estructura de un dominio, Kerberos y LDAP con laboratorio (nodos Kerberos y LDAP).
 - Ejercicio en casa: instala `oath-toolkit` y reproduce el vector `94287082` de RFC 6238; luego genera tu propio secreto, cárgalo en una app autenticadora y compara los códigos (nodo MFA & 2FA).
 - Ejercicio en casa: levanta [FreeRADIUS](https://www.freeradius.org/) en un contenedor, crea un usuario en `users` y prueba `radtest`; captura el tráfico con tcpdump en UDP 1812 y observa qué viaja en claro (nodo RADIUS).
 - Ejercicio en casa: levanta OpenLDAP ([guía del administrador](https://www.openldap.org/doc/admin26/)), crea dos OUs y tres usuarios, y haz `ldapsearch` con bind simple sin TLS mientras capturas con Wireshark para ver la contraseña en claro (nodo LDAP).

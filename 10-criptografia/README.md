@@ -741,21 +741,22 @@ Cabeceras → ni S/MIME ni PGP cifran asunto ni direcciones.
 - [RFC 4033: DNS Security Introduction and Requirements](https://www.rfc-editor.org/rfc/rfc4033) — DNSSEC.
 - [RFC 4513: LDAP Authentication Methods and Security Mechanisms](https://www.rfc-editor.org/rfc/rfc4513) — StartTLS y binds seguros.
 - [RFC 3711: SRTP](https://www.rfc-editor.org/rfc/rfc3711) y [RFC 8551: S/MIME 4.0](https://www.rfc-editor.org/rfc/rfc8551) — voz segura y correo firmado/cifrado.
+- [CyberChef](https://gchq.github.io/CyberChef/) — de GCHQ; codifica/decodifica base64, calcula hashes, cifra con AES y encadena operaciones para ver la diferencia entre codificar, cifrar y hashear (nodos Obfuscation y Hashing).
+- [hashcat](https://hashcat.net/hashcat/) con su lista de [hashes de ejemplo](https://hashcat.net/wiki/doku.php?id=example_hashes) — en tu laboratorio, genera hashes MD5 y bcrypt de 20 contraseñas propias y compara cuánto tarda `hashcat -m 0` frente a `hashcat -m 3200` con el mismo diccionario (nodos Hashing y Salting).
+- [SSL Labs Server Test](https://www.ssllabs.com/ssltest/) — analiza la configuración TLS de un sitio público: versiones, suites, cadena de certificados (nodos SSL vs TLS y PKI).
+- [DNSViz](https://dnsviz.net/) — dibuja la cadena DNSSEC de cualquier dominio, de la raíz a la zona (nodo DNSSEC).
 
 ### Práctica
 
-- [CyberChef](https://gchq.github.io/CyberChef/) — de GCHQ; codifica/decodifica base64, calcula hashes, cifra con AES y encadena operaciones para ver la diferencia entre codificar, cifrar y hashear (nodos Obfuscation y Hashing).
-- [hashcat](https://hashcat.net/hashcat/) con su lista de [hashes de ejemplo](https://hashcat.net/wiki/doku.php?id=example_hashes) — en tu laboratorio, genera hashes MD5 y bcrypt de 20 contraseñas propias y compara cuánto tarda `hashcat -m 0` frente a `hashcat -m 3200` con el mismo diccionario (nodos Hashing y Salting).
 - [TryHackMe: Cryptography Basics](https://tryhackme.com/room/cryptographybasics), [Cryptography Concepts](https://tryhackme.com/room/cryptographyconcepts) y [Encryption - Crypto 101](https://tryhackme.com/room/encryptioncrypto101) — gratis; simétrica, asimétrica, intercambio de claves y PKI.
-- [TryHackMe: Crack the Hash](https://tryhackme.com/room/crackthehash) — identificar y crackear hashes MD5, SHA-1, SHA-256 y bcrypt (nodos Hashing y Salting).
 - [TryHackMe: Crack the hash](https://tryhackme.com/room/crackthehash) y [Breaking Crypto the Simple Way](https://tryhackme.com/room/breakingcryptothesimpleway) — gratis; identificar y crackear hashes en laboratorio (nodo Hashing). Retos de cripto por niveles en [picoGym](https://picoctf.org/) (categoría Cryptography).
 - [cryptopals](https://cryptopals.com/) — retos de programación de criptografía; el [set 1](https://cryptopals.com/sets/1) arranca con hex, base64 y XOR y avanza hasta romper AES-ECB (nodos Obfuscation y Private vs Public Keys).
-- [SSL Labs Server Test](https://www.ssllabs.com/ssltest/) — analiza la configuración TLS de un sitio público: versiones, suites, cadena de certificados (nodos SSL vs TLS y PKI).
-- [DNSViz](https://dnsviz.net/) — dibuja la cadena DNSSEC de cualquier dominio, de la raíz a la zona (nodo DNSSEC).
 - Ejercicio en casa: haz el Diffie-Hellman de la nota a mano y luego en Python con `pow(5, 6, 23)`; repite con `p` de 2048 bits generado con `openssl dhparam 2048` (nodo Key Exchange).
 - Ejercicio en casa: crea una CA raíz, una intermedia y un certificado hoja con `openssl`; verifica la cadena con `openssl verify -CAfile raiz.crt -untrusted intermedia.crt hoja.crt`, revoca la hoja y genera la CRL (nodo PKI).
 - Ejercicio en casa: en dos VMs propias, sube un archivo por FTP (vsftpd) y por SFTP mientras capturas con Wireshark; busca `PASS` en la captura de FTP (nodo FTP vs SFTP).
 - Ejercicio en casa: levanta un túnel IPsec entre dos VMs con strongSwan y compara en Wireshark el tráfico ESP con el ping en claro (nodo IPSEC).
+- [CryptoHack](https://cryptohack.org/) — gratis; retos de criptografía por niveles, desde codificaciones y XOR hasta RSA y Diffie-Hellman mal implementados (nodos Key Exchange y Private vs Public Keys).
+- [picoCTF](https://picoctf.org/) — en picoGym, categoría Cryptography: retos de cifrados clásicos, codificaciones y RSA para resolver (nodos Obfuscation y Hashing).
 
 ## Cuadro resumen
 

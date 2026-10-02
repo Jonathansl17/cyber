@@ -294,7 +294,6 @@ OSI (7) / TCP/IP (4) → modelos de capas para ubicar funciones y fallos.
 
 - [TryHackMe: What is Networking?](https://tryhackme.com/room/whatisnetworking) — sala gratuita introductoria. Basics of Computer Networking.
 - [TryHackMe: Intro to LAN](https://tryhackme.com/room/introtolan) — topologías, subredes y DHCP en una LAN. Basics of Computer Networking.
-- [TryHackMe: MAL: Malware Introductory](https://tryhackme.com/room/malmalintroductory) — qué es el malware y cómo se analiza de forma segura. Suites (contexto de maldocs).
 - [TryHackMe: MAL: Malware Introductory](https://tryhackme.com/room/malmalintroductory) — gratis; tipos de malware y análisis estático básico, incluido el de documentos. Understand Basics of Popular Suites.
 - [CyberDefenders: MalDoc101](https://cyberdefenders.org/blueteam-ctf-challenges/maldoc101/) — reto blue team de análisis de un documento con macros. Understand Basics of Popular Suites.
 - Ejercicio en casa (Troubleshooting): desconecta a propósito el DNS de una VM (por ejemplo, pon un servidor DNS inexistente) y diagnostícalo solo con `ping` a la puerta de enlace, a una IP pública y a un nombre, anotando qué descarta cada prueba.
