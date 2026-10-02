@@ -896,7 +896,6 @@ IPAM → inventario y planificación de todas las IP; integra DHCP y DNS.
 - [TryHackMe: Secure Network Architecture](https://tryhackme.com/room/introtosecurityarchitecture) — gratis; VLAN, DMZ, segmentación, firewalls y routing; practica VLAN, DMZ, Router y Switch. Para DNS a fondo: [DNS in Detail](https://tryhackme.com/room/dnsindetail) (gratis).
 - [TryHackMe: DNS in Detail](https://tryhackme.com/room/dnsindetail) — jerarquía, tipos de registro y consultas; practica DNS.
 - [TryHackMe: Introductory Networking](https://tryhackme.com/room/introtonetworking) — capas, IP y herramientas básicas (`ping`, `traceroute`, `dig`); practica IP y DNS.
-- [HTB Academy: Introduction to Networking](https://academy.hackthebox.com/course/preview/introduction-to-networking) — direccionamiento IPv4 e IPv6, subnetting, MAC y terminología de protocolos desde la óptica de seguridad; practica Basics of Subnetting e IP Terminology.
 - [Cisco Packet Tracer](https://www.netacad.com/cisco-packet-tracer) — arma un switch con dos VLAN, un router con un servidor DHCP por VLAN y una DMZ con un servidor web; comprueba con ping qué llega y qué no.
 - Ejercicio en casa: ejecuta `sudo tcpdump -i <interfaz> -n -v 'udp port 67 or udp port 68'` en tu máquina, desconecta y reconecta la red, e identifica los cuatro mensajes DORA y las opciones 1, 3, 6 y 51 en la salida.
 - Ejercicio en casa: `dig +trace` sobre un dominio tuyo o conocido para ver raíz, TLD y autoritativo; luego `dig MX`, `dig TXT` y `dig -x` sobre el mismo dominio.

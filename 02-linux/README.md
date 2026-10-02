@@ -588,7 +588,6 @@ man → manual oficial del comando.
 - [TryHackMe: Linux Strength Training](https://tryhackme.com/room/linuxstrengthtraining) — retos de búsqueda de archivos, permisos y procesado de texto. Nodo Common Commands.
 - [TryHackMe: Linux Privilege Escalation](https://tryhackme.com/room/linprivesc) — SUID, sudo, cron y capabilities en un laboratorio legal. Nodo Understand Permissions.
 - [TryHackMe: Linux Logging for SOC](https://tryhackme.com/room/linuxloggingforsoc) — gratis; /var/log, auth.log, journal y auditd desde el punto de vista del analista. Nodo Troubleshooting.
-- [HTB Academy: Linux Fundamentals](https://academy.hackthebox.com/course/preview/linux-fundamentals) — módulo completo de sistema, usuarios, permisos, servicios y red. Todos los nodos.
 - Ejercicio en casa (Permissions): en una VM crea dos usuarios y un grupo compartido; arma una carpeta con SGID (2770) y sticky para que ambos escriban pero ninguno borre lo del otro, y comprueba con `ls -l` el grupo heredado.
 - Ejercicio en casa (Permissions): ejecuta `find / -perm -4000 -type f 2>/dev/null` en tu VM, guarda la lista y busca cada binario en GTFOBins para saber cuáles serían peligrosos si se les pusiera SUID.
 - Ejercicio en casa (Troubleshooting): instala nginx, ocupa el puerto 80 con `python3 -m http.server 80` y diagnostica el fallo usando solo `systemctl status`, `journalctl -u nginx` y `ss -tulpn`.

@@ -467,7 +467,6 @@ LUN → disco lógico que la SAN presenta a un servidor.
 - [TryHackMe: Networking Concepts](https://tryhackme.com/room/networkingconcepts) — OSI, TCP/IP y encapsulamiento con preguntas guiadas; practica Understand the OSI Model.
 - [TryHackMe: Intro to LAN](https://tryhackme.com/room/introtolan) — topologías, switches y routers; practica Network Topologies y LAN.
 - [TryHackMe: What is Networking?](https://tryhackme.com/room/whatisnetworking) — introducción para quien empieza de cero; practica conceptos previos y LAN.
-- [HTB Academy: Introduction to Networking](https://academy.hackthebox.com/course/preview/introduction-to-networking) — tipos de red, topologías y modelos de capas desde la óptica de seguridad; practica toda la nota.
 - [Cisco Packet Tracer](https://www.netacad.com/cisco-packet-tracer) — simulador gratuito; arma una estrella con un switch y una malla de 4 routers y observa en modo Simulation cómo se encapsula cada PDU capa por capa.
 - Ejercicio en casa: en tu propia máquina, `sudo tcpdump -i <interfaz> -e -n -c 5 'tcp port 443'` mientras abres una web; identifica en cada línea qué parte es capa 2, 3 y 4, y comprueba que `length` = 14 + cabecera IP + cabecera TCP + datos.
 - Ejercicio en casa: con dos máquinas virtuales propias, exporta una carpeta por NFS desde una y móntala en la otra; luego compárala con un disco iSCSI (paquete `targetcli` en el servidor) y anota qué lado formatea el sistema de archivos en cada caso.

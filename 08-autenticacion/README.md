@@ -271,7 +271,7 @@ Valid starting       Expires              Service principal
 
 La primera línea es el TGT (servicio `krbtgt`); la segunda, el ticket de servicio para la web.
 
-Ataques conocidos, a nivel conceptual (se practican en labs como los de TryHackMe y HTB Academy listados abajo):
+Ataques conocidos, a nivel conceptual (se practican en labs como los de TryHackMe y PortSwigger listados abajo):
 
 - Kerberoasting (ATT&CK T1558.003): cualquier usuario del dominio puede pedir un ticket de servicio para cualquier SPN; como va cifrado con la llave de la cuenta de servicio, se lleva offline y se crackea su contraseña. Defensa: contraseñas de servicio de 25+ caracteres o gMSA (cuentas administradas con contraseña rotada automáticamente), y AES en lugar de RC4.
 - AS-REP Roasting: si una cuenta tiene desactivada la pre-autenticación, cualquiera pide su AS-REP y crackea offline la parte cifrada con su contraseña. Defensa: nunca desactivar la pre-autenticación.
@@ -638,7 +638,6 @@ LAPS → contraseña de admin local única y rotada por equipo.
 - [TryHackMe: OWASP Top 10 2025: IAAA Failures](https://tryhackme.com/room/owasptopten2025one) — gratis; fallos de identificación, autenticación y autorización (nodos Authentication vs Authorization y SSO).
 - [TryHackMe: Monitoring Active Directory](https://tryhackme.com/room/monitoringactivedirectory) — gratis; cómo se ven Kerberos y LDAP en los logs de un dominio (nodos Kerberos y LDAP).
 - [TryHackMe: Attacktive Directory](https://tryhackme.com/room/attacktivedirectory) — gratis; Kerberos en un dominio de laboratorio de punta a punta (nodo Kerberos).
-- [HTB Academy: Introduction to Active Directory](https://academy.hackthebox.com/course/preview/introduction-to-active-directory) — módulo de nivel Fundamental; estructura de un dominio, Kerberos y LDAP con laboratorio (nodos Kerberos y LDAP).
 - Ejercicio en casa: instala `oath-toolkit` y reproduce el vector `94287082` de RFC 6238; luego genera tu propio secreto, cárgalo en una app autenticadora y compara los códigos (nodo MFA & 2FA).
 - Ejercicio en casa: levanta [FreeRADIUS](https://www.freeradius.org/) en un contenedor, crea un usuario en `users` y prueba `radtest`; captura el tráfico con tcpdump en UDP 1812 y observa qué viaja en claro (nodo RADIUS).
 - Ejercicio en casa: levanta OpenLDAP ([guía del administrador](https://www.openldap.org/doc/admin26/)), crea dos OUs y tres usuarios, y haz `ldapsearch` con bind simple sin TLS mientras capturas con Wireshark para ver la contraseña en claro (nodo LDAP).

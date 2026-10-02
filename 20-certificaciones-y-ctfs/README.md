@@ -497,7 +497,7 @@ Precio GIAC → 999 USD la mayoría; reintento 899; renovación 499; validez 4 a
 
 Analogía: es el examen práctico de conducir en ciudad real; no basta con saberse las señales, tienes que llegar al destino en un tiempo dado y luego explicar por escrito la ruta.
 
-Ejemplo de preparación: 2 o 3 meses del curso PEN-200 y sus laboratorios, más unas 40 o 50 máquinas de práctica de dificultad fácil y media (TryHackMe, HackTheBox, VulnHub), escribiendo un informe de cada una como si fuera el del examen.
+Ejemplo de preparación: 2 o 3 meses del curso PEN-200 y sus laboratorios, más unas 40 o 50 máquinas de práctica de dificultad fácil y media (TryHackMe, VulnHub), escribiendo un informe de cada una como si fuera el del examen.
 
 ```
 OSCP → examen práctico de 24 h: 3 máquinas (60 pts) + Active Directory (40 pts); aprobar con 70.
@@ -570,7 +570,7 @@ Una **ruta de certificación** es el orden en que conviene sacar las certificaci
         │                                   │
         ▼                                   ▼
    Defensivo (SOC, IR)               Pentest / red team
-   práctica: TryHackMe SOC L1,       práctica: TryHackMe, HTB, VulnHub,
+   práctica: TryHackMe SOC L1,       práctica: TryHackMe, VulnHub,     
    CyberDefenders, BTLO              picoCTF, pwn.college
         │                                   │
    GSEC o CySA+                      CEH (si lo pide RR. HH.) ──► OSCP ──► GPEN / CRT / GWAPT
@@ -591,7 +591,6 @@ Ejemplo de primer año: meses 1 a 4, Network+ con práctica de redes; meses 5 a 
 - [What is CTF? An introduction to security Capture The Flag competitions](https://www.youtube.com/watch?v=8ev9ZX9J45A) — LiveOverflow; qué es un CTF y cómo se juega (CTFs).
 - [BEGINNER Capture The Flag - PicoCTF 2021 001 "Obedient Cat"](https://www.youtube.com/watch?v=P07NH5F-t3s) — John Hammond; inicio de su serie resolviendo picoCTF (picoCTF).
 - [Introduction: What is pwn.college?](https://www.youtube.com/watch?v=hh4XAU6XYP0) — pwn.college; cómo funciona la plataforma (pwn.college).
-- [Tier 0: HackTheBox Starting Point - 5 Machines - Full Walkthrough](https://www.youtube.com/watch?v=jQ194vU4Qkk) — CryptoCat; las primeras máquinas gratuitas de HackTheBox (HackTheBox).
 - [Free CCNA | Network Devices | Day 1](https://www.youtube.com/watch?v=H8W9oMNSuwo) — Jeremy's IT Lab; inicio del curso completo y gratuito de CCNA (CCNA).
 - [Everyone Is Confused About the OSCP+](https://www.youtube.com/watch?v=Vun7pLuihhI) — Tib3rius; qué cambió con OSCP+ (OSCP).
 - [OSCP vs. GPEN vs. CEH: The Ultimate Guide!](https://www.youtube.com/watch?v=aBqUK9YkjQk) — Luke Gough; comparación de las tres certificaciones ofensivas (CEH, GPEN, OSCP).
@@ -612,8 +611,6 @@ El curso completo y gratuito de Security+ y Network+ está en [professormesser.c
 
 ### Práctica
 
-- [HackTheBox Starting Point](https://app.hackthebox.com/starting-point) — máquinas guiadas gratuitas, de nivel 0 a 2, para empezar en HTB.
-- [HTB Academy](https://academy.hackthebox.com/) — módulos de nivel Fundamental gratuitos con laboratorio incluido.
 - [TryHackMe: Pentesting Fundamentals](https://tryhackme.com/room/pentestingfundamentals), [Vulnversity](https://tryhackme.com/room/vulnversity), [Basic Pentesting](https://tryhackme.com/room/basicpentestingjt), [Blue](https://tryhackme.com/room/blue) y [Simple CTF](https://tryhackme.com/room/easyctf) — gratis; las primeras máquinas completas para practicar la metodología del OSCP.
 - [TryHackMe: SOC Fundamentals](https://tryhackme.com/room/socfundamentals) y [SOC L1 Alert Triage](https://tryhackme.com/room/socl1alerttriage) — gratis; el lado defensivo de la ruta.
 - [VulnHub: Kioptrix Level 1](https://www.vulnhub.com/entry/kioptrix-level-1-1,22/) y [Mr-Robot](https://www.vulnhub.com/entry/mr-robot-1,151/) — máquinas clásicas para tu laboratorio local.
@@ -632,7 +629,7 @@ CTFs (Capture the Flag)
 CTF         → competencia de retos de seguridad; cada reto esconde una bandera.
 Jeopardy    → retos independientes por categoría y puntos.
 Attack-Defense → cada equipo defiende sus servicios y ataca los del resto.
-HackTheBox  → máquinas realistas con pocas pistas; Starting Point y Academy para empezar.
+HackTheBox  → máquinas realistas con pocas pistas; más abierto que TryHackMe.
 TryHackMe   → salas guiadas con preguntas; para empezar de cero.
 VulnHub     → VMs vulnerables descargables; gratis y sin conexión.
 picoCTF     → CTF Jeopardy gratuito de Carnegie Mellon; picoGym abierto todo el año.

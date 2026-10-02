@@ -366,7 +366,7 @@ Vulnerabilidad  →  Exploit (abre la puerta)  →  Payload (lo que entra)  → 
 
 Los frameworks del roadmap:
 
-- Metasploit: el framework abierto de referencia para aprender; miles de módulos de exploits conocidos y una base de datos de resultados. Es el que se usa en los laboratorios de TryHackMe y HTB.
+- Metasploit: el framework abierto de referencia para aprender; miles de módulos de exploits conocidos y una base de datos de resultados. Es el que se usa en los laboratorios de TryHackMe y en las máquinas de VulnHub.
 - Cobalt Strike: framework comercial de "simulación de adversario" para equipos rojos profesionales. Sus versiones piratas son muy usadas por grupos criminales, por eso los defensores conocen bien su rastro.
 - Sliver: alternativa abierta y moderna (escrita en Go) centrada en el C2.
 
@@ -474,7 +474,7 @@ Las fases de un pentest según PTES (Penetration Testing Execution Standard), en
 Ejemplo: una empresa contrata un pentest de su web `tienda.ejemplo` del 3 al 7 de noviembre, de 20:00 a 6:00, sin denegación de servicio ni phishing a empleados. El tercer día el equipo descubre que la base de datos es de un proveedor externo: aunque sea vulnerable, queda fuera de alcance y solo se reporta, no se prueba.
 
 > [!WARNING]
-> Practicar contra sistemas sin autorización por escrito es ilegal aunque "solo mires". Para aprender, usa laboratorios hechos para eso: TryHackMe, HackTheBox, DVWA, Juice Shop o tus propias VMs.
+> Practicar contra sistemas sin autorización por escrito es ilegal aunque "solo mires". Para aprender, usa laboratorios hechos para eso: TryHackMe, VulnHub, DVWA, Juice Shop o tus propias VMs.
 
 ```
 RoE        → acuerdo firmado de qué, cómo y cuándo se prueba.

@@ -484,7 +484,7 @@ Señales (solo del activo): muchas conexiones a puertos distintos desde una mism
 Defensas: reducir lo que se publica (ofertas de empleo sin versiones exactas, metadatos de documentos limpios), no filtrar subdominios internos, IDS y alertas por escaneos, honeypots, cerrar servicios innecesarios. Las herramientas se ven en [`07-herramientas-de-red`](../07-herramientas-de-red/) y el OSINT en [`13-frameworks-de-amenazas`](../13-frameworks-de-amenazas/).
 
 > [!NOTE]
-> El reconocimiento activo contra sistemas que no son tuyos y sin autorización por escrito puede ser delito; practícalo solo en tus laboratorios o en plataformas como TryHackMe y HTB.
+> El reconocimiento activo contra sistemas que no son tuyos y sin autorización por escrito puede ser delito; practícalo solo en tus laboratorios o en plataformas como TryHackMe o VulnHub.
 
 ```
 Reconocimiento pasivo → sin tocar al objetivo (OSINT); no deja rastro en sus logs.
