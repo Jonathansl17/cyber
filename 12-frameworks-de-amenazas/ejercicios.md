@@ -189,6 +189,13 @@ Objetivo: superponer en el ATT&CK Navigator una capa con las técnicas de TeamTN
 
 Necesitas: navegador; Linux con `curl`, `tar` y `python3`. Sigma es el formato abierto de reglas de detección para logs; cada regla de SigmaHQ lleva etiquetas `attack.tNNNN` con su técnica de ATT&CK, y las de `rules/linux/` se escriben para auditd, para el journal y para la telemetría de procesos del EDR. Tiempo estimado: 45 minutos.
 
+```bash
+sudo apt install curl python3     # Debian/Ubuntu
+sudo pacman -S curl python        # Arch
+```
+
+- `sudo`, `apt install`, `pacman -S`, `curl`, `python3`/`python`, `#` → (ver ejercicio 1); `tar` ya viene con el sistema base.
+
 ### Pasos
 
 1. Descarga la capa del grupo y las reglas Sigma de Linux:
@@ -478,30 +485,46 @@ rm -rf ~/lab-osint
 
 Nodo: [Hunting por hipótesis](README.md#hunting-por-hipótesis), [Ciclo de threat hunting](README.md#ciclo-de-threat-hunting) y [Threat Hunting](README.md#threat-hunting).
 
-Objetivo: simular en una VM propia la persistencia T1053.003 (un cron de un usuario sin privilegios que ejecuta un binario desde `/tmp`), escribir la hipótesis de caza y las consultas que la encuentran cruzando auditd con el journal, y comprobar que devuelven exactamente la actividad simulada.
+Objetivo: simular en tu propio equipo la persistencia T1053.003 (un cron de un usuario sin privilegios que ejecuta un binario desde `/tmp`), escribir la hipótesis de caza y las consultas que la encuentran cruzando auditd con el journal, y comprobar que devuelven exactamente la actividad simulada.
 
-Necesitas: VirtualBox o similar con una VM Ubuntu Server 24.04 (o Debian 12) con tu usuario administrador (con `sudo`); red NAT solo para instalar paquetes, luego red solo-anfitrión o desconectada. El "binario sospechoso" es una copia de `/usr/bin/id`, inofensiva. Tiempo estimado: 1 hora.
+Necesitas: tu propio equipo Linux con tu usuario administrador (con `sudo`), auditd, cron y un servidor SSH instalados, y dos terminales abiertas a la vez. No hace falta ninguna máquina virtual: todo el laboratorio corre en este mismo equipo, y la "segunda máquina" es solo una segunda terminal que inicia sesión contra `127.0.0.1`. El "binario sospechoso" es una copia de `/usr/bin/id`, inofensiva. Este ejercicio modifica temporalmente tu sistema real (crea una cuenta de pruebas `ana`, carga reglas de auditd e instala un crontab en esa cuenta); la limpieza del final lo revierte todo, así que no lo hagas en un servidor de producción. Tiempo estimado: 1 hora.
+
+```bash
+sudo apt update && sudo apt install -y auditd cron openssh-server   # Debian/Ubuntu
+sudo pacman -S audit cronie openssh                                 # Arch
+```
+
+- `sudo` → ejecuta el comando como root, necesario para instalar paquetes del sistema.
+- `apt update` → descarga la lista actualizada de paquetes de los repositorios.
+- `&&` → (ver ejercicio 1).
+- `apt install -y auditd cron openssh-server` → instala el demonio de auditoría del kernel (`auditd`, que trae `auditctl`, `augenrules` y `ausearch`), el planificador `cron` y el servidor SSH; `-y` responde "sí" a la confirmación.
+- `pacman -S audit cronie openssh` → los mismos tres paquetes en Arch: `audit` es el framework de auditoría (mismos binarios `auditctl`/`augenrules`/`ausearch`), `cronie` el planificador (provee `crontab` y el demonio `crond`) y `openssh` incluye el servidor `sshd`.
+- `# Debian/Ubuntu`, `# Arch` → comentarios de la shell; ejecuta solo la línea de tu distribución.
+
+En Arch arranca tú mismo los servicios (Debian suele dejarlos activos al instalar):
+
+```bash
+sudo systemctl start auditd cronie sshd
+```
+
+- `systemctl start auditd cronie sshd` → arranca el demonio de auditoría, el planificador de cron y el servidor SSH; los nombres de servicio equivalentes en Debian/Ubuntu son `auditd`, `cron` y `ssh`.
 
 ### Pasos
 
-1. Haz una instantánea de la VM limpia (VirtualBox: Máquina > Tomar instantánea) para poder volver atrás al final.
-2. En la VM, con tu usuario administrador, instala auditd y cron (en Ubuntu cron ya viene instalado) y comprueba que los dos servicios corren:
+1. Abre dos terminales en este mismo equipo: la **Terminal 1 (administrador)**, donde trabajas con tu usuario y `sudo`, y la **Terminal 2 (usuario de pruebas)**, que usarás más adelante para la sesión de `ana`. En la Terminal 1 confirma que los servicios corren:
    ```bash
-   sudo apt update && sudo apt install -y auditd cron
-   systemctl is-active auditd cron
+   systemctl is-active auditd cron ssh     # Debian/Ubuntu
+   systemctl is-active auditd cronie sshd  # Arch
    ```
-   - `sudo` → ejecuta el comando como root, necesario para instalar paquetes.
-   - `apt update` → descarga la lista actualizada de paquetes de los repositorios.
-   - `&&` → (ver ejercicio 1).
-   - `apt install -y auditd cron` → instala el demonio de auditoría del kernel (`auditd`, que trae `auditctl`, `augenrules` y `ausearch`) y el planificador `cron`; `-y` responde "sí" a la confirmación.
-   - `systemctl is-active auditd cron` → imprime el estado de cada servicio, uno por línea.
-   Debe responder `active` dos veces. Ahora cambia la red de la VM a solo-anfitrión.
-3. Crea las reglas de auditoría que generan los datos de la hipótesis. Crea `/etc/audit/rules.d/caza.rules` (por ejemplo con `sudo nano /etc/audit/rules.d/caza.rules`) con este contenido completo:
+   - `systemctl is-active ...` → imprime el estado de cada servicio, uno por línea; ejecuta solo la línea de tu distribución.
+   Debe responder `active` tres veces. Todo el ejercicio ocurre contra este equipo y la cuenta de pruebas, nunca contra sistemas de terceros.
+2. En la Terminal 1 crea las reglas de auditoría que generan los datos de la hipótesis. Crea `/etc/audit/rules.d/caza.rules` (por ejemplo con `sudo nano /etc/audit/rules.d/caza.rules`) con este contenido completo. La primera línea vigila la carpeta donde se guardan los crontabs de usuario, cuya ruta cambia según la distribución:
    ```
    -w /var/spool/cron/crontabs/ -p wa -k cron_persist
    -a always,exit -F arch=b64 -S execve -F auid>=1000 -F auid!=unset -k exec_usuario
    ```
-   - `-w /var/spool/cron/crontabs/` → vigila esa carpeta, donde Debian y Ubuntu guardan el crontab de cada usuario (un archivo por usuario, con su nombre).
+   En Arch con cronie esa carpeta es `/var/spool/cron/`, así que la primera línea sería `-w /var/spool/cron/ -p wa -k cron_persist`.
+   - `-w /var/spool/cron/crontabs/` → vigila esa carpeta, donde Debian y Ubuntu guardan el crontab de cada usuario (un archivo por usuario, con su nombre); en Arch con cronie la carpeta equivalente es `/var/spool/cron/`.
    - `-p wa` → registra las escrituras (`w`) y los cambios de atributos (`a`), como el renombrado y el cambio de permisos con que `crontab` instala el archivo.
    - `-k cron_persist` → etiqueta (key) que se pone a cada evento de la regla, para buscarlos después con `ausearch -k`.
    - `-a always,exit` → regla de llamada al sistema: añadir (`-a`) a la lista `exit`, que se evalúa al terminar la llamada, con la acción `always` (registrar siempre).
@@ -519,7 +542,7 @@ Necesitas: VirtualBox o similar con una VM Ubuntu Server 24.04 (o Debian 12) con
    - `augenrules --load` → une todos los archivos `.rules` de `/etc/audit/rules.d/` en `/etc/audit/audit.rules` y los carga en el kernel.
    - `auditctl -l` → lista las reglas cargadas en el kernel.
    Deben aparecer tus dos reglas, con `-F key=cron_persist` y `-F key=exec_usuario`.
-4. Prepara la cuenta estándar, todavía como administrador:
+3. Prepara la cuenta estándar, todavía en la Terminal 1 como administrador:
    ```bash
    sudo useradd -m -s /bin/bash ana
    sudo passwd ana
@@ -527,18 +550,25 @@ Necesitas: VirtualBox o similar con una VM Ubuntu Server 24.04 (o Debian 12) con
    - `useradd` → crea una cuenta local.
    - `-m` → crea su directorio personal, `/home/ana`.
    - `-s /bin/bash` → shell de inicio de sesión de la cuenta.
-   - `ana` → nombre de la cuenta; no entra en el grupo `sudo`, así que no tiene privilegios de administrador.
-   - `passwd ana` → pide por teclado la contraseña nueva de `ana` (dos veces), sin escribirla en la línea de comandos.
+   - `ana` → nombre de la cuenta; no entra en el grupo de administración (`sudo`/`wheel`), así que no tiene privilegios.
+   - `passwd ana` → pide por teclado la contraseña nueva de `ana` (dos veces); necesitas esa contraseña para iniciar su sesión por SSH en el paso 5.
    `ana` no puede usar `sudo`, como el atacante sin privilegios de la hipótesis.
-5. Antes de simular nada, escribe la hipótesis en `~/hipotesis.txt` con el formato de la nota (técnica, dónde se vería, qué datos y qué ventana):
+4. Antes de simular nada, escribe la hipótesis en `~/hipotesis.txt` (en la Terminal 1) con el formato de la nota (técnica, dónde se vería, qué datos y qué ventana):
    ```
    Un atacante podría estar usando cron (T1053.003) para persistir en este
-   servidor; si es así, veremos un crontab instalado por una cuenta que no es
+   equipo; si es así, veremos un crontab instalado por una cuenta que no es
    de administración cuyo comando apunta a /tmp, /var/tmp o /dev/shm, y ese
    binario ejecutándose cada pocos minutos lanzado por cron, en las últimas 24 horas.
-   Datos: auditd (claves cron_persist y exec_usuario) y journal (crontab y CRON).
+   Datos: auditd (claves cron_persist y exec_usuario) y journal (identificadores
+   crontab y CRON en Debian, crond en Arch).
    ```
-6. Simula la persistencia: cierra tu sesión (`exit`) y entra en la consola de la VM como `ana` (un `su` o `sudo -iu ana` no sirve, porque conservaría tu auid). Como `ana`, ejecuta:
+5. Simula la persistencia desde la **Terminal 2**. Para que la actividad lleve el auid de `ana` y no el tuyo, inicia una sesión de login real suya contra el servidor SSH de este mismo equipo:
+   ```bash
+   ssh ana@127.0.0.1
+   ```
+   - `ssh ana@127.0.0.1` → abre una sesión de login del usuario `ana` contra el SSH de `127.0.0.1` (este equipo), de modo que el kernel le asigna su propio auid. Un `su` o `sudo -iu ana` no sirve, porque conservaría tu auid: el loginuid se fija una vez por sesión y ya no cambia. Acepta la huella del host la primera vez y escribe la contraseña de `ana`. (Alternativa sin SSH: cambia a una consola virtual con Ctrl+Alt+F3 e inicia sesión como `ana`.)
+
+   Ya como `ana`, ejecuta:
    ```bash
    cp /usr/bin/id /tmp/.svc
    (crontab -l 2>/dev/null; echo '* * * * * /tmp/.svc') | crontab -
@@ -550,45 +580,47 @@ Necesitas: VirtualBox o similar con una VM Ubuntu Server 24.04 (o Debian 12) con
    - `2>/dev/null` → descarta los errores; si `ana` no tiene crontab, `crontab -l` se queja de `no crontab for ana`.
    - `echo '* * * * * /tmp/.svc'` → imprime la línea nueva: los cinco `*` (minuto, hora, día del mes, mes, día de la semana) significan "cada minuto", y luego va el comando.
    - `| crontab -` → instala como crontab de `ana` lo que llega por la tubería (`-` es la entrada estándar), sustituyendo al anterior; por eso se reimprime primero el actual.
-   La última orden muestra `* * * * * /tmp/.svc`. Espera dos minutos para que cron lo ejecute al menos una vez y cierra la sesión de `ana`.
-7. Vuelve a entrar con tu usuario administrador. Consulta 1, la instalación del crontab vista por auditd:
+   La última orden muestra `* * * * * /tmp/.svc`. Espera dos minutos para que cron lo ejecute al menos una vez y cierra la sesión de `ana` con `exit` (vuelves a tu shell de la Terminal 2).
+6. Vuelve a la **Terminal 1** (tu usuario administrador). Consulta 1, la instalación del crontab vista por auditd:
    ```bash
    sudo ausearch -k cron_persist --start today --format text
    ```
    - `ausearch` → busca en el log de auditd, `/var/log/audit/audit.log`, que solo puede leer root.
-   - `-k cron_persist` → solo eventos con esa etiqueta (ver paso 3).
+   - `-k cron_persist` → solo eventos con esa etiqueta (ver paso 2).
    - `--start today` → solo eventos desde las 00:00 de hoy; admite también `recent` (10 minutos), `yesterday` o una fecha y hora.
    - `--format text` → resume cada evento en una frase: quién, qué hizo, sobre qué y con qué programa.
    Verás varias líneas del mismo segundo (crea un temporal, le cambia el dueño, lo renombra) como esta:
    ```
    At 10:15:20 10/08/2026 ana successfully renamed /var/spool/cron/crontabs/ana using /usr/bin/crontab
    ```
-   El sujeto es `ana`, no root, y el programa `/usr/bin/crontab`. Si `ana` hubiera hecho `sudo`, verías `<tu usuario>, acting as root`: el auid delata siempre quién abrió la sesión.
-8. Consulta 2, la misma instalación vista por el journal, y el contenido de todos los crontabs con rutas temporales:
+   El sujeto es `ana`, no root, y el programa `/usr/bin/crontab` (en Arch la ruta vigilada sería `/var/spool/cron/ana`). Si `ana` hubiera hecho `sudo`, verías `<tu usuario>, acting as root`: el auid delata siempre quién abrió la sesión.
+7. Consulta 2, la misma instalación vista por el journal, y el contenido de todos los crontabs con rutas temporales. Fija primero la carpeta de crontabs de tu distribución:
    ```bash
+   CRONTABS=/var/spool/cron/crontabs   # Debian/Ubuntu; en Arch (cronie): CRONTABS=/var/spool/cron
    sudo journalctl -t crontab --since "24 hours ago" --no-pager
-   sudo grep -rE '/(tmp|var/tmp|dev/shm)/' /var/spool/cron/crontabs/
+   sudo grep -rE '/(tmp|var/tmp|dev/shm)/' "$CRONTABS"/
    ```
+   - `CRONTABS=...` → guarda en una variable la carpeta de crontabs de tu sistema; usa la ruta de Arch si tu distribución es Arch.
    - `journalctl` → consulta el journal de systemd; con `sudo` ve los mensajes de todos los usuarios.
-   - `-t crontab` → solo mensajes con ese identificador de syslog, el que usa el programa `crontab`.
+   - `-t crontab` → solo mensajes con ese identificador de syslog, el que usa la herramienta `crontab` en ambas distribuciones.
    - `--since "24 hours ago"` → la ventana de la hipótesis.
    - `--no-pager` → imprime sin abrir el paginador `less`.
    - `grep -rE` → (ver ejercicio 2, paso 2): búsqueda recursiva con expresión regular extendida.
    - `'/(tmp|var/tmp|dev/shm)/'` → cualquiera de las tres carpetas donde cualquier usuario puede escribir; `|` dentro del paréntesis significa "o".
-   - `/var/spool/cron/crontabs/` → la carpeta de crontabs; solo root puede leerla, de ahí el `sudo`.
+   - `"$CRONTABS"/` → la carpeta de crontabs; solo root puede leerla, de ahí el `sudo`.
    ```
    oct 08 10:15:20 lab crontab[2250]: (ana) REPLACE (ana)
    /var/spool/cron/crontabs/ana:* * * * * /tmp/.svc
    ```
    Que el journal y auditd coincidan en hora (mismo segundo) y usuario es la primera correlación.
-9. Consulta 3, la ejecución, vista por el journal (cron registra cada comando que lanza) y por auditd:
+8. Consulta 3, la ejecución, vista por el journal (cron registra cada comando que lanza) y por auditd:
    ```bash
    sudo journalctl -t CRON --since "24 hours ago" --no-pager | grep -E 'CMD \(/(tmp|var/tmp|dev/shm)/'
    sudo ausearch -k exec_usuario --start today --format text | grep -E 'executed /(tmp|var/tmp|dev/shm)/'
    ```
-   - `journalctl -t CRON --since ... --no-pager` → (ver paso 8); `CRON` es el identificador del demonio cron al ejecutar trabajos.
+   - `journalctl -t CRON --since ... --no-pager` → (ver paso 7); `CRON` es el identificador del demonio cron de Debian al ejecutar trabajos. En Arch con cronie el identificador es `crond`, así que ahí usarías `-t crond`.
    - `grep -E 'CMD \(/(tmp|var/tmp|dev/shm)/'` → deja las líneas `CMD (` cuyo comando empieza en una carpeta temporal; `\(` es un paréntesis literal.
-   - `ausearch -k exec_usuario --start today --format text` → (ver paso 7); eventos de la regla `execve`.
+   - `ausearch -k exec_usuario --start today --format text` → (ver paso 6); eventos de la regla `execve`.
    - `grep -E 'executed /(tmp|var/tmp|dev/shm)/'` → deja los programas ejecutados desde esas carpetas.
    ```
    oct 08 10:16:01 lab CRON[2301]: (ana) CMD (/tmp/.svc)
@@ -596,14 +628,14 @@ Necesitas: VirtualBox o similar con una VM Ubuntu Server 24.04 (o Debian 12) con
    At 10:16:01 10/08/2026 ana successfully executed /tmp/.svc
    At 10:17:01 10/08/2026 ana successfully executed /tmp/.svc
    ```
-   Una ejecución por minuto, siempre en el segundo 01: la regularidad es la firma de una tarea programada. El auid es `ana` porque cron abre una sesión PAM para cada trabajo con su usuario. Si además ves `(CRON) info (No MTA installed, discarding output)`, es cron descartando la salida de `id` porque no hay servidor de correo.
-10. Comprueba qué es en realidad `/tmp/.svc`:
+   Una ejecución por minuto, siempre en el segundo 01: la regularidad es la firma de una tarea programada. El auid es `ana` porque cron abre una sesión PAM para cada trabajo con su usuario (si tu cronie de Arch no está compilado con soporte PAM, el trabajo puede no recibir un loginuid de usuario y esa línea de auditd no aparecerá; en ese caso te quedas con la evidencia del journal y de la instalación, y la correlación sigue siendo válida). Si además ves `(CRON) info (No MTA installed, discarding output)`, es cron descartando la salida de `id` porque no hay servidor de correo.
+9. Comprueba qué es en realidad `/tmp/.svc` (en la Terminal 1):
     ```bash
     sudo sha256sum /tmp/.svc /usr/bin/id
     ```
     - `sha256sum` → (ver ejercicio 1); calcula el hash de los dos archivos.
     Los dos hashes son iguales: el binario oculto es una copia renombrada de una herramienta del sistema. Un nombre cambiado para pasar desapercibido es enmascaramiento (T1036), una pista extra para la siguiente hipótesis.
-11. Cierra el ciclo de caza (paso 4, informar y enriquecer): añade a `hipotesis.txt` el resultado (confirmada, con hora, usuario y comando), las consultas de los pasos 7 a 9 y una frase con la regla que propondrías al SIEM, por ejemplo "alertar ante un evento de auditd con clave cron_persist seguido de un CRON CMD cuyo comando esté en /tmp, /var/tmp o /dev/shm".
+10. Cierra el ciclo de caza (paso 4, informar y enriquecer): añade a `hipotesis.txt` el resultado (confirmada, con hora, usuario y comando), las consultas de los pasos 6 a 8 y una frase con la regla que propondrías al SIEM, por ejemplo "alertar ante un evento de auditd con clave cron_persist seguido de un CRON/crond CMD cuyo comando esté en /tmp, /var/tmp o /dev/shm".
 
 ### Resultado esperado
 
@@ -611,15 +643,15 @@ Necesitas: VirtualBox o similar con una VM Ubuntu Server 24.04 (o Debian 12) con
 
 ### Comprueba que lo lograste
 
-- ¿La consulta del paso 7 devuelve algo si no cargaste las reglas del paso 3? No: auditd sin reglas no vigila los crontabs; por eso la hipótesis debe nombrar datos que de verdad existen. El journal del paso 8 sí estaría, porque `crontab` lo escribe siempre.
+- ¿La consulta del paso 6 devuelve algo si no cargaste las reglas del paso 2? No: auditd sin reglas no vigila los crontabs; por eso la hipótesis debe nombrar datos que de verdad existen. El journal del paso 7 sí estaría, porque `crontab` lo escribe siempre.
 - Si `ana` cambia el comando a `/home/ana/.cache/svc`, ¿lo encuentran tus consultas? No, porque filtran por carpetas temporales; amplía el patrón (por ejemplo, cualquier ruta oculta: `/\.`) y repite.
-- Si en vez de cron usa un timer de usuario de systemd (T1053.006, `~/.config/systemd/user/`), ¿lo ven tus reglas? No: no cambia ningún crontab ni aparece `CRON` en el journal. Haría falta vigilar esas carpetas (`-w`) y buscar los procesos lanzados por `systemd --user`. Es el mismo hueco que viste en las reglas Sigma del ejercicio 2.
-- ¿Por qué esto es threat hunting y no monitoreo? Porque partió de una hipótesis escrita por ti, no de una alerta; la regla del paso 11 es lo que lo convierte en monitoreo para la próxima vez.
+- Si en vez de cron usa un timer de usuario de systemd (T1053.006, `~/.config/systemd/user/`), ¿lo ven tus reglas? No: no cambia ningún crontab ni aparece `CRON`/`crond` en el journal. Haría falta vigilar esas carpetas (`-w`) y buscar los procesos lanzados por `systemd --user`. Es el mismo hueco que viste en las reglas Sigma del ejercicio 2.
+- ¿Por qué esto es threat hunting y no monitoreo? Porque partió de una hipótesis escrita por ti, no de una alerta; la regla del paso 10 es lo que lo convierte en monitoreo para la próxima vez.
 - ¿Qué técnica de ATT&CK y qué fase de la Kill Chain representa el cron? T1053.003 (Persistence) y la fase 5, Installation.
 
 ### Limpieza
 
-Con tu usuario administrador (o restaura la instantánea del paso 1):
+En la Terminal 1, con tu usuario administrador:
 
 ```bash
 sudo crontab -r -u ana
@@ -633,7 +665,7 @@ sudo augenrules --load
 - `-u ana` → del usuario `ana`, en vez del propio; solo root puede usarlo.
 - `rm -f /tmp/.svc` → borra el binario copiado; `-f` no da error si ya no existe.
 - `userdel -r ana` → borra la cuenta `ana`; `-r` borra también su directorio personal y su buzón.
-- `rm /etc/audit/rules.d/caza.rules` → borra el archivo de reglas del paso 3.
-- `augenrules --load` → (ver paso 3); vuelve a cargar las reglas, ya sin las tuyas.
+- `rm /etc/audit/rules.d/caza.rules` → borra el archivo de reglas del paso 2.
+- `augenrules --load` → (ver paso 2); vuelve a cargar las reglas, ya sin las tuyas.
 
-Para desinstalar auditd: `sudo apt purge -y auditd`.
+Si instalaste los servicios solo para este ejercicio, puedes pararlos y desinstalarlos. Para desinstalar auditd: en Debian/Ubuntu `sudo apt purge -y auditd`; en Arch `sudo pacman -Rns audit` (y `cronie`/`openssh` si tampoco los usabas antes). Si arrancaste el SSH solo para esto, páralo con `sudo systemctl stop sshd` (Arch) o `sudo systemctl stop ssh` (Debian/Ubuntu).

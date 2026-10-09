@@ -4,46 +4,62 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-## Ejercicio 1: Aplica un subconjunto del CIS nivel 1 a una VM
+## Ejercicio 1: Aplica un subconjunto del CIS nivel 1 a un equipo de laboratorio
 
 Nodo: [Operating System Hardening](README.md#operating-system-hardening), con apoyo de [Port Blocking](README.md#port-blocking), [Host Based Firewall](README.md#host-based-firewall) y [Patching](README.md#patching).
 
-Objetivo: endurecer una VM Ubuntu Server con siete grupos de controles del CIS Benchmark nivel 1, dejar un registro de cada cambio y demostrar con `ss`, `nmap` y Lynis que la superficie de ataque bajó (menos puertos en escucha, puertos filtrados desde fuera y un índice de hardening mayor).
+Objetivo: endurecer un equipo Linux de laboratorio con siete grupos de controles del CIS Benchmark nivel 1, dejar un registro de cada cambio y demostrar con `ss`, `nmap` y Lynis que la superficie de ataque bajó (menos puertos en escucha, puertos filtrados desde fuera y un índice de hardening mayor). Todo en un solo equipo, usando varias terminales: no hacen falta máquinas virtuales ni una segunda máquina.
 
 Necesitas:
 
-- VirtualBox (o KVM/virt-manager) con una VM Ubuntu Server 24.04 LTS recién instalada, con OpenSSH marcado durante la instalación. Sirve igual Debian 12 cambiando los nombres de paquete que se indiquen. Haz un snapshot llamado `limpia` antes de empezar.
-- Un segundo adaptador de red en modo solo-anfitrión (host-only) para escanear la VM desde tu equipo sin exponerla a nadie más. Lo más sencillo es añadirlo en la configuración de la VM (Red → Adaptador 2 → "Adaptador solo-anfitrión", red `vboxnet0`) antes de instalar Ubuntu: el instalador lo detecta y lo configura por DHCP. Si lo añades después, la VM no le pide IP sola; mira su nombre con `ip -br link` (suele ser `enp0s8`) y crea `/etc/netplan/60-hostonly.yaml`:
-  ```yaml
-  network:
-    version: 2
-    ethernets:
-      enp0s8:
-        dhcp4: true
+- Un equipo Linux que puedas restaurar o reinstalar sin pena: idealmente un contenedor, un equipo de laboratorio o una instalación aparte, **nunca tu equipo de trabajo diario**. Sirve Ubuntu Server 24.04 LTS, Debian 12 o Arch Linux; a lo largo del ejercicio se dan los nombres de paquete y servicio de cada familia. Varios de estos controles (purgar servicios, activar el firewall, endurecer SSH) pueden dejarte sin acceso o romper el sistema si te equivocas, por eso conviene un equipo del que puedas partir de cero.
+- Trabajarás con **varias terminales abiertas en el mismo equipo**:
+  - **Terminal 1 (equipo endurecido)**: donde aplicas los controles y corres `ss`, `lynis`, etc.
+  - **Terminal 2 (escáner)**: desde donde escaneas con `nmap` el servicio simulado "desde fuera". Es el mismo equipo; en una red real este escáner estaría en otra máquina, pero el flujo de paquetes que observas es idéntico.
+- Una interfaz `dummy` que da una dirección IP que no es loopback, para poder hablar de "alcanzable desde fuera" sin una segunda máquina. Créala en la **Terminal 1** antes de empezar:
+  ```bash
+  sudo ip link add dummy0 type dummy
+  sudo ip addr add 10.0.0.1/24 dev dummy0
+  sudo ip link set dummy0 up
+  ip -4 -br addr show dummy0       # debe mostrar: dummy0  UNKNOWN  10.0.0.1/24
   ```
-  Luego `sudo chmod 600 /etc/netplan/60-hostonly.yaml` (netplan avisa si el archivo es legible por otros) y `sudo netplan apply`. Con `ip -4 -br addr` debe aparecer una IP `192.168.56.x` (rango por defecto de `vboxnet0`; en KVM la red equivalente es una red aislada de virt-manager con otro rango).
-- En tu equipo anfitrión, `nmap`: `sudo apt install nmap` (Debian/Ubuntu), `sudo pacman -S nmap` (Arch).
-- El PDF del benchmark: regístrate gratis en [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks) y descarga "CIS Ubuntu Linux 24.04 LTS Benchmark". Los números de control cambian entre versiones; en este ejercicio se citan por su título, búscalos en el PDF y anota el número de tu versión.
+  - `ip` → herramienta de iproute2 para consultar y configurar la red.
+  - `link add dummy0 type dummy` → crea una interfaz virtual llamada `dummy0` del tipo `dummy`: existe en el kernel, acepta direcciones y tráfico, pero no sale a ninguna parte.
+  - `addr add 10.0.0.1/24 dev dummy0` → le asigna la dirección `10.0.0.1` con máscara `/24` a esa interfaz.
+  - `link set dummy0 up` → la activa.
+  - `-4 -br addr show dummy0` → muestra en formato breve (`-br`) solo las direcciones IPv4 (`-4`) de `dummy0`.
+
+  Los servicios que levantes en `0.0.0.0` quedarán también escuchando en `10.0.0.1`, así que `nmap 10.0.0.1` los ve como los vería un atacante de la red; los que escuchen solo en `127.0.0.1` no, igual que en una máquina real. (Como escáner y objetivo son el mismo equipo, el firewall filtrará por dirección de destino, no por interfaz, ver paso 9.)
+- `nmap` en el equipo. Instalación:
+  - Debian/Ubuntu: `sudo apt install nmap`
+  - Arch: `sudo pacman -S nmap`
+- El PDF del benchmark: regístrate gratis en [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks) y descarga "CIS Ubuntu Linux 24.04 LTS Benchmark" (sirve de guía aunque uses Arch; los controles son equivalentes). Los números de control cambian entre versiones; en este ejercicio se citan por su título, búscalos en el PDF y anota el número de tu versión.
 - Tiempo estimado: 2 horas.
 
 > [!WARNING]
-> Haz todo esto en la VM, nunca en tu equipo de trabajo. Algunos controles (firewall, SSH) pueden dejarte sin acceso remoto si te equivocas; ten siempre abierta la consola de VirtualBox además de la sesión SSH.
+> Hazlo solo en un equipo que puedas restaurar (contenedor, equipo de laboratorio o instalación aparte), nunca en tu equipo de trabajo. Algunos controles (firewall, SSH) pueden dejarte sin acceso remoto o romper servicios si te equivocas; si administras el equipo por SSH, ten siempre a mano una consola local además de la sesión remota. El firewall de este ejercicio se limita a la dirección simulada `10.0.0.1` justo para no cortar tu sesión real.
 
 ### Pasos
 
-1. Simula un sistema "de fábrica" con servicios de sobra. Ubuntu Server trae pocos; instala los que un escritorio o una plantilla vieja suelen traer encendidos:
+1. Simula un sistema "de fábrica" con servicios de sobra. Instala los que un escritorio o una plantilla vieja suelen traer encendidos:
    ```bash
+   # Debian/Ubuntu
    sudo apt update
    sudo apt install -y vsftpd rpcbind avahi-daemon cups
+   # Arch
+   sudo pacman -S vsftpd rpcbind avahi cups
+   sudo systemctl start vsftpd rpcbind avahi-daemon cups
    ```
    - `sudo` → ejecuta el comando que sigue como root; instalar paquetes exige privilegios de administrador.
    - `apt update` → descarga de los repositorios la lista actualizada de paquetes y versiones disponibles; no instala nada.
    - `apt install` → instala los paquetes indicados y sus dependencias.
    - `-y` → responde "sí" automáticamente a la confirmación, para no tener que escribirla.
+   - `pacman -S` → instala (sincroniza) los paquetes indicados en Arch.
    - `vsftpd` → servidor FTP.
    - `rpcbind` → el portmapper que usan NFS y otros servicios RPC.
-   - `avahi-daemon` → servicio de anuncio y descubrimiento mDNS/DNS-SD en la red local.
+   - `avahi-daemon` / `avahi` → servicio de anuncio y descubrimiento mDNS/DNS-SD en la red local (el paquete en Arch se llama `avahi`, el servicio sigue siendo `avahi-daemon`).
    - `cups` → servidor de impresión.
+   - `systemctl start vsftpd rpcbind avahi-daemon cups` → en Arch arranca los servicios con `sudo systemctl start <svc>`, porque no se inician solos al instalar (Debian suele arrancarlos durante la instalación).
 
    Así tendrás un FTP, el portmapper de NFS, el anuncio mDNS y el servidor de impresión, cuatro cosas que el CIS nivel 1 pide quitar si no se usan.
 2. Crea la carpeta de trabajo y guarda la foto inicial de puertos TCP y UDP en escucha:
@@ -72,34 +88,33 @@ Necesitas:
    ```
    LISTEN 0 32    0.0.0.0:21        users:(("vsftpd",pid=1630,fd=3))
    LISTEN 0 4096  0.0.0.0:111       users:(("rpcbind",pid=1402,fd=4))
-   LISTEN 0 4096  0.0.0.0:22        users:(("sshd",pid=902,fd=3))
    LISTEN 0 4096  127.0.0.1:631     users:(("cupsd",pid=1720,fd=7))
    LISTEN 0 4096  127.0.0.53%lo:53  users:(("systemd-resolve",pid=610,fd=15))
    ```
-   El último comando cuenta los sockets TCP en escucha sin la cabecera (IPv4 e IPv6 por separado): ese es tu número "antes".
-3. Averigua la IP de la VM en la red solo-anfitrión y escanéala desde el anfitrión:
+   El último comando cuenta los sockets TCP en escucha sin la cabecera (IPv4 e IPv6 por separado): ese es tu número "antes". Fíjate en la columna de dirección: `vsftpd` y `rpcbind` escuchan en `0.0.0.0` (todas las interfaces, incluida `10.0.0.1`), pero `cupsd` escucha en `127.0.0.1` (solo loopback).
+3. Escanea el servicio "desde fuera". En la **Terminal 2 (escáner)**, apunta a la dirección de la interfaz `dummy0`:
    ```bash
-   ip -4 -br addr            # en la VM; busca la interfaz con 192.168.56.x
-   nmap -sT -p- 192.168.56.10 -oN antes-nmap.txt   # en el anfitrión, con la IP de tu VM
+   nmap -sT -p- 10.0.0.1 -oN ~/hardening/antes-nmap.txt
    ```
-   - `ip` → herramienta de iproute2 para consultar y configurar la red.
-   - `-4` → limita la salida a direcciones IPv4.
-   - `-br` → formato breve (brief): una línea por interfaz con su estado y sus direcciones.
-   - `addr` → objeto `address`: muestra las direcciones IP de cada interfaz.
-   - `# ...` → comentario de la shell; todo lo que va detrás no se ejecuta.
    - `nmap` → escáner de puertos.
    - `-sT` → escaneo TCP connect: completa el saludo de tres vías con cada puerto; no necesita privilegios.
    - `-p-` → escanea todos los puertos TCP, del 1 al 65535 (sin él solo revisa los 1000 más comunes).
-   - `192.168.56.10` → la IP de tu VM en la red solo-anfitrión; cámbiala por la tuya.
-   - `-oN antes-nmap.txt` → guarda además el resultado en ese archivo en formato normal (legible).
-   Deberías ver `21/tcp open ftp`, `22/tcp open ssh` y `111/tcp open rpcbind`. Copia `antes-nmap.txt` a tu cuaderno; los puertos en `127.0.0.1` no salen porque no son alcanzables desde fuera.
-4. Mide el punto de partida con Lynis:
+   - `10.0.0.1` → la dirección de la interfaz `dummy0`, que hace de "red externa"; en un caso real sería la IP del equipo vista desde otra máquina.
+   - `-oN ~/hardening/antes-nmap.txt` → guarda además el resultado en ese archivo en formato normal (legible).
+
+   Deberías ver `21/tcp open ftp` y `111/tcp open rpcbind` (y `22/tcp open ssh` si tienes servidor SSH activo). El `631` de CUPS no aparece: escucha en `127.0.0.1` y no es alcanzable desde `10.0.0.1`, igual que en una máquina real un servicio en loopback no está expuesto a la red.
+
+   > Solo contra `127.0.0.1` / `10.0.0.1` / servicios que tú mismo levantaste en este equipo. `nmap` y las demás herramientas ofensivas se usan únicamente contra tu propia máquina o sistemas que tengas autorización explícita para auditar.
+4. Mide el punto de partida con Lynis (en la **Terminal 1**):
    ```bash
+   # Debian/Ubuntu
    sudo apt install -y lynis
+   # Arch
+   sudo pacman -S lynis
    sudo lynis audit system --quick | tee ~/hardening/lynis-antes.txt
    sudo grep hardening_index /var/log/lynis-report.dat
    ```
-   - `sudo apt install -y lynis` → instala Lynis sin pedir confirmación (`sudo`, `apt install` y `-y`, ver paso 1).
+   - `sudo apt install -y lynis` / `sudo pacman -S lynis` → instala Lynis (ver paso 1).
    - `lynis` → herramienta de auditoría de seguridad para sistemas Unix.
    - `audit system` → orden de Lynis que audita el sistema local completo.
    - `--quick` → modo rápido: no se detiene a esperar que pulses Enter entre secciones.
@@ -108,11 +123,11 @@ Necesitas:
    - `grep hardening_index` → muestra solo las líneas que contienen el texto `hardening_index`.
    - `/var/log/lynis-report.dat` → informe en formato `clave=valor` que Lynis escribe al terminar cada auditoría.
 
-   Anota el número (por ejemplo `hardening_index=61`). El valor exacto depende de la versión; lo que importa es compararlo consigo mismo al final.
+   Anota el número (por ejemplo `hardening_index=61`). El valor exacto depende de la versión y de la distribución; lo que importa es compararlo consigo mismo al final.
 5. Abre el registro de cambios. Cada control que apliques tendrá una entrada con este formato, en texto plano:
    ```bash
    cat > ~/hardening/cambios.txt <<'EOF'
-   Registro de hardening CIS nivel 1 - VM ubuntu-lab
+   Registro de hardening CIS nivel 1 - equipo de laboratorio
    Formato: [control CIS (título y número de tu PDF)] antes -> cambio -> cómo se verifica
 
    EOF
@@ -125,25 +140,33 @@ Necesitas:
    Después de cada paso siguiente, añade su entrada con `nano ~/hardening/cambios.txt`.
 6. Control "servicios de servidor que no se usan" (sección Services del benchmark: avahi, servidor de impresión, rpcbind, servidor FTP). Elimínalos, no solo los pares:
    ```bash
+   # Debian/Ubuntu
    sudo apt purge -y vsftpd rpcbind avahi-daemon cups
    sudo apt autoremove -y
    dpkg -l vsftpd rpcbind avahi-daemon cups 2>&1 | grep -E '^ii' || echo "ninguno instalado"
+   # Arch
+   sudo systemctl disable --now vsftpd rpcbind avahi-daemon cups
+   sudo pacman -Rns vsftpd rpcbind avahi cups
+   pacman -Q vsftpd rpcbind avahi cups 2>&1 | grep -v 'was not found' || echo "ninguno instalado"
    ```
    - `sudo`, `-y` → (ver paso 1).
    - `apt purge` → desinstala los paquetes y borra también sus archivos de configuración (`remove` los dejaría).
-   - `vsftpd rpcbind avahi-daemon cups` → los cuatro paquetes instalados en el paso 1.
+   - `vsftpd rpcbind avahi-daemon cups` → los cuatro paquetes instalados en el paso 1 (en Arch, `avahi` en vez de `avahi-daemon`).
    - `apt autoremove` → desinstala las dependencias que se instalaron automáticamente y ya nadie necesita.
    - `dpkg -l` → lista los paquetes indicados con su estado en el sistema.
-   - `2>&1` → manda también los errores (salida 2) a la salida normal (1), para que pasen por la tubería; `dpkg` avisa por error de los paquetes que no encuentra.
+   - `2>&1` → manda también los errores (salida 2) a la salida normal (1), para que pasen por la tubería; avisa por error de los paquetes que no encuentra.
    - `grep -E '^ii'` → deja solo las líneas que empiezan (`^`) por `ii`, el estado "deseado instalar, instalado"; `-E` activa las expresiones regulares extendidas.
    - `||` → ejecuta lo de la derecha solo si lo de la izquierda falla; `grep` falla cuando no encuentra ninguna línea.
    - `echo "ninguno instalado"` → imprime ese texto.
+   - `systemctl disable --now ...` → en Arch, desactiva y detiene (`--now`) los servicios antes de quitarlos; `pacman` no para los servicios por ti.
+   - `pacman -Rns` → desinstala los paquetes (`-R`), con sus dependencias ya huérfanas (`-s`) y sus archivos de configuración (`-n`).
+   - `pacman -Q` → consulta si cada paquete sigue instalado; `grep -v 'was not found'` descarta los avisos de los que ya no están.
 
    La última línea debe imprimir `ninguno instalado`. Entrada de ejemplo para el registro:
    ```
-   [Ensure ftp/avahi/print/rpcbind services are not in use] 4 servicios activos -> apt purge -> dpkg -l no los lista
+   [Ensure ftp/avahi/print/rpcbind services are not in use] 4 servicios activos -> purga de paquetes -> el gestor ya no los lista
    ```
-7. Control "módulos de sistemas de archivos poco usados deshabilitados" (cramfs, freevxfs, hfs, hfsplus, jffs2). Crea el archivo completo:
+7. Control "módulos de sistemas de archivos poco usados deshabilitados" (cramfs, freevxfs, hfs, hfsplus, jffs2). Crea el archivo completo (igual en Debian/Ubuntu y Arch):
    ```bash
    sudo tee /etc/modprobe.d/cis-filesystems.conf <<'EOF'
    # CIS L1: filesystems not needed on this server
@@ -171,7 +194,7 @@ Necesitas:
    - `-n` → simulación (dry run): hace todo menos cargar el módulo.
    - `-v` → modo detallado: imprime lo que haría; debe responder `install /bin/false`, así que si alguien enchufa un disco con ese formato, el kernel no cargará el módulo.
    - `cramfs` → el módulo que se comprueba.
-8. Control "parámetros de red y kernel" (secciones Network Parameters y Process Hardening). Archivo completo:
+8. Control "parámetros de red y kernel" (secciones Network Parameters y Process Hardening). Archivo completo (igual en ambas distribuciones):
    ```bash
    sudo tee /etc/sysctl.d/60-cis.conf <<'EOF'
    # CIS L1: host is not a router
@@ -225,33 +248,52 @@ Necesitas:
    - `sysctl net.ipv4.conf.all.accept_redirects kernel.randomize_va_space` → sin `=`, solo lee y muestra el valor actual de esos dos parámetros.
 
    La última orden debe devolver `= 0` y `= 2`. Son los mismos parámetros que el ejemplo `90-hardening.conf` del README, ampliados.
-9. Control "firewall basado en host configurado" (sección Host Based Firewall, con ufw). Primero la regla de SSH, después la política; si lo haces al revés y estás por SSH, te cortas:
+9. Control "firewall basado en host configurado" (sección Host Based Firewall). En Arch el firewall del kernel se administra con nftables; en Debian/Ubuntu `ufw` es un frente más sencillo sobre lo mismo, pero aquí usamos nftables directamente para que valga en ambas familias. Instálalo:
    ```bash
-   sudo apt install -y ufw
-   sudo ufw allow in on lo
-   sudo ufw deny in from 127.0.0.0/8
-   sudo ufw deny in from ::1
-   sudo ufw allow 22/tcp
-   sudo ufw default deny incoming
-   sudo ufw default allow outgoing
-   sudo ufw logging on
-   sudo ufw enable
-   sudo ufw status verbose
+   # Debian/Ubuntu
+   sudo apt install -y nftables
+   # Arch
+   sudo pacman -S nftables
    ```
-   - `sudo apt install -y ufw` → instala ufw (ver paso 1); ufw y todas sus órdenes requieren root.
-   - `ufw` → Uncomplicated Firewall, interfaz sencilla sobre el firewall del kernel.
-   - `allow in on lo` → acepta el tráfico entrante (`in`) por la interfaz de loopback `lo`.
-   - `deny in from 127.0.0.0/8` → descarta lo que entre con origen en la red de loopback IPv4; como `lo` ya se aceptó antes, solo afecta a paquetes que llegan por una interfaz real diciendo venir de `127.0.0.1`, que serían falsificados.
-   - `deny in from ::1` → lo mismo para la dirección de loopback IPv6.
-   - `allow 22/tcp` → permite conexiones entrantes al puerto 22 por TCP (SSH); va antes que la política para no cortarte.
-   - `default deny incoming` → política por defecto: descarta todo lo entrante que ninguna regla permita.
-   - `default allow outgoing` → política por defecto: permite todo lo saliente.
-   - `logging on` → activa el registro de paquetes bloqueados en el log del kernel (nivel `low` por defecto).
-   - `enable` → carga el firewall y lo deja activado en cada arranque.
-   - `status verbose` → muestra el estado, las políticas por defecto, el nivel de log y las reglas.
+   - `sudo apt install -y nftables` / `sudo pacman -S nftables` → instala nftables (ver paso 1). En Arch suele venir ya instalado como parte del sistema base.
 
-   Salida esperada: `Status: active`, `Default: deny (incoming), allow (outgoing)` y una regla `22/tcp ALLOW IN Anywhere`.
-10. Control "configuración del servidor SSH" (sección SSH Server). En Ubuntu 24.04 y Debian 12, `sshd_config` incluye `sshd_config.d/*.conf` en su primera línea, y en sshd gana el primer valor leído, así que un archivo ahí manda sobre el resto. Archivo completo:
+   La regla "SSH primero, política después": si bloquearas antes de permitir SSH y administraras el equipo en remoto, te cortarías. Por eso la regla que acepta el 22 va antes que el descarte. Para no afectar tu sesión real, el firewall de este laboratorio se limita a la dirección simulada `10.0.0.1` (en un caso real, la política por defecto sería descartar todo lo entrante, como `ufw default deny incoming`). Crea el archivo de reglas:
+   ```bash
+   sudo tee /etc/nftables-cis-lab.conf > /dev/null <<'EOF'
+   table inet cis_lab {
+       chain input {
+           type filter hook input priority 0; policy accept;
+           ip daddr 10.0.0.1 tcp dport 22 accept
+           ip daddr 10.0.0.1 log prefix "cis-lab drop: " drop
+       }
+   }
+   EOF
+   sudo nft -f /etc/nftables-cis-lab.conf
+   sudo nft list table inet cis_lab
+   ```
+   - `sudo tee /etc/nftables-cis-lab.conf > /dev/null` → escribe el archivo como root; `> /dev/null` descarta la copia que `tee` manda a pantalla.
+   - `table inet cis_lab` → crea una tabla llamada `cis_lab` de la familia `inet`, que cubre IPv4 e IPv6 a la vez.
+   - `chain input` → cadena enganchada al tráfico entrante dirigido a esta máquina.
+   - `type filter hook input priority 0` → cadena de filtrado en el hook de entrada, con la prioridad estándar 0.
+   - `policy accept` → lo que no coincida con ninguna regla se acepta: así el resto del sistema no se ve afectado, solo filtramos lo dirigido a `10.0.0.1`.
+   - `ip daddr 10.0.0.1 tcp dport 22 accept` → acepta primero el SSH (puerto 22) hacia la dirección simulada; va antes que el descarte para no cortar la administración (la lección del orden).
+   - `ip daddr 10.0.0.1 log prefix "cis-lab drop: " drop` → todo lo demás dirigido a `10.0.0.1` se registra en el log del kernel con ese prefijo y se descarta sin responder. Se filtra por dirección de destino (no por interfaz) porque escáner y objetivo son el mismo equipo y el tráfico local llega por `lo`.
+   - `nft -f /etc/nftables-cis-lab.conf` → lee y aplica las reglas del archivo de forma atómica.
+   - `nft list table inet cis_lab` → muestra la tabla cargada para comprobarla.
+
+   Si tu sistema usa `iptables` en vez de `nft`, el equivalente es:
+   ```bash
+   sudo iptables -A INPUT -d 10.0.0.1 -p tcp --dport 22 -j ACCEPT
+   sudo iptables -A INPUT -d 10.0.0.1 -j DROP
+   ```
+   - `iptables` → herramienta clásica de filtrado IPv4; en Arch el camino moderno es `iptables-nft`, que traduce estas órdenes a nftables por debajo.
+   - `-A INPUT` → añade la regla al final de la cadena `INPUT` (tráfico entrante).
+   - `-d 10.0.0.1` → coincide con paquetes cuyo destino es la dirección simulada.
+   - `-p tcp --dport 22` → protocolo TCP, puerto de destino 22 (SSH).
+   - `-j ACCEPT` / `-j DROP` → acepta o descarta; la regla de ACCEPT va primero por el mismo motivo de orden.
+
+   En Arch, para que el firewall se cargue en cada arranque, habilita el servicio con `sudo systemctl enable nftables` (Debian suele dejar la carga lista al instalar). Para este laboratorio basta con haberlo cargado a mano con `nft -f`.
+10. Control "configuración del servidor SSH" (sección SSH Server). En Ubuntu 24.04, Debian 12 y Arch con OpenSSH reciente, `sshd_config` incluye `sshd_config.d/*.conf`, y en sshd gana el primer valor leído, así que un archivo ahí manda sobre el resto. Archivo completo:
     ```bash
     sudo tee /etc/ssh/sshd_config.d/10-cis.conf <<'EOF'
     # CIS L1 SSH server settings
@@ -271,10 +313,10 @@ Necesitas:
     Banner /etc/issue.net
     EOF
     sudo chmod 600 /etc/ssh/sshd_config /etc/ssh/sshd_config.d/10-cis.conf
-    sudo sshd -t && sudo systemctl reload ssh
+    sudo sshd -t && sudo systemctl reload sshd    # Debian/Ubuntu: la unidad se llama ssh
     sudo sshd -T | grep -E '^(permitrootlogin|maxauthtries|disableforwarding|loglevel) '
     ```
-    - `sudo tee /etc/ssh/sshd_config.d/10-cis.conf <<'EOF'` → escribe el archivo como root con el texto del heredoc (ver pasos 5 y 7); el prefijo `10-` hace que se lea antes que otros archivos del directorio.
+    - `sudo tee /etc/ssh/sshd_config.d/10-cis.conf <<'EOF'` → escribe el archivo como root con el texto del heredoc (ver pasos 5 y 7); el prefijo `10-` hace que se lea antes que otros archivos del directorio. (Si tu OpenSSH es antiguo y `sshd_config` no tiene la línea `Include`, añade estas directivas al final de `/etc/ssh/sshd_config`.)
     - `# CIS L1 SSH server settings` → comentario; sshd lo ignora.
     - `PermitRootLogin no` → root no puede iniciar sesión por SSH de ninguna forma.
     - `PermitEmptyPasswords no` → rechaza el acceso a cuentas con contraseña vacía.
@@ -294,11 +336,11 @@ Necesitas:
     - `/etc/ssh/sshd_config /etc/ssh/sshd_config.d/10-cis.conf` → los dos archivos a los que se aplica.
     - `sshd -t` → modo prueba: valida la sintaxis de la configuración y las claves, y no imprime nada si todo está bien.
     - `&&` → ejecuta lo de la derecha solo si lo de la izquierda terminó bien; así solo se recarga si la configuración es válida.
-    - `systemctl reload ssh` → pide al servicio que relea su configuración sin cortar las sesiones abiertas; en Ubuntu y Debian el servicio se llama `ssh`, no `sshd`.
+    - `systemctl reload sshd` → pide al servicio que relea su configuración sin cortar las sesiones abiertas; en Arch y Fedora la unidad se llama `sshd`, en Ubuntu y Debian se llama `ssh`. En Arch, si nunca arrancaste el servidor, actívalo con `sudo systemctl start sshd` (Debian suele arrancarlo al instalar `openssh-server`).
     - `sshd -T` → modo prueba extendido: valida y escribe la configuración efectiva completa, una directiva por línea en minúsculas.
     - `grep -E '^(permitrootlogin|maxauthtries|disableforwarding|loglevel) '` → deja solo las líneas que empiezan (`^`) por una de esas directivas seguida de espacio; `-E` permite usar el grupo `( | )` de alternativas.
 
-    Antes de cerrar tu sesión actual, abre una segunda con `ssh usuario@192.168.56.10` para confirmar que sigues entrando.
+    Antes de cerrar tu sesión actual, si administras el equipo por SSH abre una segunda con `ssh usuario@127.0.0.1` (o `ssh usuario@10.0.0.1`, que el firewall del paso 9 permite) para confirmar que sigues entrando.
 11. Control "permisos de archivos de cuentas" (sección System File Permissions). Comprueba y, si hiciera falta, corrige:
     ```bash
     stat -c '%a %U:%G %n' /etc/passwd /etc/group /etc/shadow /etc/gshadow
@@ -311,15 +353,18 @@ Necesitas:
     - `%n` → nombre del archivo.
     - `/etc/passwd /etc/group /etc/shadow /etc/gshadow` → los cuatro archivos de cuentas y grupos que se revisan.
 
-    Lo esperado es `644 root:root` para `passwd` y `group`, y `640 root:shadow` (o más restrictivo) para `shadow` y `gshadow`. Si alguno no cuadra: `sudo chmod 640 /etc/shadow && sudo chown root:shadow /etc/shadow` (`chmod 640` deja lectura y escritura al dueño y solo lectura al grupo; `chown root:shadow` pone como dueño a `root` y como grupo a `shadow`).
-12. Control "AppArmor activo" y "parches al día" (secciones Mandatory Access Control y Software Updates):
+    Lo esperado es `644 root:root` para `passwd` y `group`, y `640 root:shadow` (o más restrictivo) para `shadow` y `gshadow`. En Arch el grupo de `shadow` suele ser `root` y los permisos `600`, que es igual de válido o más restrictivo. Si alguno no cuadra: `sudo chmod 640 /etc/shadow && sudo chown root:shadow /etc/shadow` (`chmod 640` deja lectura y escritura al dueño y solo lectura al grupo; `chown root:shadow` pone como dueño a `root` y como grupo a `shadow`).
+12. Control "control de acceso obligatorio" y "parches al día" (secciones Mandatory Access Control y Software Updates):
     ```bash
+    # Debian/Ubuntu: AppArmor viene activo
     sudo aa-status | head -n 4
     sudo apt update && sudo apt full-upgrade -y
     ls /var/run/reboot-required 2>/dev/null && sudo reboot
+    # Arch: ni AppArmor ni SELinux vienen activos de fábrica
+    sudo pacman -Syu
     ```
     - `sudo` → (ver paso 1); `aa-status` necesita root para leer el estado de AppArmor.
-    - `aa-status` → muestra si el módulo AppArmor está cargado y cuántos perfiles hay en modo enforce y complain; debe decir `apparmor module is loaded.` y un número de perfiles cargados.
+    - `aa-status` → muestra si el módulo AppArmor está cargado y cuántos perfiles hay en modo enforce y complain; en Debian/Ubuntu debe decir `apparmor module is loaded.` y un número de perfiles cargados. En Arch, AppArmor (o SELinux) no viene activo: el control equivalente exige instalarlo y habilitarlo aparte (`apparmor`, parámetros del kernel `lsm=...`), lo cual queda fuera de este ejercicio; anótalo como pendiente si usas Arch.
     - `| head -n 4` → muestra solo las 4 primeras líneas (`-n` indica cuántas).
     - `apt update` → (ver paso 1).
     - `&&` → (ver paso 10).
@@ -328,9 +373,10 @@ Necesitas:
     - `ls /var/run/reboot-required` → lista ese archivo, que Ubuntu crea cuando una actualización exige reiniciar; si no existe, `ls` falla.
     - `2>/dev/null` → descarta el mensaje de error de `ls` cuando el archivo no existe.
     - `sudo reboot` → reinicia el sistema; solo se ejecuta si el archivo existe, gracias a `&&`.
+    - `pacman -Syu` → en Arch, sincroniza las listas (`-y`) y actualiza todo el sistema (`-u`) en una sola orden; Arch no crea un archivo `reboot-required`, así que reinicia tú mismo si se actualizó el kernel (compáralo con `uname -r` frente a la versión instalada).
 
-    Si existe `/var/run/reboot-required`, el parche del kernel no protege hasta reiniciar, igual que explica la sección Patching.
-13. Toma la foto final y vuelve a escanear desde el anfitrión:
+    Si existe `/var/run/reboot-required` (o acabas de actualizar el kernel en Arch), el parche no protege hasta reiniciar, igual que explica la sección Patching.
+13. Toma la foto final. En la **Terminal 1**:
     ```bash
     sudo ss -tlnp | tee ~/hardening/despues-tcp.txt
     sudo ss -ulnp | tee ~/hardening/despues-udp.txt
@@ -340,12 +386,15 @@ Necesitas:
     - `sudo ss -tlnp | tee ...`, `sudo ss -ulnp | tee ...`, `ss -H -tln | wc -l` → (ver paso 2), ahora guardando en `despues-tcp.txt` y `despues-udp.txt`.
     - `diff` → compara dos archivos línea a línea y muestra solo las diferencias: las líneas con `<` estaban solo antes y las de `>` solo después.
     - `~/hardening/antes-tcp.txt ~/hardening/despues-tcp.txt` → el archivo antiguo y el nuevo.
+
+    Y vuelve a escanear desde la **Terminal 2 (escáner)**:
     ```bash
-    nmap -sT -p- 192.168.56.10 -oN despues-nmap.txt   # en el anfitrión
+    nmap -sT -p- 10.0.0.1 -oN ~/hardening/despues-nmap.txt
     ```
-    - `nmap -sT -p- 192.168.56.10` → (ver paso 3).
-    - `-oN despues-nmap.txt` → (ver paso 3), ahora con el archivo "después".
-    En la VM deberían quedar solo el 22 y los 53 de `systemd-resolved` en loopback. Desde fuera, nmap debe mostrar únicamente `22/tcp open ssh`; si pruebas un puerto concreto que antes estaba abierto (`nmap -sT -p 21,111 192.168.56.10`, donde `-p 21,111` limita el escaneo a esos dos puertos) aparecerá `filtered`, porque ufw descarta sin responder.
+    - `nmap -sT -p- 10.0.0.1` → (ver paso 3).
+    - `-oN ~/hardening/despues-nmap.txt` → (ver paso 3), ahora con el archivo "después".
+
+    En el equipo deberían quedar solo el 22 (si tienes SSH) y los 53 de `systemd-resolved` en loopback. Desde `10.0.0.1`, nmap ya no debe mostrar el 21 ni el 111; si pruebas un puerto concreto que antes estaba abierto (`nmap -sT -p 21,111 10.0.0.1`, donde `-p 21,111` limita el escaneo a esos dos puertos) aparecerá `filtered`, porque la regla `drop` de nftables descarta sin responder.
 14. Mide otra vez con Lynis y compara:
     ```bash
     sudo lynis audit system --quick | tee ~/hardening/lynis-despues.txt
@@ -358,19 +407,29 @@ Necesitas:
 
 ### Resultado esperado
 
-Una carpeta `~/hardening/` con `antes-*.txt`, `despues-*.txt`, `lynis-antes.txt`, `lynis-despues.txt` y `cambios.txt` con una entrada por control (siete grupos). En cifras, algo como: varios sockets TCP en escucha menos (desaparecen 21, 111 y 631, en sus versiones IPv4 e IPv6), de 3 puertos abiertos desde fuera a 1, y un índice de Lynis varios puntos más alto (el README pone como ejemplo de 58 a 77).
+Una carpeta `~/hardening/` con `antes-*.txt`, `despues-*.txt`, `lynis-antes.txt`, `lynis-despues.txt` y `cambios.txt` con una entrada por control (siete grupos). En cifras, algo como: varios sockets TCP en escucha menos (desaparecen 21, 111 y 631, en sus versiones IPv4 e IPv6), de 2 puertos abiertos desde `10.0.0.1` (21 y 111) a ninguno (salvo el 22 si usas SSH), y un índice de Lynis varios puntos más alto (el README pone como ejemplo de 58 a 77).
 
 ### Comprueba que lo lograste
 
-- ¿Por qué `nmap` desde el anfitrión nunca mostró el puerto 631 de CUPS, ni antes ni después? Porque escuchaba en `127.0.0.1`: solo era alcanzable desde la propia VM. Un servicio en loopback no está expuesto, aunque sí suma superficie local.
+- ¿Por qué `nmap` desde `10.0.0.1` nunca mostró el puerto 631 de CUPS, ni antes ni después? Porque escuchaba en `127.0.0.1`: solo era alcanzable desde el propio equipo, no desde una dirección de red. Un servicio en loopback no está expuesto, aunque sí suma superficie local.
 - ¿Qué diferencia hay entre un puerto que aparece `closed` y uno `filtered` en el escaneo final? `closed` significa que el sistema respondió RST porque nadie escucha; `filtered`, que el firewall descartó el paquete y no hubo respuesta.
-- `sudo sshd -T | grep permitrootlogin` devuelve `permitrootlogin no`, e intentar `ssh root@192.168.56.10` desde el anfitrión falla aunque la contraseña de root fuera correcta.
+- `sudo sshd -T | grep permitrootlogin` devuelve `permitrootlogin no`, e intentar `ssh root@127.0.0.1` falla aunque la contraseña de root fuera correcta.
 - `modprobe -n -v hfsplus` devuelve `install /bin/false`.
 - Cada línea de `cambios.txt` dice qué había antes, qué cambiaste y con qué comando se verifica. Si alguna no tiene verificación, el control no está documentado.
 
 ### Limpieza
 
-Vuelve al snapshot `limpia` desde VirtualBox (Máquina, Herramientas, Instantáneas, Restaurar) si quieres repetir el ejercicio, o conserva la VM endurecida como plantilla para otros laboratorios. En el anfitrión, borra `antes-nmap.txt` y `despues-nmap.txt` cuando los hayas copiado a tus notas.
+```bash
+sudo nft delete table inet cis_lab          # o, con iptables: borra las dos reglas con -D en vez de -A
+sudo rm -f /etc/nftables-cis-lab.conf /etc/modprobe.d/cis-filesystems.conf /etc/sysctl.d/60-cis.conf /etc/ssh/sshd_config.d/10-cis.conf
+sudo ip link del dummy0
+rm -f ~/hardening/antes-nmap.txt ~/hardening/despues-nmap.txt
+```
+- `nft delete table inet cis_lab` → borra la tabla del firewall con todas sus cadenas y reglas.
+- `rm -f ...` → borra los archivos de configuración que creaste y los dos informes de nmap; `-f` no se queja si falta alguno.
+- `ip link del dummy0` → elimina la interfaz virtual que creaste en Necesitas.
+
+Si montaste el equipo solo para este ejercicio (contenedor o instalación aparte), lo más limpio para repetirlo es restaurarlo o reinstalarlo, o conservarlo endurecido como plantilla para otros laboratorios.
 
 ## Ejercicio 2: Audita el cifrado y el WPS de tu router
 
@@ -381,7 +440,9 @@ Objetivo: comprobar desde fuera, con lo que tu router anuncia por el aire, que t
 Necesitas:
 
 - Tu propio router doméstico y su contraseña de administración (suele venir en la etiqueta inferior si nunca la cambiaste). Solo tu red: no audites redes ajenas, aunque el escaneo pasivo las muestre.
-- Un portátil Linux con Wi-Fi y NetworkManager (`nmcli` viene con él) y la herramienta `iw`: `sudo apt install iw` (Debian/Ubuntu) o `sudo pacman -S iw` (Arch).
+- Un portátil Linux con Wi-Fi y NetworkManager (`nmcli` viene con él) y la herramienta `iw`:
+  - Debian/Ubuntu: `sudo apt install iw`
+  - Arch: `sudo pacman -S iw`
 - Tiempo estimado: 30 minutos.
 
 ### Pasos

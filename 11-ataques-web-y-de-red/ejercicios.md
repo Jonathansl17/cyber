@@ -4,9 +4,11 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-Todo se hace sobre equipos, VMs, topologías de laboratorio y dominios públicos consultados de
-forma pasiva. El código vulnerable se compila y se ejecuta en tu propia máquina para observar
-el fallo y corregirlo; no se ataca nada de terceros.
+Todo se hace sobre tu propio equipo Linux, topologías simuladas en Packet Tracer y dominios
+públicos consultados de forma pasiva. No hace falta ninguna máquina virtual. El código vulnerable
+se compila y se ejecuta en tu propia máquina para observar el fallo y corregirlo; cualquier
+herramienta ofensiva se usa solo contra servicios que tú mismo levantaste en este equipo, nunca
+contra terceros.
 
 ## Ejercicio 1: Reproduce un desbordamiento y una fuga de memoria con AddressSanitizer
 

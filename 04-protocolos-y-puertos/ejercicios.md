@@ -10,7 +10,13 @@ Nodo: Understand Handshakes ([TCP 3-way handshake](README.md#tcp-3-way-handshake
 
 Objetivo: grabar una conexión HTTPS completa de tu propio equipo y señalar en la captura los tres segmentos del 3-way handshake, el ClientHello con su SNI, la versión de TLS que eligió el servidor y los segmentos FIN del cierre. Al final sabrás distinguir con datos el handshake TCP del TLS y ver qué cambia entre TLS 1.2 y 1.3.
 
-Necesitas: un Linux con internet (tu equipo o una VM en modo NAT); `tcpdump`, `curl` y Wireshark (que trae `tshark`). Instalación en Debian/Ubuntu: `sudo apt install tcpdump curl wireshark`; en Arch: `sudo pacman -S tcpdump curl wireshark-qt`. Solo capturas tu propio tráfico hacia un sitio público de ejemplo (`example.com`). Tiempo: 30-40 minutos.
+Necesitas: tu propio equipo Linux con internet; `tcpdump`, `curl` y Wireshark (que trae `tshark`). Solo capturas tu propio tráfico hacia un sitio público de ejemplo (`example.com`); todo corre en esta misma máquina en dos terminales. Tiempo: 30-40 minutos.
+
+Instalación:
+- Debian/Ubuntu: `sudo apt install tcpdump curl wireshark`
+- Arch: `sudo pacman -S tcpdump curl wireshark-qt`
+
+Para capturar y abrir la captura como usuario normal (sin root) debes estar en el grupo `wireshark`: `sudo usermod -aG wireshark $USER` y luego vuelve a iniciar sesión. En Debian/Ubuntu, además, `sudo dpkg-reconfigure wireshark-common` habilita la captura sin root. Si solo usas `tcpdump` con `sudo` para capturar y Wireshark/`tshark` para leer el archivo, basta con cambiar el dueño del `.pcap` (paso 5).
 
 ### Pasos
 
@@ -37,7 +43,7 @@ Necesitas: un Linux con internet (tu equipo o una VM en modo NAT); `tcpdump`, `c
    - `example.com` → nombre que se resuelve.
    - `awk 'NR==1{print $1}'` → `NR==1` se queda solo con la primera línea y `print $1` imprime su primer campo, la IP.
    - `IP=$(...)` y `echo "$IP"` → (ver paso 1).
-3. En una terminal, arranca la captura filtrando ese host y el puerto 443. Déjala corriendo.
+3. **Terminal 1 (captura):** arranca la captura filtrando ese host y el puerto 443. Déjala corriendo.
    ```bash
    sudo tcpdump -i "$IF" -nn -w hs.pcap "tcp port 443 and host $IP"
    ```
@@ -49,7 +55,7 @@ Necesitas: un Linux con internet (tu equipo o una VM en modo NAT); `tcpdump`, `c
    - `"tcp port 443 and host $IP"` → filtro de captura (sintaxis pcap-filter): solo TCP con puerto origen o destino 443 y con la IP del paso 2 como origen o destino; `and` exige ambas condiciones.
 
    Debe mostrar `tcpdump: listening on <interfaz>...` y quedarse esperando.
-4. En otra terminal (define otra vez `IP` si es una shell nueva), haz dos peticiones a esa misma IP: una con la versión de TLS que negocie curl (será 1.3) y otra limitada a TLS 1.2.
+4. **Terminal 2 (cliente)** (define otra vez `IP` si es una shell nueva): haz dos peticiones a esa misma IP: una con la versión de TLS que negocie curl (será 1.3) y otra limitada a TLS 1.2.
    ```bash
    curl -s -o /dev/null --resolve example.com:443:$IP https://example.com
    sleep 2
@@ -62,7 +68,7 @@ Necesitas: un Linux con internet (tu equipo o una VM en modo NAT); `tcpdump`, `c
    - `https://example.com` → URL que se pide.
    - `sleep 2` → espera 2 segundos para separar las dos conexiones en la captura.
    - `--tls-max 1.2` → versión máxima de TLS que curl ofrecerá; obliga a negociar TLS 1.2.
-5. Vuelve a la terminal de tcpdump y detenla con `Ctrl+C`. Mostrará cuántos paquetes capturó, algo como `24 packets captured`. Si `hs.pcap` quedó con dueño root y Wireshark no lo abre, cámbialo:
+5. Vuelve a la Terminal 1 (captura) y detén tcpdump con `Ctrl+C`. Mostrará cuántos paquetes capturó, algo como `24 packets captured`. Si `hs.pcap` quedó con dueño root y Wireshark no lo abre, cámbialo:
    ```bash
    sudo chown "$USER" hs.pcap
    ```

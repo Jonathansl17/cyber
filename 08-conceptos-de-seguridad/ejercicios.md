@@ -4,9 +4,11 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-Todo se hace sobre equipos, cuentas, discos y máquinas virtuales tuyos. Cuando hay varias
-zonas de red, se montan en una red aislada del laboratorio (host-only o interna), nunca
-contra equipos o servicios de terceros.
+Todo se hace sobre tu propio equipo: tus cuentas, tus discos y servicios que tú mismo
+levantas. Cuando un ejercicio necesita varias zonas de red o un "sitio remoto", se simulan en
+el mismo equipo (interfaces dummy, loopback, `127.0.0.1`), nunca contra equipos o servicios de
+terceros. Las herramientas ofensivas (nmap, etc.) se usan solo contra `127.0.0.1` y servicios
+que tú mismo levantaste en este equipo.
 
 ## Ejercicio 1: Aplica la regla 3-2-1 y mide tu RPO y RTO
 
@@ -16,12 +18,17 @@ Objetivo: tener los mismos datos en 3 copias, 2 soportes y 1 fuera del sitio con
 borrar el original, restaurarlo y obtener dos números tuyos: cuánto perderías (RPO, fijado
 por la hora del último snapshot) y cuánto tardas en volver (RTO, el tiempo real de restauración).
 
-Necesitas: Linux (puede ser tu equipo o una VM). Un pendrive USB. Un segundo equipo o VM
-accesible por SSH para la copia fuera del sitio (vale otra VM en red interna). Paquete
-`restic`. Unos 30 minutos.
+Necesitas: Linux. Un pendrive USB. El servidor SSH local (`sshd`) escuchando en `127.0.0.1`
+para simular el sitio remoto: la copia "fuera del sitio" será una segunda carpeta local a la
+que restic entra por SFTP contra `127.0.0.1` (sin segundo equipo ni VM). Paquetes `restic` y
+el servidor OpenSSH. Unos 30 minutos.
 
-- Debian/Ubuntu: `sudo apt update && sudo apt install restic`
-- Arch: `sudo pacman -S restic`
+Instalación:
+- Debian/Ubuntu: `sudo apt update && sudo apt install restic openssh-server`
+- Arch: `sudo pacman -S restic openssh`
+
+En Arch arranca el servicio con `sudo systemctl start sshd` (Debian suele arrancarlo solo al
+instalar `openssh-server`). Comprueba que escucha con `ss -tlnp | grep ':22'`.
 
 ### Pasos
 
@@ -84,23 +91,33 @@ accesible por SSH para la copia fuera del sitio (vale otra VM en red interna). P
 
    Dos soportes distintos: si muere el disco del equipo, el USB sobrevive, y al revés.
 
-4. La copia "1 fuera del sitio": manda un backup por SFTP al segundo equipo o VM. Cambia
-   `usuario` y `host-lab` por los de tu otra máquina.
+4. La copia "1 fuera del sitio": manda un backup por SFTP a una segunda carpeta local, pero
+   entrando por SSH contra `127.0.0.1` (el mismo equipo hace de "sitio remoto"). restic usa su
+   backend SFTP igual que contra una máquina real; lo único que cambia es que el host es tu
+   propio `sshd` en loopback. Sustituye `TU_USUARIO` por tu usuario (lo ves con `whoami`).
    ```bash
-   restic -r sftp:usuario@host-lab:/home/usuario/restic-offsite init
-   restic -r sftp:usuario@host-lab:/home/usuario/restic-offsite backup ~/datos-prueba
+   mkdir -p ~/restic-offsite
+   restic -r sftp:TU_USUARIO@127.0.0.1:/home/TU_USUARIO/restic-offsite init
+   restic -r sftp:TU_USUARIO@127.0.0.1:/home/TU_USUARIO/restic-offsite backup ~/datos-prueba
    ```
-   - `-r sftp:usuario@host-lab:/home/usuario/restic-offsite` → repositorio remoto por SFTP: `sftp:` es el tipo de backend, `usuario@host-lab` la cuenta y máquina a la que restic entra por SSH, y lo que va tras los dos puntos es la ruta del repositorio en esa máquina.
+   - `mkdir -p ~/restic-offsite` → crea de antemano la carpeta que hará de repositorio "remoto"; el backend SFTP de restic no crea la ruta base si no existe.
+   - `-r sftp:TU_USUARIO@127.0.0.1:/home/TU_USUARIO/restic-offsite` → repositorio por SFTP: `sftp:` es el tipo de backend, `TU_USUARIO@127.0.0.1` la cuenta y el host al que restic entra por SSH (aquí tu propio equipo por loopback), y lo que va tras los dos puntos es la ruta del repositorio en ese host. En un despliegue real `127.0.0.1` sería la dirección de otra máquina en otro sitio; el backend SFTP y el flujo de datos que ejercitas son idénticos.
    - `init` → (ver paso 2).
    - `backup ~/datos-prueba` → (ver paso 2).
 
-   Ahora cumples 3-2-1 con margen. Cuenta las copias de los datos: el original y el repo
-   local están los dos en el disco del equipo, así que ese disco aporta una sola copia útil
-   frente a un fallo (si el disco muere, caen las dos); el USB aporta otra y el repositorio
-   remoto una tercera. Son 3 copias en soportes que fallan de forma independiente, sobre 2
-   tipos de medio distintos (disco interno y USB) más el sitio remoto, y 1 de ellas fuera del
-   sitio. El repo local no cuenta como copia extra para el 3-2-1 por estar en el mismo disco
-   que el original: su valor es la restauración rápida (RTO bajo), no la resiliencia.
+   La primera conexión SSH a `127.0.0.1` te pedirá aceptar la huella del host (escribe `yes`) y
+   la contraseña de tu usuario, salvo que ya tengas una clave SSH cargada.
+
+   Con esto recorres el esquema 3-2-1 de punta a punta. Cuenta las copias de los datos: el
+   original y el repo local están los dos en el disco del equipo, así que ese disco aporta una
+   sola copia útil frente a un fallo (si el disco muere, caen las dos); el USB aporta otra sobre
+   un medio distinto. El repositorio por SFTP hace de tercera copia, la "fuera del sitio". Ojo:
+   en este laboratorio esa copia vive en el mismo disco (la alcanzas por `127.0.0.1`), así que
+   aquí no te da resiliencia geográfica de verdad; su papel es ejercitar el backend SFTP y la
+   restauración remota. En producción ese `127.0.0.1` sería otra máquina en otra ubicación, y
+   entonces sí sería la copia que sobrevive a que se destruya tu sitio entero. El repo local, por
+   estar en el mismo disco que el original, tampoco cuenta como copia extra para el 3-2-1: su
+   valor es la restauración rápida (RTO bajo), no la resiliencia.
 
 5. Simula el desastre: borra el original.
    ```bash
@@ -146,18 +163,20 @@ desastre (si solo haces backup una vez al día, tu RPO es de hasta 24 horas); RT
   solo backup diario, hasta 24 horas de datos en riesgo.
 - ¿Tu RTO medido baja del objetivo que te pondrías (por ejemplo 1 hora)? Para 200 MB debería
   ser segundos; con 500 GB sería mucho mayor, y ahí se ve por qué el RTO depende del volumen.
-- ¿Sobrevive el esquema a que se moje el equipo entero? Sí: queda la copia del USB y la de
-  fuera del sitio.
+- ¿Sobrevive el esquema a que se moje el equipo entero? El USB sobrevive si no estaba
+  conectado. La copia por SFTP solo salvaría tus datos si estuviera en otra máquina u otra
+  ubicación; en este laboratorio está en el mismo disco (la alcanzas por `127.0.0.1`), así que
+  aquí se ve justo por qué la copia "fuera del sitio" tiene que estar físicamente lejos para
+  contar como tal.
 
 ### Limpieza
 
 ```bash
-rm -rf ~/restic-local ~/datos-restaurados
+rm -rf ~/restic-local ~/datos-restaurados ~/restic-offsite
 restic -r /mnt/usb/restic-usb forget --prune latest 2>/dev/null; sudo umount /mnt/usb
-restic -r sftp:usuario@host-lab:/home/usuario/restic-offsite forget --prune latest
 ```
-- `rm -rf` → (ver paso 5): borra el repositorio local y la carpeta restaurada.
-- `restic -r ...` → (ver pasos 2, 3 y 4): elige el repositorio del USB o el remoto.
+- `rm -rf` → (ver paso 5): borra el repositorio local, la carpeta restaurada y el repositorio "fuera del sitio" (es una carpeta local, basta con borrarla).
+- `restic -r /mnt/usb/restic-usb` → (ver paso 3): elige el repositorio del USB.
 - `forget` → elimina snapshots de la lista del repositorio.
 - `latest` → el snapshot que se olvida: el más reciente (ver paso 6).
 - `--prune` → tras olvidar, ejecuta `prune`, que borra los datos que ya no usa ningún snapshot y libera espacio.
@@ -234,125 +253,210 @@ backup que lo lleva a 0 por 20 al año, valor del control +40, así que se mitig
 - ¿Un activo con EF alto pero ARO muy bajo da un ALE alto o bajo? Bajo, porque ALE multiplica
   por la frecuencia anual: un desastre carísimo pero rarísimo puede salir barato por año.
 
-## Ejercicio 3: Segmenta una red de laboratorio y compruébala con nmap
+## Ejercicio 3: Segmenta tres zonas en un host con interfaces dummy y nftables
 
 Nodo: Perimiter vs DMZ vs Segmentation ([README](README.md#perimiter-vs-dmz-vs-segmentation)).
 
-Objetivo: montar tres zonas (DMZ, usuarios, servidores) separadas por un firewall, cargar
-las reglas de la nota y demostrar con nmap desde cada zona que solo ves los puertos que la
-política permite y que todo lo demás sale filtrado.
+Objetivo: montar tres zonas (DMZ, usuarios, servidores) en tu propio equipo, sin ninguna VM,
+usando tres interfaces de red *dummy*; cargar la política entre zonas con nftables y demostrar
+con `nc` y `ping` desde cada zona que solo alcanzas los puertos que la política permite y que
+todo lo demás sale bloqueado.
 
-Necesitas: un hipervisor (VirtualBox o Proxmox). Un firewall pfSense o OPNsense como VM con
-tres interfaces (una por zona), todas en redes internas o host-only, sin salida real a
-internet. Tres VMs ligeras (una por zona) con `nmap` instalado. Unas dos horas la primera vez.
+La idea es "varias zonas, un solo equipo": cada zona es una interfaz dummy con su propia IP, y
+el mismo kernel enruta y filtra el tráfico entre ellas. Donde antes había un firewall pfSense y
+tres máquinas, ahora hay tres IP locales y una tabla de nftables. En una red real cada zona
+estaría en una máquina distinta detrás de un firewall; el tráfico que observas y la política que
+aplicas son los mismos.
 
-- Debian/Ubuntu (en las VMs cliente): `sudo apt install nmap`
-- Arch: `sudo pacman -S nmap`
+Necesitas: Linux con `nftables`. Las interfaces dummy vienen de serie en el kernel (el módulo
+`dummy` se carga solo al crear la interfaz), así que no se instala nada para ellas. `nc`
+(netcat) y `nmap` para probar. Permisos de root (sudo). Unos 40 minutos.
+
+Las tres zonas y sus IP:
+- DMZ → `10.0.1.1/24` (interfaz `zonadmz`)
+- usuarios → `10.0.10.1/24` (interfaz `zonausuarios`)
+- servidores → `10.0.20.1/24` (interfaz `zonaservidores`)
+
+Instalación:
+- Debian/Ubuntu: `sudo apt install nftables nmap netcat-openbsd`
+- Arch: `sudo pacman -S nftables nmap openbsd-netcat`
 
 ### Pasos
 
-1. En el hipervisor crea tres redes internas aisladas y nómbralas `dmz`, `usuarios`,
-   `servidores`. En VirtualBox, para cada VM: Configuración, Red, Conectado a "Red interna",
-   y escribe el nombre de la red. Ninguna VM debe tener NAT ni puente a tu red real.
-
-2. Da al firewall (pfSense/OPNsense) tres tarjetas de red, una en cada red interna, y asigna
-   direcciones de ejemplo: DMZ `10.0.1.1/24`, usuarios `10.0.10.1/24`, servidores
-   `10.0.20.1/24`. Conecta cada VM cliente a su red y dale una IP de esa subred (por ejemplo
-   el servidor web de la DMZ `10.0.1.10`, un PC de usuarios `10.0.10.10`, la base de datos de
-   servidores `10.0.20.10`).
-
-   En cada VM cliente configura como **puerta de enlace por defecto** la IP del firewall en
-   su propia subred: `10.0.1.1` en la VM DMZ, `10.0.10.1` en la de usuarios, `10.0.20.1` en la
-   de servidores. Sin gateway, cada VM solo habla con su propia subred y el tráfico entre zonas
-   nunca llega al firewall, así que las reglas no se probarían. Verifica en cada VM con
-   `ip route` que aparece `default via 10.0.X.1` y haz `ping 10.0.X.1` a su firewall.
+1. Crea las tres interfaces dummy, una por zona, y asígnales su IP. Hazlo en una terminal; el
+   resto de pasos usará otras.
    ```bash
-   # ejemplo en la VM de usuarios (ajusta nombre de interfaz con "ip link")
-   sudo ip addr add 10.0.10.10/24 dev enp0s3
-   sudo ip route add default via 10.0.10.1
-   ip route            # debe mostrar: default via 10.0.10.1 dev enp0s3
+   for z in dmz:10.0.1.1 usuarios:10.0.10.1 servidores:10.0.20.1; do
+     nombre="zona${z%%:*}"; ip="${z##*:}"
+     sudo ip link add "$nombre" type dummy
+     sudo ip addr add "$ip/24" dev "$nombre"
+     sudo ip link set "$nombre" up
+   done
+   ip -brief addr show | grep '^zona'
    ```
-   - `ip addr add ... dev enp0s3` → asigna la IP y máscara a la interfaz (sustituye `enp0s3` por la tuya).
-   - `ip route add default via 10.0.10.1` → añade la ruta por defecto apuntando al firewall de esa zona.
-   - `ip route` → muestra la tabla de rutas; confirma la línea `default via`.
+   - `for z in dmz:10.0.1.1 ...; do ...; done` → bucle de bash que recorre tres pares `zona:ip`.
+   - `nombre="zona${z%%:*}"` → expansión de bash: `${z%%:*}` quita desde el primer `:` hasta el final y deja el nombre de la zona; así `dmz` se vuelve `zonadmz`.
+   - `ip="${z##*:}"` → `${z##*:}` quita todo hasta el último `:` y deja la IP.
+   - `ip link add "$nombre" type dummy` → crea una interfaz virtual de tipo *dummy*: una tarjeta de red falsa que acepta una IP y existe solo en este kernel; el módulo `dummy` se carga solo al crearla, no hay que instalar nada.
+   - `ip addr add "$ip/24" dev "$nombre"` → asigna la IP y la máscara `/24` a esa interfaz.
+   - `ip link set "$nombre" up` → levanta la interfaz (sin esto queda `DOWN` y no enruta).
+   - `ip -brief addr show` → lista las interfaces en formato compacto; `-brief` da una línea por interfaz con estado e IP.
+   - `grep '^zona'` → filtra solo las líneas que empiezan por `zona`, es decir, las tres recién creadas.
 
-3. Levanta servicios reconocibles para escanear: en la VM DMZ abre un web en el 443, en la VM
-   servidores abre un postgres simulado en el 5432.
+   Cada IP es una zona. Como las tres son locales a este equipo, el tráfico entre ellas lo
+   entrega el propio kernel (pasa por `lo`), y ahí es donde nftables lo va a filtrar.
+
+2. Escribe la política entre zonas en un archivo de nftables y cárgala. Por defecto se bloquea
+   el tráfico entre zonas; solo se permite lo que la nota autoriza.
    ```bash
-   # VM DMZ (10.0.1.10)
-   python3 -m http.server 443
-   # VM servidores (10.0.20.10)
-   python3 -m http.server 5432
+   cat > ~/zonas.nft <<'EOF'
+   table inet zonas {
+       chain interzona {
+           type filter hook input priority 0; policy accept;
+
+           # Respuestas de conexiones ya permitidas: dejarlas pasar.
+           ct state established,related accept
+
+           # Tráfico que NO es entre las subredes del laboratorio: no lo tocamos.
+           ip saddr != { 10.0.1.0/24, 10.0.10.0/24, 10.0.20.0/24 } accept
+           ip daddr != { 10.0.1.0/24, 10.0.10.0/24, 10.0.20.0/24 } accept
+
+           # Política permitida (solo llegan aquí los paquetes nuevos entre zonas):
+           ip saddr 10.0.10.0/24 ip daddr 10.0.1.0/24  tcp dport 443  accept   # usuarios -> DMZ (web)
+           ip saddr 10.0.1.0/24  ip daddr 10.0.20.0/24 tcp dport 5432 accept   # DMZ -> servidores (BD)
+
+           # Cualquier otro tráfico entre las tres zonas: bloquear.
+           ip saddr { 10.0.1.0/24, 10.0.10.0/24, 10.0.20.0/24 } ip daddr { 10.0.1.0/24, 10.0.10.0/24, 10.0.20.0/24 } drop
+       }
+   }
+   EOF
+   sudo nft -f ~/zonas.nft
+   sudo nft list table inet zonas
    ```
-   - `# VM DMZ ...` → comentarios que indican en qué VM va cada comando; no se ejecutan.
-   - `python3` → intérprete de Python 3.
-   - `-m http.server` → ejecuta el módulo `http.server` de la biblioteca estándar como programa: un servidor web mínimo que sirve los archivos de la carpeta actual por HTTP sin cifrar (no habla TLS aunque escuche en el 443).
-   - `443` / `5432` → puerto TCP en el que escucha (por defecto 8000) en todas las interfaces. Los puertos por debajo de 1024, como el 443, solo se pueden abrir como root, así que en la VM DMZ ejecútalo con `sudo`.
+   - `cat > ~/zonas.nft <<'EOF' ... EOF` → here-document: guarda en `~/zonas.nft` todo lo que va hasta `EOF`; las comillas en `'EOF'` impiden que bash toque los `$` del texto.
+   - `table inet zonas` → una tabla de nftables de familia `inet` (vale para IPv4 e IPv6) llamada `zonas`.
+   - `chain interzona { type filter hook input priority 0; policy accept; }` → una cadena enganchada al *hook* `input`, por donde pasa todo paquete que el kernel entrega a una IP local (y el tráfico entre dos IP locales se entrega localmente, así que pasa por aquí). `policy accept` deja pasar lo que ninguna regla bloquee; la segmentación la hace la regla `drop` del final, no la política de la cadena, para no cortar el tráfico normal del equipo.
+   - `ct state established,related accept` → acepta los paquetes de vuelta de una conexión ya permitida (sin esto, la respuesta en un puerto efímero caería en el `drop` del final y cortaría la conexión).
+   - `ip saddr != { ... } accept` / `ip daddr != { ... } accept` → si el origen o el destino no es una de las tres subredes del laboratorio, se acepta y no se mira más; así solo filtramos el tráfico entre zonas y no el normal del equipo (internet, loopback, SSH...).
+   - `ip saddr 10.0.10.0/24 ip daddr 10.0.1.0/24 tcp dport 443 accept` → la única regla de permitir para usuarios: TCP 443 hacia la DMZ (el web).
+   - `ip saddr 10.0.1.0/24 ip daddr 10.0.20.0/24 tcp dport 5432 accept` → la única regla de permitir para la DMZ: TCP 5432 hacia servidores (la base de datos).
+   - `ip saddr { ... } ip daddr { ... } drop` → todo lo demás entre las tres zonas se descarta; equivale al "default deny" del firewall. Descartar (no rechazar) es lo que hará que un escaneo vea `filtered`, no `closed`.
+   - `sudo nft -f ~/zonas.nft` → carga el archivo de reglas; queda activo al instante, sin reiniciar nada.
+   - `sudo nft list table inet zonas` → muestra la tabla cargada para confirmar que está.
 
-4. En el firewall, crea las reglas, denegando por defecto. En pfSense: Firewall, Rules, una
-   pestaña por interfaz (DMZ, USUARIOS, SERVIDORES). Trabajas solo con las tres zonas internas
-   del laboratorio; aquí no hay WAN ni red de gestión, así que no aparecen en las reglas.
+   Fíjate en la lógica: usuarios solo abre el 443 de la DMZ; la DMZ solo abre el 5432 de
+   servidores; servidores no inicia nada. Por eso, si comprometen el web de la DMZ (la zona
+   expuesta a internet), desde ahí solo se alcanza el puerto 5432 de servidores, no todo el
+   parque: la DMZ **no** puede llegar al resto de servidores ni a los usuarios, y servidores no
+   puede "volver" hacia la DMZ por su cuenta. Eso es frenar el movimiento lateral.
 
-   **Antes de nada, quita la regla permisiva por defecto de la LAN.** pfSense crea de fábrica
-   en la interfaz LAN (la que corresponda a tu zona de usuarios) una regla "Default allow LAN
-   to any" que deja salir todo; si la dejas, la segmentación no se cumple y el escaneo del
-   paso 5 vería puertos abiertos. Bórrala o deshabilítala y escribe reglas explícitas. Las
-   demás interfaces (DMZ, SERVIDORES) ya empiezan sin reglas, es decir, denegando todo.
-   ```
-   Interfaz USUARIOS : permitir TCP 443 hacia 10.0.1.10 (web de la DMZ); denegar el resto
-   Interfaz DMZ      : permitir TCP 5432 hacia 10.0.20.10 (base de datos); denegar el resto
-   Interfaz SERVIDORES : denegar todo tráfico iniciado hacia otras zonas
-   ```
-   - `Interfaz USUARIOS` → las reglas se evalúan sobre el tráfico que *entra* al firewall por esa interfaz: los usuarios solo pueden abrir TCP 443 contra el servidor web de la DMZ; hacia servidores (5432, 22, etc.) no llegan.
-   - `Interfaz DMZ` → el servidor web solo puede abrir TCP 5432 (la base de datos) hacia `10.0.20.10`; nada más hacia servidores ni hacia usuarios.
-   - `Interfaz SERVIDORES` → los servidores no inician conexiones hacia otras zonas (solo responden a las permitidas), así que esta interfaz se queda sin reglas de permitir.
+3. Levanta un servicio reconocible en cada zona de destino. Usa una terminal por servicio y
+   déjalas abiertas.
 
-   Deja activa la regla implícita de denegar al final de cada interfaz; en pfSense es el
-   "Default deny" que bloquea todo lo que ninguna regla permitió explícitamente.
-
-5. Escanea desde la zona de usuarios hacia las otras dos. Debes ver filtrado casi todo.
+   **Terminal 1 (web de la DMZ):**
    ```bash
-   # desde la VM usuarios (10.0.10.10)
-   nmap -Pn -p 443,5432,22,80 10.0.1.10 10.0.20.10
+   sudo python3 -m http.server 443 --bind 10.0.1.1
    ```
-   - `# desde la VM usuarios ...` → comentario: indica dónde ejecutarlo.
+   **Terminal 2 (base de datos de servidores):**
+   ```bash
+   python3 -m http.server 5432 --bind 10.0.20.1
+   ```
+   - `python3 -m http.server` → servidor web mínimo de la biblioteca estándar; aquí solo nos
+     importa que deje un puerto TCP escuchando, no lo que sirva.
+   - `443` / `5432` → puerto TCP en el que escucha. El 443 está por debajo de 1024, así que su
+     terminal necesita `sudo`; el 5432 no.
+   - `--bind 10.0.1.1` / `--bind 10.0.20.1` → ata el servidor a la IP de esa zona, no a todas las
+     interfaces; así el destino del tráfico es la IP de la zona y nftables puede clasificarlo.
+
+4. Desde una tercera terminal, prueba la política con `nc`, forzando el origen de cada zona.
+   `nc` solo comprueba si el TCP conecta; es la forma limpia de "ser" cada zona en un solo equipo.
+
+   **Terminal 3 (cliente):**
+   ```bash
+   # usuarios -> DMZ:443  => PERMITIDO
+   nc -z -v -w2 -s 10.0.10.1 10.0.1.1 443
+   # DMZ -> servidores:5432  => PERMITIDO
+   nc -z -v -w2 -s 10.0.1.1 10.0.20.1 5432
+   # usuarios -> servidores:5432  => BLOQUEADO
+   nc -z -v -w2 -s 10.0.10.1 10.0.20.1 5432
+   # DMZ -> DMZ:443 no aplica; prueba DMZ -> usuarios => BLOQUEADO
+   nc -z -v -w2 -s 10.0.1.1 10.0.10.1 443
+   ```
+   - `nc` → netcat, navaja suiza de conexiones TCP/UDP.
+   - `-z` → modo "zero-I/O": solo intenta conectar y dice si lo logró, sin enviar datos (sirve para sondear un puerto).
+   - `-v` → verboso: imprime `Connection to ... succeeded!` si conecta, o el fallo si no.
+   - `-w2` → espera como máximo 2 segundos; sin esto, un puerto bloqueado (paquete descartado) dejaría a `nc` colgado.
+   - `-s 10.0.10.1` → fuerza la IP de ORIGEN del paquete; así el paquete sale "desde la zona de usuarios" aunque todo corra en el mismo equipo. Es la pieza clave del ejercicio: cambiando `-s` te conviertes en una zona u otra.
+   - `10.0.1.1 443` → destino y puerto.
+
+   Lo permitido imprime `succeeded!`; lo bloqueado da `Connection timed out` tras los 2 segundos
+   (el paquete se descartó, no hubo respuesta: igual que un `filtered`).
+
+5. Confirma el bloqueo también con `ping`: la política no permite ICMP entre zonas, así que
+   cualquier ping entre zonas debe fallar.
+   ```bash
+   ping -c1 -W1 -I 10.0.10.1 10.0.1.1
+   ping -c1 -W1 -I 10.0.10.1 10.0.20.1
+   ```
+   - `ping` → envía paquetes ICMP de eco y espera la respuesta.
+   - `-c1` → envía un solo paquete y termina.
+   - `-W1` → espera como máximo 1 segundo la respuesta.
+   - `-I 10.0.10.1` → usa esa IP como origen; igual que el `-s` de `nc`, te sitúa en la zona de usuarios.
+   - `10.0.1.1` / `10.0.20.1` → destino: la DMZ y servidores.
+   Esperado: `100% packet loss` en ambos, porque ICMP no está en las reglas de permitir y cae en
+   el `drop`.
+
+6. (Opcional) Escanea una zona con nmap para ver la foto de puertos. Necesita root y la interfaz
+   de origen de la zona.
+   ```bash
+   sudo nmap -Pn -p 443,5432,22 -e zonausuarios -S 10.0.10.1 10.0.1.1
+   ```
    - `nmap` → escáner de puertos.
-   - `-Pn` → no hace el descubrimiento previo (ping) y trata los hosts como encendidos; sin esto, un firewall que bloquea el ping haría que nmap diera el host por caído y no escaneara.
-   - `-p 443,5432,22,80` → escanea solo esa lista de puertos.
-   - `10.0.1.10 10.0.20.10` → los objetivos: el web de la DMZ y la base de datos de servidores.
-   - Sin opción de tipo de escaneo, nmap hace un SYN scan si eres root y un connect scan (`-sT`) si no.
-   Lo esperado: los puertos no permitidos salen `filtered` (el firewall los descarta), no
-   `closed` (eso sería el host rechazando sin firewall).
-
-6. Escanea desde la DMZ hacia servidores: solo debe verse el 5432 permitido.
-   ```bash
-   # desde la VM DMZ (10.0.1.10)
-   nmap -Pn -p 443,5432,22 10.0.20.10
-   ```
-   - `-Pn` → (ver paso 5).
-   - `-p 443,5432,22` → (ver paso 5); ahora con tres puertos.
-   - `10.0.20.10` → objetivo: solo la base de datos de servidores.
-   Esperado: `5432/tcp open`, el resto `filtered`.
+   - `-Pn` → no hace descubrimiento previo por ping y trata el host como encendido; necesario porque el ICMP entre zonas está bloqueado.
+   - `-p 443,5432,22` → la lista de puertos a mirar.
+   - `-e zonausuarios` → envía por esa interfaz (la zona de usuarios).
+   - `-S 10.0.10.1` → usa esa IP de origen, para "ser" la zona de usuarios.
+   - `10.0.1.1` → objetivo: la DMZ.
+   La política predice `443/tcp open` (permitido) y `5432`/`22` como `filtered` (descartados). Si
+   nmap entrega el escaneo por loopback y el resultado no cuadra, quédate con la comprobación de
+   `nc`/`ping` de los pasos 4 y 5, que es la fiable en un solo equipo.
 
 ### Resultado esperado
 
-Dos o tres salidas de nmap que demuestran la política: desde usuarios solo alcanzas el 443
-del web de la DMZ y nada de servidores, y desde la DMZ solo alcanzas el 5432 de la base de
-datos. El mismo host se ve distinto según desde qué zona lo mires: eso es la segmentación
-frenando el movimiento lateral.
+Las pruebas con `nc` y `ping` que demuestran la política: desde usuarios solo conecta el 443
+del web de la DMZ y nada de servidores; desde la DMZ solo conecta el 5432 de la base de datos;
+los `ping` entre zonas dan 100% de pérdida. La misma IP se comporta distinto según desde qué
+zona la toques: eso es la segmentación frenando el movimiento lateral, montada entera en un
+solo equipo.
 
 ### Comprueba que lo lograste
 
-- ¿Un puerto bloqueado por el firewall sale `filtered` o `closed` en nmap? `filtered`: el
-  firewall descarta el paquete y nmap no recibe respuesta. `closed` sería el propio host
-  contestando con un RST, sin firewall de por medio.
-- Si comprometieran la VM de la DMZ, ¿podría escanear toda la red de servidores? No: solo
-  alcanzaría el 5432 de `10.0.20.10`, que es justo lo que la regla permite.
+- ¿Por qué lo bloqueado se ve `timed out` / `filtered` y no un rechazo inmediato? Porque la
+  regla es `drop` (descarta el paquete sin contestar), igual que un firewall; un `closed` sería
+  el host respondiendo con un RST, sin filtro de por medio.
+- Si comprometieran el web de la DMZ, ¿podría alcanzar toda la zona de servidores? No: solo el
+  5432 de `10.0.20.1`, que es justo lo que la regla permite. El resto de servidores y los
+  usuarios quedan fuera de su alcance.
+- ¿Por qué la DMZ no puede llegar a servidores salvo en el 5432, ni servidores iniciar nada?
+  Porque la DMZ es la zona expuesta a internet y es la que más probablemente caiga; se le da el
+  mínimo (un solo puerto de un solo destino), y a servidores no se le deja abrir conexiones
+  hacia fuera para que un servidor comprometido no "salte" a otra zona.
 
 ### Limpieza
 
-Apaga y borra las tres VMs cliente y el firewall, y elimina las tres redes internas del
-hipervisor. Al estar todo en redes aisladas, no queda nada tocando tu red real.
+```bash
+sudo nft delete table inet zonas
+sudo ip link del zonadmz
+sudo ip link del zonausuarios
+sudo ip link del zonaservidores
+rm -f ~/zonas.nft
+```
+- `sudo nft delete table inet zonas` → borra la tabla de reglas que cargaste; como no se guardó en `/etc/nftables.conf`, con esto el filtrado desaparece (y al reiniciar tampoco volvería).
+- `sudo ip link del zonaX` → elimina cada interfaz dummy; al ser virtuales, desaparecen sin dejar rastro y su IP se va con ellas.
+- `rm -f ~/zonas.nft` → borra el archivo de reglas que escribiste.
+
+Cierra con Ctrl+C las terminales 1 y 2 de los servidores. Al estar todo montado con interfaces
+dummy y reglas en memoria, no queda nada tocando tu red real.
 
 ## Ejercicio 4: Escribe un runbook de restauración y pruébalo
 

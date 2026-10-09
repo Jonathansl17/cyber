@@ -4,8 +4,10 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-Todo el tráfico de escaneo va contra máquinas virtuales tuyas en una red aislada
-(host-only o interna), nunca contra sistemas de terceros.
+Todo el escaneo va contra tu propio equipo (`127.0.0.1` y los servicios que tú mismo
+levantaste en esta máquina), nunca contra sistemas de terceros. No hace falta ninguna
+máquina virtual: cada ejercicio se hace en este equipo con varias terminales abiertas a
+la vez.
 
 ## Ejercicio 1: Recalcula el vector CVSS de tres CVE
 
@@ -68,28 +70,37 @@ nota corta por métrica donde no coincidiste.
 Nodo: [Escáneres de vulnerabilidades](README.md#escáneres-de-vulnerabilidades) y
 [Ciclo de gestión de vulnerabilidades](README.md#ciclo-de-gestión-de-vulnerabilidades).
 
-Objetivo: escanear una VM vulnerable propia dos veces, una sin credenciales y otra con
+Objetivo: escanear tu propio equipo dos veces, una sin credenciales y otra con
 credenciales, comprobar que el escaneo autenticado encuentra más hallazgos, y priorizar
 los cinco primeros cruzándolos con CISA KEV y EPSS.
 
-Necesitas: VirtualBox o similar con una red host-only; una VM objetivo vulnerable
-(Metasploitable 2 o una VM Linux vieja tuya); una segunda máquina Linux con Docker para
-Greenbone Community Edition. Tiempo: 2-3 h (la primera sincronización de feeds de
-Greenbone tarda). Todo en red host-only, aislado de tu red doméstica.
+Necesitas: tu propio equipo Linux con Docker, donde levantarás Greenbone Community
+Edition en contenedores; el objetivo del escaneo es este mismo equipo. Tiempo: 2-3 h (la
+primera sincronización de feeds de Greenbone tarda). Todo es local, sin ninguna máquina
+virtual: Greenbone (el escáner) y el objetivo conviven en tu máquina. En un entorno real
+el escáner y el objetivo estarían en equipos distintos, pero el flujo de escaneo que
+observas es el mismo; aquí ambos papeles los hace tu propio host. Trabajarás con dos
+terminales: la **Terminal 1 (Greenbone)**, para levantar el stack y seguir sus logs, y la
+**Terminal 2 (operador)**, para los comandos sueltos y las consultas de KEV/EPSS.
+
+```bash
+sudo apt install docker.io     # Debian/Ubuntu
+sudo pacman -S docker          # Arch
+```
+
+- `apt install docker.io` / `pacman -S docker` → instala el motor de contenedores Docker (en Arch el paquete se llama `docker`).
+- En Arch arranca el servicio con `sudo systemctl start docker` (Debian suele arrancarlo solo al instalar).
+- Para usar `docker` sin `sudo`, añádete al grupo `docker` con `sudo usermod -aG docker $USER` y vuelve a iniciar sesión; si no, antepón `sudo` a cada comando `docker`.
 
 ### Pasos
 
-1. En VirtualBox crea una red host-only (Herramientas > Red > Host-only Networks >
-   Crear) y pon las dos VMs (objetivo y la que correrá Greenbone) en esa red. Verifica
-   que se ven entre sí:
+1. En la Terminal 1, arranca Docker y comprueba que responde:
    ```bash
-   ip -brief address        # anota la IP host-only de cada VM, p. ej. 192.168.56.0/24
-   ping -c1 192.168.56.10   # desde la VM de Greenbone hacia la objetivo
+   sudo systemctl start docker
+   docker info
    ```
-   - `ip -brief address` → lista las direcciones IP; `-brief` las muestra en formato resumido (una línea por interfaz) y `address` es el objeto consultado.
-   - `ping` → envía paquetes ICMP para comprobar si un host responde.
-   - `-c1` → envía un solo paquete y termina (count 1).
-   - `192.168.56.10` → la IP de destino.
+   - `systemctl start docker` → arranca el motor de Docker si no estaba activo; en Debian/Ubuntu suele estarlo ya tras instalar.
+   - `docker info` → imprime el estado del motor; si sale la información del servidor, Docker funciona. El objetivo del escaneo será tu propio equipo, al que los contenedores de Greenbone llegan por la puerta de enlace de su red Docker; averiguarás esa dirección en el paso 4, cuando el stack ya exista.
 2. Levanta Greenbone Community Edition con los contenedores oficiales (lo dicta la
    [documentación de Greenbone](https://greenbone.github.io/docs/latest/22.4/container/)):
    ```bash
@@ -127,10 +138,27 @@ Greenbone tarda). Todo en red host-only, aislado de tu red doméstica.
    - `gvmd --user=admin --new-password='...'` → el demonio de gestión de Greenbone cambia la contraseña del usuario `admin`; las comillas simples evitan que el shell interprete caracteres como `$`.
 
    Inicia sesión con `admin` y la clave nueva. En el menú `Configuration > Credentials`
-   crea unas credenciales SSH válidas de la VM objetivo (un usuario propio de esa VM).
-4. Crea un objetivo (`Configuration > Targets`) con la IP host-only de la VM objetivo
-   y, de momento, sin credenciales. Lanza una tarea (`Scans > Tasks > New Task`) con la
-   configuración "Full and fast". Anota el número total de resultados al terminar.
+   crea unas credenciales SSH válidas de tu propio equipo (un usuario local de este host,
+   con el servidor SSH escuchando; valen para el escaneo autenticado del paso 5).
+4. Averigua la dirección con la que los contenedores de Greenbone ven tu equipo (es el
+   objetivo del escaneo). En la Terminal 2, consulta la puerta de enlace de la red Docker
+   del stack:
+   ```bash
+   docker network inspect greenbone-community-edition_default \
+     --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+   ```
+   - `docker network inspect <red>` → muestra la configuración de esa red de Docker; `greenbone-community-edition_default` es la red que crea el stack (nombre de proyecto del paso 2 más `_default`).
+   - `--format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'` → extrae solo la puerta de enlace de la red; esa IP es la de tu equipo vista desde los contenedores, y es la que pondrás como objetivo.
+
+   Asegúrate de que el cortafuegos de tu equipo permite conexiones desde esa subred y de
+   que los servicios que quieras escanear (por ejemplo `sshd`) escuchan en todas las
+   interfaces, no solo en `127.0.0.1`. Crea un objetivo (`Configuration > Targets`) con
+   esa dirección y, de momento, sin credenciales. Lanza una tarea
+   (`Scans > Tasks > New Task`) con la configuración "Full and fast". Anota el número
+   total de resultados al terminar. (Si tu host está muy al día y casi no da hallazgos, el
+   ejercicio sigue valiendo: lo que importa es comparar el total anónimo con el
+   autenticado; también puedes levantar un contenedor deliberadamente vulnerable en la
+   misma red Docker y apuntar el objetivo a su nombre.)
 5. Duplica el objetivo, esta vez asignándole las credenciales SSH del paso 3, y vuelve
    a escanear. Anota de nuevo el total.
 6. Para los cinco hallazgos de mayor CVSS del escaneo autenticado, abre cada CVE y
@@ -166,21 +194,26 @@ docker compose -f docker-compose.yml -p greenbone-community-edition down -v
 - `down` → detiene y elimina los contenedores del proyecto.
 - `-v` → elimina también los volúmenes asociados (borra los datos persistidos).
 
-Apaga o elimina las VMs del laboratorio. La red host-only puede quedarse; no da acceso
-a internet.
+No queda ninguna máquina virtual que apagar. Si levantaste un contenedor objetivo
+vulnerable, deténlo y bórralo también (`docker rm -f <nombre>`). En Arch, si arrancaste
+Docker solo para esto, puedes pararlo con `sudo systemctl stop docker`.
 
 ## Ejercicio 3: Decide corregir, mitigar o aceptar con Nmap vulners
 
 Nodo: [Ciclo de gestión de vulnerabilidades](README.md#ciclo-de-gestión-de-vulnerabilidades)
 y [Escáneres de vulnerabilidades](README.md#escáneres-de-vulnerabilidades).
 
-Objetivo: reproducir la salida de la nota con el script `vulners` de Nmap contra tu VM
-vulnerable y, para cada servicio con hallazgos, escribir una decisión razonada de
-tratamiento: corregir, mitigar o aceptar.
+Objetivo: reproducir la salida de la nota con el script `vulners` de Nmap contra los
+servicios de tu propio equipo (`127.0.0.1`) y, para cada servicio con hallazgos, escribir
+una decisión razonada de tratamiento: corregir, mitigar o aceptar.
 
-Necesitas: la misma VM objetivo del ejercicio 2 en red host-only y una VM de ataque con
-Nmap. Tiempo: 45-60 min. El script `vulners` consulta su base por internet desde la VM
-de ataque; la VM objetivo sigue aislada.
+Necesitas: tu propio equipo con Nmap. Tiempo: 45-60 min. El script `vulners` consulta su
+base por internet, así que necesitas conexión. Escaneas solo `127.0.0.1` y servicios que
+tú mismo levantaste en este equipo, nunca sistemas de terceros. Si quieres algo que
+analizar, deja escuchando algún servicio en la **Terminal 1 (servicio)** (por ejemplo el
+`sshd` del ejercicio anterior, o un contenedor con una versión antigua) y lanza Nmap
+desde la **Terminal 2 (escaneo)**. En un entorno real el objetivo estaría en otra máquina;
+aquí el objetivo es tu propio host en loopback, y el escaneo es idéntico.
 
 ### Pasos
 
@@ -196,30 +229,31 @@ de ataque; la VM objetivo sigue aislada.
    `vulners.nse` desde su [repositorio](https://github.com/vulnersCom/nmap-vulners),
    o actualiza Nmap. En Debian/Ubuntu: `sudo apt install nmap`; en Arch:
    `sudo pacman -S nmap`.
-2. Escanea versión y vulnerabilidades de los puertos abiertos de tu VM objetivo:
+2. Escanea versión y vulnerabilidades de los puertos abiertos de tu propio equipo. En la
+   Terminal 2:
    ```bash
-   nmap -sV --script vulners -p- 192.168.56.10
+   nmap -sV --script vulners -p- 127.0.0.1
    ```
    - `nmap` → escáner de red (ver paso 1).
    - `-sV` → detecta la versión de cada servicio abierto.
    - `--script vulners` → ejecuta el script `vulners`, que lista los CVE asociados a cada versión con su CVSS.
    - `-p-` → escanea los 65535 puertos.
-   - `192.168.56.10` → la IP del objetivo.
+   - `127.0.0.1` → la dirección de loopback, es decir, tu propio equipo; así ves los servicios que escuchan en esta máquina.
 
    `-sV` detecta la versión de cada servicio y `--script vulners` lista los CVE
    asociados a esa versión con su CVSS, igual que el ejemplo del README.
 3. Copia la salida a un archivo de trabajo:
    ```bash
-   nmap -sV --script vulners -oN vulners.txt -p- 192.168.56.10
+   nmap -sV --script vulners -oN vulners.txt -p- 127.0.0.1
    ```
-   - `-sV`, `--script vulners`, `-p-` y la IP → (ver paso 2).
+   - `-sV`, `--script vulners`, `-p-` y la dirección → (ver paso 2).
    - `-oN vulners.txt` → guarda la salida en formato normal (legible) en ese archivo.
 4. Para cada servicio con hallazgos, decide el tratamiento y escríbelo en una tabla de
    texto (servicio, CVE principal, decisión, motivo):
    - Corregir: hay actualización disponible y el servicio importa. Ej.: subir la versión
      de Apache.
    - Mitigar: no puedes parchear ya, pero reduces la exposición (cerrar el puerto en el
-     firewall, poner una regla, aislar la VM).
+     firewall, poner una regla, limitar el servicio a loopback).
    - Aceptar: el riesgo es bajo y lo registras con fecha de revisión (servicio de
      laboratorio sin datos).
 
@@ -235,7 +269,8 @@ El archivo `vulners.txt` y tu tabla de decisiones con una fila por servicio vuln
 
 ### Limpieza
 
-Borra `vulners.txt` si contiene detalles de tu laboratorio. Apaga la VM objetivo.
+Borra `vulners.txt` si contiene detalles de tu equipo. Si levantaste un servicio o un
+contenedor solo para este ejercicio, deténlo.
 
 ## Ejercicio 4: Audita tu Linux con Lynis y contrástalo con el CIS Benchmark
 
@@ -245,7 +280,7 @@ Objetivo: ejecutar Lynis en tu propia máquina Linux, leer el "hardening index" 
 comparar cinco de sus sugerencias con las recomendaciones del CIS Benchmark de tu
 distribución, decidiendo cuáles aplicarías.
 
-Necesitas: tu Linux de siempre (o una VM Linux tuya); Lynis instalado; acceso al CIS
+Necesitas: tu Linux de siempre; Lynis instalado; acceso al CIS
 Benchmark de tu distribución (descarga gratuita previo registro en
 [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks)). Tiempo: 1 h. No modifica
 nada del sistema: Lynis solo audita.
@@ -312,7 +347,8 @@ Lynis con su control CIS (número, nivel, coincide sí/no).
 ### Limpieza
 
 Borra los archivos de trabajo (`sugerencias.txt`). No apliques cambios de hardening en
-tu equipo principal sin entenderlos; practícalos en una VM.
+tu equipo principal sin entenderlos; pruébalos antes en un entorno desechable (una cuenta
+o un contenedor de pruebas).
 
 ## Ejercicio 5: Perfil CSF 2.0 actual y objetivo de tu casa
 

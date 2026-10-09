@@ -1,10 +1,13 @@
 # Ejercicios: Cloud
 
-Ejercicios guiados para hacer en tu propia cuenta de AWS. Cada uno dice qué vas a
-lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
-está en [README.md](README.md).
+Ejercicios guiados para hacer en tu propio equipo, contra un emulador local de AWS
+(LocalStack) o, si prefieres el comportamiento exacto de la nube, en tu propia cuenta de
+AWS. Cada uno dice qué vas a lograr, qué necesitas, los pasos exactos y cómo comprobar
+que salió bien. No hace falta ninguna máquina virtual: la AWS CLI v2 y Terraform son
+herramientas que corren en esta máquina. La teoría está en [README.md](README.md).
 
 > [!WARNING]
+> Esto aplica solo al camino de AWS real; con LocalStack no hay cuenta ni coste.
 > Todo se hace en una cuenta de AWS tuya y con recursos tuyos, dentro de la capa
 > gratuita. Desde el 15 de julio de 2025 las cuentas nuevas ya no tienen la antigua capa
 > gratuita "de 12 meses": eliges entre un plan Free (hasta 200 USD en créditos, 100 al
@@ -20,13 +23,65 @@ está en [README.md](README.md).
 > (`terraform destroy` y borrado del bucket) al terminar para no dejar nada corriendo.
 > Nunca uses buckets, cuentas ni dominios que no sean tuyos.
 
-Antes de empezar, pon un presupuesto de aviso en AWS Billing (`Billing and Cost
-Management > Budgets > Create budget`), tipo "Cost budget", importe 1 USD, con alerta
-por correo al 80 %. Así te avisa si algo se dispara.
+Antes de empezar (solo si usas AWS real), pon un presupuesto de aviso en AWS Billing
+(`Billing and Cost Management > Budgets > Create budget`), tipo "Cost budget", importe
+1 USD, con alerta por correo al 80 %. Así te avisa si algo se dispara.
+
+## Dos formas de hacerlos: local (LocalStack) o AWS real
+
+Estos ejercicios no necesitan ninguna máquina virtual: la AWS CLI v2 y Terraform corren
+en tu propio equipo. Tienes dos maneras de ejecutarlos:
+
+- **Local y gratis con LocalStack (recomendada para practicar).** LocalStack es un
+  emulador de AWS que corre en un contenedor Docker en tu máquina; apuntas la CLI y
+  Terraform a `http://localhost:4566` y nada sale a internet ni genera factura. Emula bien
+  S3 e IAM básico, así que el ejercicio 1 funciona tal cual y el 2 en su mayor parte (algún
+  matiz del bloqueo de acceso público puede comportarse distinto del real). El ejercicio 1,
+  además, ni siquiera toca la nube en su parte clave: Checkov es análisis estático del
+  código y `terraform plan` es una simulación (dry-run). El ejercicio 3 usa CloudTrail
+  (`lookup-events`), IAM Access Analyzer y la simulación de políticas, que LocalStack
+  Community no emula o reserva a su edición de pago; para ese necesitas AWS real (o
+  LocalStack Pro).
+- **AWS real (capa gratuita).** Para ver el comportamiento exacto de AWS (imprescindible
+  en el ejercicio 3), usa una cuenta tuya como se explica en la siguiente sección.
+
+Levantar LocalStack:
+
+```bash
+sudo pacman -S docker                  # Arch (Debian/Ubuntu: sudo apt install docker.io)
+sudo systemctl start docker            # Arch: arranca el servicio (Debian suele arrancarlo al instalar)
+pipx install localstack awscli-local   # el gestor localstack y el envoltorio awslocal
+localstack start -d                    # arranca el contenedor en segundo plano
+```
+
+- `pacman -S docker` / `apt install docker.io` → instala Docker, el motor de contenedores donde corre LocalStack (en Arch el paquete se llama `docker`).
+- `systemctl start docker` → arranca el motor de Docker; en Arch no se inicia solo al instalar.
+- `pipx install localstack awscli-local` → instala el gestor `localstack` y `awslocal`, un envoltorio de la CLI que ya apunta al emulador.
+- `localstack start -d` → descarga (la primera vez) y arranca el contenedor de LocalStack en segundo plano (`-d`, detached).
+
+Para que la CLI hable con LocalStack usa credenciales ficticias y el envoltorio `awslocal`
+(equivale a `aws --endpoint-url=http://localhost:4566`):
+
+```bash
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
+awslocal sts get-caller-identity
+```
+
+- `export AWS_ACCESS_KEY_ID=test ...` → LocalStack no valida las claves, pero la CLI exige que existan; `test`/`test` es la convención.
+- `awslocal sts get-caller-identity` → comprueba que la CLI llega al emulador; devuelve una cuenta ficticia (`000000000000`).
+
+En los ejercicios, cuando trabajes contra LocalStack sustituye `aws` por `awslocal`. Para
+Terraform contra LocalStack, añade al bloque `provider "aws"` los `endpoints` hacia
+`http://localhost:4566` y las opciones de omitir la validación de credenciales (ver la
+[guía de LocalStack para Terraform](https://docs.localstack.cloud/user-guide/integrations/terraform/)).
+Con AWS real, deja los comandos tal como están y sigue la preparación de credenciales de
+abajo.
 
 ## Preparación: credenciales de la CLI sin claves permanentes
 
-Los tres ejercicios usan la AWS CLI v2. No uses la cuenta root para trabajar y evita las
+Esta sección es para el camino de AWS real; si usas LocalStack, basta con las
+credenciales ficticias de la sección anterior. Los tres ejercicios usan la AWS CLI v2 (que
+corre en tu propio equipo). No uses la cuenta root para trabajar y evita las
 claves de acceso de larga duración de un usuario IAM (`AKIA...`): si se filtran (un
 `git push` descuidado, un backup) sirven hasta que alguien las borre, y son una de las
 causas más comunes de cuentas comprometidas. Prefiere credenciales temporales:

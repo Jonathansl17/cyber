@@ -16,7 +16,7 @@ Objetivo: poner en marcha los cuatro scripts del README (integridad por hashes, 
 abiertos, 404 en el log web y fallos de SSH) contra tus propios equipos, y dejar cada
 uno ejecutándose solo con cron, avisándote cuando haya algo anómalo.
 
-Necesitas: tu Linux de siempre o una VM Linux tuya con Python 3, Go y Node.js. Para el
+Necesitas: tu propio equipo Linux con Python 3, Go y Node.js. Para el
 aviso por correo, un cliente de correo de línea
 de comandos (`msmtp` o `mailx`). Tiempo: 2-3 h. Instalación de los intérpretes:
 - Debian/Ubuntu: `sudo apt install python3 golang nodejs msmtp bsd-mailx`.

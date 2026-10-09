@@ -4,9 +4,11 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-Todo se hace sobre discos, VMs y cuentas tuyas, en una red de laboratorio aislada
-(host-only o interna de VirtualBox) cuando hay tráfico entre máquinas. El objetivo es
-preservar, analizar y detectar: nada se hace contra equipos de terceros.
+Todo se hace en tu propio equipo Linux, sin máquinas virtuales: sobre imágenes de disco y
+dispositivos loop para la parte forense, y con varias terminales contra `127.0.0.1` cuando
+hace falta tráfico entre dos extremos. El objetivo es preservar, analizar y detectar: nada se
+hace contra equipos de terceros, solo contra `127.0.0.1` y servicios que tú mismo levantaste
+en este equipo.
 
 ## Ejercicio 1: Imagen forense de un disco y recuperación de un archivo borrado
 
@@ -252,22 +254,39 @@ rmdir /tmp/mnt 2>/dev/null
 
 Nodo: [memdump](README.md#memdump).
 
-Objetivo: capturar la memoria de una VM Linux propia mientras tiene una conexión de red y un
+Objetivo: capturar la memoria de tu propio equipo Linux mientras tiene una conexión de red y un
 historial de bash activos, y luego, desde el volcado, encontrar ese proceso, esa conexión y
 los comandos tecleados con Volatility 3.
 
-Necesitas: dos VMs Linux en una red host-only o interna de VirtualBox (una "víctima" donde
-capturas, otra que hace de extremo de la conexión). En la víctima: AVML (binario estático de
-Microsoft, no instala nada) y, para el análisis, Volatility 3 (en tu equipo de análisis, no
-hace falta que sea la víctima). El punto delicado de la forense de memoria en Linux es que
-Volatility necesita una tabla de símbolos (ISF) que corresponda exactamente al kernel del
-volcado; la generas con dwarf2json a partir de los símbolos de depuración de ese kernel.
+Necesitas: un solo equipo Linux, el tuyo. Todo se hace en local, en varias terminales, sin
+máquinas virtuales: la conexión de red que luego buscarás en memoria se abre contra
+`127.0.0.1` (una terminal escucha, otra conecta), y la captura y el análisis se hacen sobre la
+RAM de este mismo equipo. En un caso real el otro extremo de la conexión estaría en otra
+máquina, pero el socket TCP establecido que queda grabado en la RAM es idéntico: lo que
+observas en el volcado no cambia por usar loopback. Herramientas: AVML (binario estático de
+Microsoft, no instala nada) para capturar, y Volatility 3 para el análisis. El punto delicado
+de la forense de memoria en Linux es que Volatility necesita una tabla de símbolos (ISF) que
+corresponda exactamente al kernel del volcado; la generas con dwarf2json a partir de los
+símbolos de depuración de ese kernel.
+
+> [!WARNING]
+> Vuelca y analiza solo la RAM de tu propio equipo, y abre la conexión de prueba solo contra
+> `127.0.0.1`. No captures la memoria ni el tráfico de equipos que no sean tuyos.
+
+AVML y dwarf2json son binarios estáticos que se descargan de sus releases oficiales: no hay
+paquete que instalar. Volatility 3 sí se instala, en un entorno virtual de Python; lo único que
+cambia entre distribuciones es el nombre del intérprete de Python.
+
+Instalación de Python (si no lo tienes):
+- Debian/Ubuntu: `sudo apt install python3 python3-venv`
+- Arch: `sudo pacman -S python` (trae `venv` incluido; el ejecutable se llama `python`, no `python3`)
 
 ```
-# Volatility 3 en el equipo de análisis (entorno virtual de Python)
+# Volatility 3 en este equipo (entorno virtual de Python)
 python3 -m venv ~/vol3 && ~/vol3/bin/pip install volatility3
+#   en Arch, si no existe python3: usa `python -m venv ~/vol3`
 
-# AVML: descarga el binario de la release oficial en la VM víctima
+# AVML: descarga el binario de la release oficial en este equipo
 curl -L -o avml https://github.com/microsoft/avml/releases/download/v0.20.0/avml
 chmod +x avml
 
@@ -289,29 +308,33 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
 
 ### Pasos
 
-1. En la VM víctima, deja actividad que luego buscarás en memoria. Abre una conexión a la
-   otra VM con `nc` y teclea un par de comandos reconocibles en bash. Mantén esa terminal
-   abierta (la conexión debe seguir viva cuando captures).
+1. Deja actividad que luego buscarás en memoria. Todo en tu propio equipo, en dos terminales:
+   una escucha en `127.0.0.1` y otra se conecta a ella y teclea un par de comandos
+   reconocibles en bash. Mantén ambas abiertas (la conexión debe seguir viva cuando captures).
+   `nc` lo trae el paquete `openbsd-netcat` (Arch) o `netcat-openbsd` (Debian/Ubuntu); si usas
+   `gnu-netcat`, la opción de escucha cambia.
    ```bash
-   # en la segunda VM (el otro extremo), escuchando:
-   nc -l -p 9000
-   # en la víctima, conectando y tecleando algo memorable:
+   # Terminal 1 (el otro extremo), escuchando en loopback:
+   nc -l -p 9000       # con openbsd-netcat: nc -l 9000
+   # Terminal 2 (víctima), conectando a 127.0.0.1 y tecleando algo memorable:
    echo marcador-volatility-2026
-   sleep infinity | nc 10.0.0.20 9000 &
+   sleep infinity | nc 127.0.0.1 9000 &
    ```
    - `nc` → netcat, abre o escucha conexiones de red TCP/UDP.
    - `-l` → modo escucha (listen): espera una conexión entrante.
-   - `-p 9000` → fija el puerto local 9000.
+   - `-p 9000` → fija el puerto local 9000 (en openbsd-netcat el puerto se da directo: `nc -l 9000`).
    - `echo marcador-volatility-2026` → imprime esa cadena; como la teclea bash, queda en el historial de bash en memoria.
    - `sleep infinity |` → alimenta a `nc` con una entrada que nunca termina, para que no cierre la conexión ni lea del teclado.
-   - `nc 10.0.0.20 9000` → se conecta a la IP 10.0.0.20 en el puerto 9000.
+   - `nc 127.0.0.1 9000` → se conecta a la dirección de loopback `127.0.0.1` en el puerto 9000.
    - `&` → lo deja en segundo plano: la terminal vuelve a bash y la conexión sigue viva.
 
    El orden importa: si ejecutaras `nc` en primer plano y tecleases el `echo` después, ese
    texto lo leería `nc` y lo enviaría por el socket al otro extremo; bash nunca lo vería y no
    quedaría en su historial. Con `jobs` compruebas que `nc` sigue corriendo.
 
-   La idea es que en el momento del volcado existan un proceso `nc`, una conexión TCP
+   En un caso real el otro extremo estaría en otra máquina de la red; aquí ambos extremos son
+   el mismo equipo por `127.0.0.1`, pero la conexión TCP establecida que queda en la RAM es
+   idéntica. La idea es que en el momento del volcado existan un proceso `nc`, una conexión TCP
    establecida al puerto 9000 y una línea de historial de bash con "marcador-volatility-2026".
 
 2. Captura la RAM con AVML a un archivo. El binario elige solo la fuente de memoria
@@ -324,10 +347,10 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
    - `memoria.lime` → archivo de salida donde AVML escribe el volcado (formato LiME).
    - `sha256sum memoria.lime > memoria.sha256` → calcula el hash del volcado y lo guarda en un archivo (ver Ejercicio 1).
 
-   El archivo sale en formato LiME y ocupa aproximadamente lo mismo que la RAM de la VM.
+   El archivo sale en formato LiME y ocupa aproximadamente lo mismo que la RAM de este equipo.
    Calcular el hash justo al terminar es parte del procedimiento forense.
 
-3. Identifica el kernel exacto de la víctima. La tabla de símbolos debe coincidir con esta
+3. Identifica el kernel exacto de este equipo. La tabla de símbolos debe coincidir con esta
    versión; apúntala.
    ```bash
    uname -r        # ej.: 6.1.0-18-amd64
@@ -338,7 +361,12 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
 4. Consigue los símbolos de depuración de ese kernel y genera la tabla ISF con dwarf2json.
    Los símbolos dan un `vmlinux` con información DWARF, pero cada distribución los empaqueta
    distinto: Debian los tiene en su repositorio normal con el sufijo `-dbg`; Ubuntu los
-   publica como `-dbgsym` en un repositorio aparte (ddebs) que hay que añadir primero.
+   publica como `-dbgsym` en un repositorio aparte (ddebs) que hay que añadir primero. En Arch
+   no hay un paquete `-dbg`/`-dbgsym` equivalente para el kernel `linux` de los repositorios
+   oficiales (los símbolos de depuración no se empaquetan de serie), así que los comandos `apt`
+   de abajo son específicos de Debian/Ubuntu; en Arch tendrías que recompilar el kernel con
+   símbolos de depuración o partir del `System.map` (ver más abajo), que da menos tipos. Lo más
+   sencillo para practicar es hacer este paso en un kernel Debian/Ubuntu.
    ```bash
    # Debian: instala los símbolos de depuración del kernel en uso
    sudo apt install linux-image-$(uname -r)-dbg
@@ -416,10 +444,10 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
 
 ### Resultado esperado
 
-Tienes `memoria.lime` con su hash, una tabla de símbolos propia del kernel de la VM, y la
+Tienes `memoria.lime` con su hash, una tabla de símbolos propia del kernel de este equipo, y la
 salida de tres plugins que, juntos, reconstruyen lo que estaba pasando: el proceso `nc`, su
 conexión al puerto 9000 y el comando `echo marcador-volatility-2026` que tecleaste. Nada de
-esto queda en el disco de la víctima: solo vivía en RAM.
+esto queda en el disco: solo vivía en RAM.
 
 ### Comprueba que lo lograste
 
@@ -450,27 +478,37 @@ rm -rf ~/vol3
 Nodo: [grep](README.md#grep), [tail](README.md#tail), [head](README.md#head),
 [cat](README.md#cat).
 
-Objetivo: generar en tu laboratorio una ráfaga de inicios de sesión SSH fallidos contra una
-VM propia y, desde el log de autenticación, identificar en segundos qué IP origina más
-intentos usando la tubería de triaje `grep | sort | uniq -c | sort -rn | head`.
+Objetivo: generar en tu propio equipo una ráfaga de inicios de sesión SSH fallidos contra el
+servidor SSH local (`127.0.0.1`) y, desde el log de autenticación, identificar en segundos qué
+IP origina más intentos usando la tubería de triaje `grep | sort | uniq -c | sort -rn | head`.
 
-Necesitas: dos VMs Linux en red host-only o interna. Una "defensora" con el servidor SSH
-(`openssh-server`) y otra desde la que se originan los intentos. Ambas son tuyas y están
-aisladas; aquí no se ataca a nadie, se provoca ruido de login fallido en tu propio servidor
-para practicar el análisis del log. Herramientas: `ssh` (cliente), `grep`, `sort`, `uniq`,
-`head` (todas de base) y `sshpass` en la VM de origen, para que el cliente envíe una
-contraseña (errónea) sin teclearla. Tiempo estimado: 30 minutos.
+Necesitas: un solo equipo Linux, el tuyo, con el servidor SSH (`openssh-server`) escuchando en
+local. Todo se hace sin máquinas virtuales, en varias terminales contra `127.0.0.1`: una
+terminal hace de servidor, otra provoca los intentos fallidos y otra mira el log. Aquí no se
+ataca a nadie: solo se provoca ruido de login fallido contra `127.0.0.1` y un servicio que tú
+mismo levantaste en este equipo, para practicar el análisis del log. Herramientas: `ssh`
+(cliente), `grep`, `sort`, `uniq`, `head` (todas de base) y `sshpass`, para que el cliente
+envíe una contraseña (errónea) sin teclearla. Tiempo estimado: 30 minutos.
+
+En un caso real la fuente de los intentos estaría en otra máquina y aparecería con su propia IP
+en el log; en local, origen y servidor son el mismo equipo y la IP de origen será `127.0.0.1`.
+La tubería de triaje es exactamente la misma y las líneas `Failed password ... from <ip>` son
+idénticas: lo único que cambia es la dirección, que aquí será siempre loopback.
+
+> [!WARNING]
+> Lanza los intentos de login solo contra `127.0.0.1` y el servidor SSH que tú mismo
+> levantaste en este equipo. Nunca contra equipos o servicios de terceros.
 
 ```
-# en la VM defensora, si no tiene servidor SSH
+# servidor SSH en este equipo, si no lo tiene
 # Debian/Ubuntu (la unidad se llama ssh)
 sudo apt install openssh-server
 sudo systemctl enable --now ssh
-# Arch (la unidad se llama sshd)
+# Arch (la unidad se llama sshd; Arch no arranca el servicio al instalar, hazlo tú)
 sudo pacman -S openssh
 sudo systemctl enable --now sshd
 
-# en la VM de origen
+# cliente sshpass (en el mismo equipo)
 sudo apt install sshpass      # Debian/Ubuntu
 sudo pacman -S sshpass        # Arch
 ```
@@ -483,15 +521,15 @@ sudo pacman -S sshpass        # Arch
 
 ### Pasos
 
-1. En la VM defensora, averigua su IP de la red de laboratorio y confirma que el servidor
-   SSH escucha.
+1. En **Terminal 1 (servidor SSH)**, confirma que el servidor SSH de este equipo escucha. No
+   hace falta averiguar ninguna IP de red: el objetivo será siempre `127.0.0.1` (loopback).
    ```bash
-   ip -4 addr show
+   ip -4 addr show lo
    ss -tlnp | grep :22
    ```
    - `ip` → herramienta de configuración de red.
    - `-4` → limita la salida a IPv4.
-   - `addr show` → muestra las direcciones asignadas a las interfaces.
+   - `addr show lo` → muestra las direcciones de la interfaz de loopback `lo`; debe aparecer `127.0.0.1/8`.
    - `ss` → muestra sockets de red.
    - `-t` → solo sockets TCP.
    - `-l` → solo sockets en escucha (listening).
@@ -499,8 +537,10 @@ sudo pacman -S sshpass        # Arch
    - `-p` → muestra el proceso dueño de cada socket.
    - `| grep :22` → deja solo las líneas del puerto 22.
 
-   Apunta la IP (por ejemplo `10.0.0.10`). `ss` debe mostrar un proceso `sshd` en el puerto 22
-   (en Ubuntu 24.04 puede figurar `systemd` como dueño, porque el puerto lo abre `ssh.socket`).
+   `ss` debe mostrar un proceso `sshd` en el puerto 22 (en Ubuntu 24.04 puede figurar `systemd`
+   como dueño, porque el puerto lo abre `ssh.socket`). Si solo escucha en una IP concreta y no en
+   `127.0.0.1`, revisa `ListenAddress` en la configuración; por defecto escucha en todas, loopback
+   incluido.
 
    Comprueba también que el servidor acepta autenticación por contraseña; si no, los intentos
    nunca llegan a probar una contraseña y no habrá líneas "Failed password":
@@ -515,15 +555,16 @@ sudo pacman -S sshpass        # Arch
    `PasswordAuthentication yes`, ejecuta `sudo systemctl restart ssh` (o `sshd`) y quítalo en la
    limpieza.
 
-2. Desde la VM de origen, genera inicios de sesión fallidos contra un usuario que no existe.
-   Un bucle que intenta conectar varias veces, enviando cada vez una contraseña equivocada,
-   basta para llenar el log de entradas "Failed password". No necesitas acertar ninguna
-   credencial; el objetivo es producir los registros, no entrar.
+2. En **Terminal 2 (origen)**, genera inicios de sesión fallidos contra un usuario que no
+   existe, dirigidos a `127.0.0.1` (el servidor SSH de este mismo equipo). Un bucle que intenta
+   conectar varias veces, enviando cada vez una contraseña equivocada, basta para llenar el log
+   de entradas "Failed password". No necesitas acertar ninguna credencial; el objetivo es
+   producir los registros, no entrar.
    ```bash
    for i in $(seq 1 30); do
      sshpass -p 'clave-incorrecta' ssh -o PreferredAuthentications=password \
          -o PubkeyAuthentication=no -o ConnectTimeout=3 -o StrictHostKeyChecking=no \
-         usuario-inexistente@10.0.0.10 true 2>/dev/null
+         usuario-inexistente@127.0.0.1 true 2>/dev/null
    done
    ```
    - `for i in $(seq 1 30); do ... done` → bucle que repite el cuerpo 30 veces.
@@ -534,29 +575,32 @@ sudo pacman -S sshpass        # Arch
    - `-o PubkeyAuthentication=no` → no prueba tus claves públicas antes (esos intentos no generan "Failed password").
    - `-o ConnectTimeout=3` → abandona el intento tras 3 segundos sin respuesta.
    - `-o StrictHostKeyChecking=no` → no se detiene a preguntar por la clave de host desconocida.
-   - `usuario-inexistente@10.0.0.10` → usuario y servidor a los que conectar.
+   - `usuario-inexistente@127.0.0.1` → usuario y servidor a los que conectar; `127.0.0.1` es el servidor SSH de este propio equipo.
    - `true` → comando a ejecutar en el servidor; nunca llega a correr porque el login falla.
    - `2>/dev/null` → descarta los mensajes de error de cada intento.
 
    Hace falta enviar una contraseña: un cliente que no la envía (por ejemplo con
    `BatchMode=yes`) se rinde antes de probarla y el servidor solo registra la conexión, nunca un
    "Failed password". Cada vuelta deja en el servidor una línea `Invalid user` y otra
-   `Failed password for invalid user`. Las 30 vueltas simulan la ráfaga.
+   `Failed password for invalid user`. Las 30 vueltas simulan la ráfaga. Como origen y servidor
+   son el mismo equipo, el log registrará `from 127.0.0.1`; en un ataque real esa sería la IP de
+   la máquina atacante.
 
-3. Vuelve a la VM defensora y mira en vivo cómo entran los registros mientras el bucle corre
-   (puedes lanzar el paso 2 y este a la vez en terminales distintas).
+3. En **Terminal 3 (log)**, mira en vivo cómo entran los registros mientras el bucle del paso 2
+   corre (puedes lanzar el paso 2 y este a la vez en terminales distintas del mismo equipo).
    ```bash
-   sudo tail -f /var/log/auth.log         # systemd sin auth.log: sudo journalctl -u ssh -f
+   sudo tail -f /var/log/auth.log         # systemd sin auth.log (Arch): sudo journalctl -u sshd -f
    ```
    - `tail` → muestra el final de un archivo.
    - `-f` → sigue el archivo y va imprimiendo lo que se le añade (follow).
-   - `/var/log/auth.log` → el log de autenticación a vigilar.
-   - `journalctl -u ssh -f` → variante systemd: `-u ssh` filtra por la unidad ssh y `-f` sigue el journal en vivo.
+   - `/var/log/auth.log` → el log de autenticación a vigilar (Debian/Ubuntu).
+   - `journalctl -u sshd -f` → variante systemd sin `auth.log` (Arch, Fedora): `-u sshd` filtra por la unidad (en Debian/Ubuntu es `-u ssh`) y `-f` sigue el journal en vivo.
 
-   Verás pares de líneas como estas (la IP es la de tu VM de origen):
+   Verás pares de líneas como estas (la IP de origen es `127.0.0.1`, porque origen y servidor
+   son este mismo equipo):
    ```
-   sshd[2412]: Invalid user usuario-inexistente from 10.0.0.20 port 51544
-   sshd[2412]: Failed password for invalid user usuario-inexistente from 10.0.0.20 port 51544 ssh2
+   sshd[2412]: Invalid user usuario-inexistente from 127.0.0.1 port 51544
+   sshd[2412]: Failed password for invalid user usuario-inexistente from 127.0.0.1 port 51544 ssh2
    ```
    En versiones recientes de OpenSSH (Arch, Ubuntu 25.04 y posteriores) el proceso aparece
    como `sshd-session[...]` en vez de `sshd[...]`; el texto es el mismo.
@@ -576,12 +620,12 @@ sudo pacman -S sshpass        # Arch
    - `sort -rn` → reordena por ese conteo; `-n` lo trata como número y `-r` lo pone de mayor a menor.
    - `head` → se queda con las primeras líneas (el top de IPs).
 
-   La salida es una tabla "conteo IP" con la IP más ruidosa arriba (en tu laboratorio, con
-   una sola VM de origen, verás solo la primera línea; la segunda ilustra un log con más
-   fuentes):
+   La salida es una tabla "conteo IP" con la IP más ruidosa arriba (en tu laboratorio local, con
+   una sola fuente, verás solo la primera línea con `127.0.0.1`; la segunda ilustra cómo se vería
+   un log con más fuentes en una red real):
    ```
-        30 from 10.0.0.20
-         2 from 10.0.0.31
+        30 from 127.0.0.1
+         2 from 203.0.113.31
    ```
 
 5. Variante para sistemas con systemd sin `auth.log` (Arch, Fedora y otros). El log de SSH
@@ -599,22 +643,22 @@ sudo pacman -S sshpass        # Arch
 6. Confirma el hallazgo mirando el contexto de esa IP: cuántos fallos y si hubo algún acceso
    aceptado después (en este laboratorio no debería haberlo, porque el usuario no existe).
    ```bash
-   sudo grep "10.0.0.20" /var/log/auth.log | grep -E "Failed|Accepted" | head
+   sudo grep "127.0.0.1" /var/log/auth.log | grep -E "Failed|Accepted" | head
    ```
-   - `grep "10.0.0.20" /var/log/auth.log` → deja solo las líneas del log en que aparece esa IP.
+   - `grep "127.0.0.1" /var/log/auth.log` → deja solo las líneas del log en que aparece esa IP.
    - `grep -E "Failed|Accepted"` → `-E` usa regex extendida; `Failed|Accepted` deja las líneas con una u otra palabra.
    - `head` → muestra solo las primeras líneas del resultado.
 
 ### Resultado esperado
 
-En una sola línea de comandos obtienes qué IP de tu red de laboratorio concentra los inicios
-de sesión fallidos y cuántos, que es exactamente el primer paso del triaje de una sospecha de
-fuerza bruta. La IP de la VM de origen aparece en lo alto con el número de intentos del bucle.
+En una sola línea de comandos obtienes qué IP concentra los inicios de sesión fallidos y
+cuántos, que es exactamente el primer paso del triaje de una sospecha de fuerza bruta. En este
+laboratorio local la IP es `127.0.0.1` y aparece en lo alto con el número de intentos del bucle;
+en una red real sería la dirección de la máquina atacante.
 
 ### Comprueba que lo lograste
 
-- ¿La IP de la VM de origen encabeza la lista del paso 4 con un conteo cercano a las vueltas
-  del bucle (30)?
+- ¿`127.0.0.1` encabeza la lista del paso 4 con un conteo cercano a las vueltas del bucle (30)?
 - ¿Entiendes cada eslabón de la tubería? `grep "Failed password"` deja solo los fallos,
   `grep -oE "from [0-9.]+"` extrae la IP, `sort` agrupa, `uniq -c` cuenta, `sort -rn` ordena de
   mayor a menor y `head` deja el top. Quita el último `| head` y verás el listado completo.

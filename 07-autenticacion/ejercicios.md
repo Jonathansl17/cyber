@@ -162,89 +162,57 @@ Borra la entrada "Lab" de la app autenticadora y la variable de la shell: `unset
 
 Nodo: [RADIUS](README.md#radius).
 
-Objetivo: levantar FreeRADIUS en un contenedor con un usuario propio, obtener un `Access-Accept` y un `Access-Reject` con `radtest`, capturar los paquetes UDP 1812 y comprobar qué campos viajan en claro, cuál va ofuscado y que el shared secret basta para recuperar la contraseña.
+Objetivo: levantar FreeRADIUS en tu propio equipo con un usuario propio, obtener un `Access-Accept` y un `Access-Reject` con `radtest` desde otra terminal contra `127.0.0.1`, capturar los paquetes UDP 1812 en la interfaz de loopback y comprobar qué campos viajan en claro, cuál va ofuscado y que el shared secret basta para recuperar la contraseña.
 
-Necesitas: un host Linux con Docker (Debian/Ubuntu: `sudo apt install docker.io`; Arch: `sudo pacman -S docker`; después `sudo systemctl start docker`), el cliente `radtest` (Debian/Ubuntu: `sudo apt install freeradius-utils`; Arch: `sudo pacman -S freeradius`), `tcpdump` y `tshark` (Debian/Ubuntu: `sudo apt install tcpdump tshark`; Arch: `sudo pacman -S tcpdump wireshark-cli`). Todo ocurre dentro de tu equipo, entre el host y el contenedor. Si tu usuario no está en el grupo `docker`, antepón `sudo` a los comandos `docker`. Tiempo: 30 minutos.
+Necesitas: un Linux con FreeRADIUS (incluye el servidor y el cliente `radtest`) y con `tcpdump` y `tshark`.
+
+Instalación:
+- Debian/Ubuntu: `sudo apt install freeradius freeradius-utils tcpdump tshark`
+- Arch: `sudo pacman -S freeradius tcpdump wireshark-cli`
+
+Todo ocurre dentro de tu equipo, en varias terminales: el servidor escucha en `127.0.0.1` y el cliente lo consulta desde otra terminal, siempre contra `127.0.0.1`. No apuntes `radtest` ni la captura contra ninguna máquina que no sea la tuya ni contra servicios que no hayas levantado tú en este equipo. En este laboratorio el servidor se arranca en primer plano en modo depuración (no como servicio del sistema), así que no hace falta `systemctl`; si ya tienes el servicio corriendo te robaría el puerto, páralo antes con `sudo systemctl stop freeradius`. Para capturar con `tshark` sin ser root, tu usuario debe estar en el grupo `wireshark`: `sudo usermod -aG wireshark $USER` y vuelve a iniciar sesión; en Debian/Ubuntu, además, `sudo dpkg-reconfigure wireshark-common` y responde "Sí" para permitir la captura sin root. Tiempo: 30 minutos.
+
+Nota de rutas y nombres (cambian entre distros): el directorio de configuración es `/etc/raddb` en Arch y `/etc/freeradius/3.0` en Debian/Ubuntu; el binario del servidor es `radiusd` en Arch y `freeradius` en Debian/Ubuntu. Los pasos usan los nombres de Arch; sustitúyelos si vas por Debian.
 
 ### Pasos
 
-1. Crea una carpeta de trabajo.
+1. **Terminal 1 (servidor).** Añade una usuaria `ana` al archivo de usuarios de FreeRADIUS. La instalación ya trae un cliente `localhost` con el shared secret `testing123`, así que no hace falta tocar `clients.conf`. La segunda línea, indentada con espacios, es un atributo que el servidor devolverá en el Accept.
    ```bash
-   mkdir -p ~/lab/radius && cd ~/lab/radius
-   ```
-   - `mkdir` → crea directorios.
-   - `-p` → crea también los directorios padre que falten (`~/lab`) y no da error si ya existen.
-   - `~/lab/radius` → la ruta a crear; `~` es tu directorio personal.
-   - `&&` → ejecuta el segundo comando solo si el primero terminó bien.
-   - `cd ~/lab/radius` → entra en esa carpeta.
-2. Escribe `clients.conf`, que define qué equipos (NAS) pueden preguntar al servidor y con qué shared secret. El host llega al contenedor desde la red de Docker (172.16.0.0/12), por eso hay dos clientes.
-   ```bash
-   cat > clients.conf <<'EOF'
-   client localhost {
-   	ipaddr = 127.0.0.1
-   	secret = testing123
-   }
+   sudo tee -a /etc/raddb/mods-config/files/authorize >/dev/null <<'EOF'
 
-   client dockernet {
-   	ipaddr = 172.16.0.0/12
-   	secret = testing123
-   }
+   ana     Cleartext-Password := "Secreto123"
+           Reply-Message := "Bienvenida, ana"
    EOF
    ```
-   - `cat > clients.conf` → `cat` copia su entrada a la salida, y `>` envía esa salida al archivo `clients.conf` (lo crea o lo sobrescribe).
-   - `<<'EOF' ... EOF` → heredoc: la entrada de `cat` son las líneas hasta `EOF`; con comillas, la shell no expande nada dentro.
-   - `client localhost { ... }` → define un cliente RADIUS (un NAS autorizado a consultar) con el nombre interno `localhost`.
-   - `ipaddr = 127.0.0.1` → dirección de origen desde la que se aceptan peticiones de ese cliente.
-   - `secret = testing123` → shared secret que comparten ese cliente y el servidor; sirve para ofuscar User-Password y firmar las respuestas.
-   - `client dockernet { ... }` → segundo cliente, con nombre `dockernet`.
-   - `ipaddr = 172.16.0.0/12` → acepta como cliente cualquier IP de ese rango (la red de Docker); se admite notación CIDR.
-3. Escribe el archivo de usuarios (`authorize`, el antiguo `users`) con una usuaria `ana`. La segunda línea, con tabulador al inicio, es un atributo que el servidor devolverá en el Accept.
-   ```bash
-   printf 'ana\tCleartext-Password := "Secreto123"\n\tReply-Message := "Bienvenida, ana"\n' > authorize
-   cat authorize
-   chmod 644 clients.conf authorize
-   ```
-   - `printf '...' > authorize` → escribe el texto con formato en el archivo `authorize`; `\t` es un tabulador y `\n` un salto de línea.
-   - `ana` → al inicio de línea, el nombre de usuario al que se aplica la entrada.
-   - `Cleartext-Password := "Secreto123"` → atributo de control: la contraseña con la que el servidor comparará; `:=` asigna el valor reemplazando cualquier otro que hubiera.
-   - `Reply-Message := "Bienvenida, ana"` → atributo de respuesta (línea que empieza con tabulador): se añade al Access-Accept.
-   - `cat authorize` → muestra el archivo para comprobarlo.
-   - `chmod 644` → permisos: lectura y escritura para el dueño (6) y solo lectura para grupo y otros (4 y 4), para que el servidor del contenedor pueda leerlos.
-   - `clients.conf authorize` → los archivos a los que se aplica.
-4. Arranca FreeRADIUS en modo depuración (`-X`), montando tus dos archivos encima de los de la imagen oficial y publicando los puertos UDP.
-   ```bash
-   docker run --rm -d --name radius-lab -p 1812-1813:1812-1813/udp \
-     -v "$PWD/clients.conf:/etc/raddb/clients.conf:ro" \
-     -v "$PWD/authorize:/etc/raddb/mods-config/files/authorize:ro" \
-     freeradius/freeradius-server:latest -X
-   docker logs radius-lab 2>&1 | tail -3
-   ```
-   - `docker run` → crea y arranca un contenedor a partir de una imagen.
-   - `--rm` → borra el contenedor automáticamente cuando se detenga.
-   - `-d` → (`--detach`) lo ejecuta en segundo plano y devuelve el control de la terminal.
-   - `--name radius-lab` → nombre del contenedor, para referirte a él en otros comandos.
-   - `-p 1812-1813:1812-1813/udp` → publica los puertos UDP 1812 (autenticación) y 1813 (accounting) del contenedor en los mismos puertos del host; formato `host:contenedor/protocolo`.
-   - `\` → al final de línea, continúa el comando en la siguiente.
-   - `-v "$PWD/clients.conf:/etc/raddb/clients.conf:ro"` → monta tu archivo (ruta absoluta con `$PWD`, el directorio actual) encima del de la imagen; `:ro` lo monta en solo lectura.
-   - `-v "$PWD/authorize:/etc/raddb/mods-config/files/authorize:ro"` → igual con el archivo de usuarios.
-   - `freeradius/freeradius-server:latest` → imagen oficial de FreeRADIUS, etiqueta `latest`.
-   - `-X` → argumento para `radiusd` dentro del contenedor: modo depuración, en primer plano y con todo el detalle de cada petición en el log.
-   - `docker logs radius-lab` → muestra la salida del contenedor.
-   - `2>&1` → envía también la salida de errores (2) a la salida normal (1), para que pase por la tubería.
-   - `tail -3` → muestra solo las 3 últimas líneas.
+   - `sudo tee -a archivo >/dev/null` → `tee` escribe en el archivo lo que recibe por la entrada; `-a` (append) lo añade al final en vez de sobrescribir, y `>/dev/null` descarta la copia que `tee` haría por pantalla. Hace falta `sudo` porque el archivo es del sistema.
+   - `<<'EOF' ... EOF` → heredoc: la entrada de `tee` son las líneas hasta `EOF`; con comillas, la shell no expande nada dentro.
+   - `ana     Cleartext-Password := "Secreto123"` → entrada de usuario: `ana`, al inicio de línea, es el nombre; `Cleartext-Password := "Secreto123"` es el atributo de control con la contraseña contra la que compara el servidor (`:=` asigna reemplazando cualquier valor previo).
+   - `        Reply-Message := "Bienvenida, ana"` → línea de continuación (empieza con espacios): atributo de respuesta que se añade al Access-Accept.
 
-   La última línea debe ser `Ready to process requests`. Si ves un error de sintaxis, revisa que el archivo `authorize` tenga el tabulador.
-5. En otra terminal, deja una captura del puerto de autenticación en todas las interfaces.
+   Vale ponerla al principio o al final del archivo mientras no haya antes una entrada `DEFAULT` activa que la tape; en la configuración de serie esas entradas están comentadas, así que añadirla al final basta.
+
+2. **Terminal 1 (servidor).** Arranca FreeRADIUS en primer plano, en modo depuración.
    ```bash
-   sudo tcpdump -i any -nn -w ~/lab/radius/radius.pcap 'udp port 1812'
+   sudo radiusd -X
    ```
-   - `sudo` → ejecuta el comando como root; capturar paquetes lo exige.
+   - `sudo` → el servidor necesita privilegios para abrir el puerto UDP 1812.
+   - `radiusd` → el demonio de FreeRADIUS (en Debian/Ubuntu el binario se llama `freeradius`).
+   - `-X` → modo depuración: se queda en primer plano y escribe el detalle de cada petición. Déjalo corriendo en esta terminal.
+
+   La última línea debe ser `Ready to process requests`. Si sale un error de sintaxis, revisa la indentación de la entrada de `ana`.
+
+3. **Terminal 3 (captura).** Antes de lanzar las peticiones, deja una captura del puerto de autenticación en la interfaz de loopback (cliente y servidor están los dos en `127.0.0.1`, así que el tráfico pasa por `lo`).
+   ```bash
+   sudo tcpdump -i lo -nn -w ~/radius.pcap 'udp port 1812'
+   ```
+   - `sudo` → capturar paquetes exige privilegios.
    - `tcpdump` → captura tráfico de red.
-   - `-i any` → captura en todas las interfaces a la vez (incluidas `lo` y la de Docker).
+   - `-i lo` → captura en la interfaz de loopback, por donde viaja todo lo que va a `127.0.0.1`.
    - `-nn` → no traduce IPs a nombres ni puertos a nombres de servicio.
-   - `-w ~/lab/radius/radius.pcap` → guarda los paquetes en ese archivo en lugar de imprimirlos.
+   - `-w ~/radius.pcap` → guarda los paquetes en ese archivo en lugar de imprimirlos.
    - `'udp port 1812'` → filtro de captura: solo UDP con origen o destino en el puerto 1812.
-6. En la primera terminal, prueba con la contraseña correcta.
+
+4. **Terminal 2 (cliente).** Prueba con la contraseña correcta.
    ```bash
    radtest ana Secreto123 127.0.0.1 0 testing123
    ```
@@ -253,71 +221,67 @@ Necesitas: un host Linux con Docker (Debian/Ubuntu: `sudo apt install docker.io`
    - `Secreto123` → contraseña del usuario (User-Password).
    - `127.0.0.1` → servidor RADIUS; sin `:puerto` usa el 1812.
    - `0` → valor del atributo NAS-Port (puerto físico del NAS); en una prueba da igual.
-   - `testing123` → shared secret del cliente, el mismo de `clients.conf`.
+   - `testing123` → shared secret del cliente, el que trae por defecto `clients.conf`.
    Salida esperada (resumida):
    ```
    Sent Access-Request Id 120 from 0.0.0.0:41234 to 127.0.0.1:1812 length 73
-   	User-Name = "ana"
-   	User-Password = "Secreto123"
+       User-Name = "ana"
+       User-Password = "Secreto123"
    ...
    Received Access-Accept Id 120 from 127.0.0.1:1812 to 127.0.0.1:41234 length 38
-   	Reply-Message = "Bienvenida, ana"
+       Reply-Message = "Bienvenida, ana"
    ```
-7. Prueba con una contraseña incorrecta.
+
+5. **Terminal 2 (cliente).** Prueba con una contraseña incorrecta.
    ```bash
    radtest ana otraCosa 127.0.0.1 0 testing123
    ```
-   - Mismos argumentos que en el paso 6, con `otraCosa` como contraseña.
+   - Mismos argumentos que en el paso 4, con `otraCosa` como contraseña.
    Llega `Received Access-Reject` (tras una espera de alrededor de un segundo que el servidor añade a propósito para frenar ataques de fuerza bruta).
-8. Mira qué decidió el servidor y por qué en su log de depuración.
+
+6. **Terminal 1 (servidor).** Mira en la salida de depuración qué decidió el servidor y por qué. Para la primera petición verás `pap: User authenticated successfully` seguido de `Sent Access-Accept`; para la segunda, un `pap: ERROR: ... password does not match "known good" password` seguido de `Sent Access-Reject`. El módulo `pap` es el que comparó la contraseña recibida con la del archivo de usuarios.
+
+7. **Terminal 3 (captura).** Detén tcpdump con `Ctrl+C` y mira el contenido en hexadecimal y ASCII.
    ```bash
-   docker logs radius-lab 2>&1 | grep -E 'Sent Access-(Accept|Reject)|pap:'
+   sudo chown "$USER" ~/radius.pcap
+   tcpdump -nn -X -r ~/radius.pcap | head -40
    ```
-   - `docker logs radius-lab 2>&1` → (ver paso 4).
-   - `grep` → filtra las líneas que coinciden con un patrón.
-   - `-E` → usa expresiones regulares extendidas, donde `|` (o) y `( )` funcionan sin escaparlos.
-   - `'Sent Access-(Accept|Reject)|pap:'` → líneas con `Sent Access-Accept`, `Sent Access-Reject` o `pap:`.
-   Para la primera petición verás `pap: User authenticated successfully` seguido de `Sent Access-Accept`; para la segunda, un `pap: ERROR: ... password does not match "known good" password` seguido de `Sent Access-Reject`. El módulo `pap` es el que comparó la contraseña recibida con la del archivo `authorize`.
-9. Detén tcpdump con `Ctrl+C`. Mira el contenido en hexadecimal y ASCII.
-   ```bash
-   cd ~/lab/radius && sudo chown "$USER" radius.pcap
-   tcpdump -nn -X -r radius.pcap | head -40
-   ```
-   - `cd ~/lab/radius` → entra en la carpeta del laboratorio.
-   - `sudo chown "$USER" radius.pcap` → cambia el dueño del archivo (creado por root) a tu usuario; `$USER` contiene tu nombre de usuario.
-   - `-nn` → (ver paso 5).
+   - `sudo chown "$USER" ~/radius.pcap` → cambia el dueño del archivo (creado por root) a tu usuario; `$USER` contiene tu nombre de usuario.
+   - `-nn` → (ver paso 3).
    - `-X` → imprime el contenido de cada paquete en hexadecimal y en ASCII.
-   - `-r radius.pcap` → lee los paquetes del archivo en lugar de capturar.
+   - `-r ~/radius.pcap` → lee los paquetes del archivo en lugar de capturar.
    - `head -40` → muestra solo las 40 primeras líneas.
-   En la columna ASCII de la derecha se lee `ana` (el User-Name) y, en la respuesta, `Bienvenida, ana`; `Secreto123` no aparece. Con `-i any` cada paquete puede salir dos veces (por `lo` y por la interfaz de Docker): es el mismo paquete antes y después de la traducción de puertos.
-10. Decodifica los campos con tshark, sin el secreto.
-    ```bash
-    tshark -r radius.pcap -Y radius -T fields -e radius.code -e radius.User_Name -e radius.User_Password
-    ```
-    - `tshark` → versión de terminal de Wireshark.
-    - `-r radius.pcap` → lee el archivo de captura.
-    - `-Y radius` → filtro de visualización: solo paquetes que Wireshark decodifica como RADIUS.
-    - `-T fields` → formato de salida: solo los campos que pidas con `-e`, separados por tabuladores.
-    - `-e radius.code` → campo con el tipo de paquete RADIUS.
-    - `-e radius.User_Name` → campo con el nombre de usuario.
-    - `-e radius.User_Password` → campo con la contraseña tal como viaja.
-    Código 1 es Access-Request, 2 Access-Accept, 3 Access-Reject. `User_Name` sale como `ana`; `User_Password` sale como bytes ilegibles (16 bytes en hex): está ofuscado con MD5 y el shared secret.
-11. Ahora dale a tshark el shared secret y mira el campo de contraseña de los Access-Request.
-    ```bash
-    tshark -r radius.pcap -o radius.shared_secret:testing123 -Y 'radius.code == 1' -V | grep -i -A1 'User-Password'
-    ```
-    - `-r radius.pcap` → (ver paso 10).
-    - `-o radius.shared_secret:testing123` → cambia una preferencia de Wireshark (`nombre:valor`): aquí el shared secret que usa el disector RADIUS para descifrar User-Password.
-    - `-Y 'radius.code == 1'` → solo los paquetes con código 1 (Access-Request).
-    - `-V` → imprime el árbol de detalle completo de cada paquete.
-    - `grep -i` → busca sin distinguir mayúsculas y minúsculas.
-    - `-A1` → muestra además 1 línea después de cada coincidencia.
-    - `'User-Password'` → texto a buscar.
-    Junto al valor cifrado aparece la contraseña descifrada: `Secreto123` en el primer intento y `otraCosa` en el segundo. Quien conozca el secreto y capture el tráfico obtiene las contraseñas.
+   En la columna ASCII de la derecha se lee `ana` (el User-Name) y, en la respuesta, `Bienvenida, ana`; `Secreto123` no aparece.
+
+8. **Terminal 2 o 3.** Decodifica los campos con tshark, sin el secreto.
+   ```bash
+   tshark -r ~/radius.pcap -Y radius -T fields -e radius.code -e radius.User_Name -e radius.User_Password
+   ```
+   - `tshark` → versión de terminal de Wireshark.
+   - `-r ~/radius.pcap` → lee el archivo de captura.
+   - `-Y radius` → filtro de visualización: solo paquetes que Wireshark decodifica como RADIUS.
+   - `-T fields` → formato de salida: solo los campos que pidas con `-e`, separados por tabuladores.
+   - `-e radius.code` → campo con el tipo de paquete RADIUS.
+   - `-e radius.User_Name` → campo con el nombre de usuario.
+   - `-e radius.User_Password` → campo con la contraseña tal como viaja.
+   Código 1 es Access-Request, 2 Access-Accept, 3 Access-Reject. `User_Name` sale como `ana`; `User_Password` sale como bytes ilegibles (16 bytes en hex): está ofuscado con MD5 y el shared secret.
+
+9. **Terminal 2 o 3.** Ahora dale a tshark el shared secret y mira el campo de contraseña de los Access-Request.
+   ```bash
+   tshark -r ~/radius.pcap -o radius.shared_secret:testing123 -Y 'radius.code == 1' -V | grep -i -A1 'User-Password'
+   ```
+   - `-r ~/radius.pcap` → (ver paso 8).
+   - `-o radius.shared_secret:testing123` → cambia una preferencia de Wireshark (`nombre:valor`): aquí el shared secret que usa el disector RADIUS para descifrar User-Password.
+   - `-Y 'radius.code == 1'` → solo los paquetes con código 1 (Access-Request).
+   - `-V` → imprime el árbol de detalle completo de cada paquete.
+   - `grep -i` → busca sin distinguir mayúsculas y minúsculas.
+   - `-A1` → muestra además 1 línea después de cada coincidencia.
+   - `'User-Password'` → texto a buscar.
+   Junto al valor cifrado aparece la contraseña descifrada: `Secreto123` en el primer intento y `otraCosa` en el segundo. Quien conozca el secreto y capture el tráfico obtiene las contraseñas.
 
 ### Resultado esperado
 
-Un `Access-Accept` con su `Reply-Message` y un `Access-Reject`, el log del servidor explicando cada decisión, y una captura `radius.pcap` en la que has comprobado tres cosas: el usuario y los atributos viajan en claro, la contraseña va ofuscada, y con el shared secret se descifra.
+Un `Access-Accept` con su `Reply-Message` y un `Access-Reject`, la salida de depuración del servidor explicando cada decisión, y una captura `radius.pcap` en la que has comprobado tres cosas: el usuario y los atributos viajan en claro, la contraseña va ofuscada, y con el shared secret se descifra.
 
 ### Comprueba que lo lograste
 
@@ -328,54 +292,78 @@ Un `Access-Accept` con su `Reply-Message` y un `Access-Reject`, el log del servi
 
 ### Limpieza
 
-```bash
-docker stop radius-lab
-docker rmi freeradius/freeradius-server:latest
-rm -r ~/lab/radius
-```
-- `docker stop radius-lab` → detiene el contenedor; como se lanzó con `--rm`, además se borra.
-- `docker rmi freeradius/freeradius-server:latest` → borra la imagen descargada.
-- `rm -r ~/lab/radius` → borra la carpeta; `-r` lo hace de forma recursiva, con todo su contenido.
+1. En la Terminal 1, para el servidor con `Ctrl+C`.
+2. Quita la entrada de prueba: edita `/etc/raddb/mods-config/files/authorize` (con `sudo`) y borra las dos líneas de `ana` que añadiste en el paso 1.
+3. Borra la captura:
+   ```bash
+   rm -f ~/radius.pcap
+   ```
+   - `rm -f ~/radius.pcap` → borra el archivo de captura; `-f` no pregunta ni da error si no existe.
 
 ## Ejercicio 3: Monta OpenLDAP y observa un bind simple en claro
 
 Nodo: [LDAP](README.md#ldap).
 
-Objetivo: levantar un directorio OpenLDAP propio con dos OUs y tres usuarios, autenticarte con un bind simple sin TLS desde otra máquina mientras capturas con Wireshark, y localizar en la captura el DN y la contraseña en texto claro; además, distinguir en la captura un bind correcto de uno fallido.
+Objetivo: levantar un directorio OpenLDAP propio con dos OUs y tres usuarios en tu equipo, autenticarte con un bind simple sin TLS desde otra terminal contra `127.0.0.1` mientras capturas en loopback, y localizar en la captura el DN y la contraseña en texto claro; además, distinguir un bind correcto de uno fallido.
 
-Necesitas: el laboratorio del [ejercicio 1 de Virtualización](../05-virtualizacion/ejercicios.md#ejercicio-1-rompe-y-restaura-una-vm-con-un-snapshot): VM `victima` con Debian 12 o Ubuntu (será el servidor LDAP) y VM `atacante` con Kali (cliente y Wireshark), en la red interna `labnet`. Antes de pasar la víctima a `labnet`, instala en ella `sudo apt install slapd ldap-utils`; en Kali, si falta, `sudo apt install ldap-utils`. Sustituye `10.10.10.101` por la IP de tu víctima. Referencia: [OpenLDAP Administrator's Guide](https://www.openldap.org/doc/admin26/). Tiempo: 45 minutos.
+Necesitas: un Linux con OpenLDAP (el servidor `slapd` y los clientes `ldapsearch`/`ldapadd`/`slappasswd`) y con `tcpdump` y `tshark`.
+
+Instalación:
+- Debian/Ubuntu: `sudo apt install slapd ldap-utils tcpdump tshark`
+- Arch: `sudo pacman -S openldap tcpdump wireshark-cli`
+
+En Arch el paquete `openldap` trae tanto el servidor `slapd` como los clientes y `slappasswd`; en Debian/Ubuntu el servidor es `slapd` y los clientes van en `ldap-utils`. Todo ocurre en tu equipo, en varias terminales: el servidor escucha en `127.0.0.1` y el cliente lo consulta desde otra terminal. En un entorno real el servidor y el cliente estarían en máquinas distintas; aquí comparten la interfaz de loopback, pero el paquete del bind y la contraseña en claro que vas a observar son idénticos. Trabaja solo contra este servidor que tú mismo levantas en `127.0.0.1`. Para capturar con `tshark` sin ser root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`, luego reinicia sesión; en Debian/Ubuntu además `sudo dpkg-reconfigure wireshark-common`). En este laboratorio `slapd` se arranca en primer plano desde una configuración propia, así que no toca el servicio del sistema ni necesita `systemctl`. Referencia: [OpenLDAP Administrator's Guide](https://www.openldap.org/doc/admin26/). Tiempo: 45 minutos.
 
 ### Pasos
 
-1. En la víctima, configura la base del directorio. El instalador ya pidió una contraseña de administrador; `dpkg-reconfigure` te deja fijar el dominio.
+1. **Terminal 1 (servidor).** Crea la carpeta de trabajo y una configuración mínima de `slapd` en formato clásico `slapd.conf` (el más simple para un laboratorio; `slapd` lo convierte solo al arrancar).
    ```bash
-   sudo dpkg-reconfigure slapd
-   ```
-   - `sudo` → ejecuta como root; reconfigurar un paquete del sistema lo exige.
-   - `dpkg-reconfigure` → vuelve a lanzar las preguntas de configuración de un paquete ya instalado.
-   - `slapd` → el paquete a reconfigurar: el servidor OpenLDAP.
-   Respuestas: "Omit OpenLDAP server configuration?" → No; "DNS domain name" → `lab.local`; "Organization name" → `Lab`; "Administrator password" → una contraseña que recuerdes (dos veces); "Do you want the database to be removed when slapd is purged?" → No; "Move old database?" → Yes. Con `lab.local` la raíz del árbol es `dc=lab,dc=local` y el administrador es `cn=admin,dc=lab,dc=local`.
-2. Comprueba que el servidor responde y escucha en el 389 de todas las interfaces.
-   ```bash
-   ss -tln | grep ':389'
-   ldapsearch -x -H ldap://localhost -b dc=lab,dc=local -LLL dn
-   ```
-   - `ss` → lista sockets.
-   - `-t` → solo TCP.
-   - `-l` → solo sockets en escucha.
-   - `-n` → muestra puertos y direcciones en número, sin traducirlos a nombres.
-   - `| grep ':389'` → deja solo las líneas que contienen `:389`, el puerto de LDAP.
-   - `ldapsearch` → cliente que hace búsquedas en un directorio LDAP.
-   - `-x` → usa autenticación simple en vez de SASL; sin `-D` el bind es anónimo.
-   - `-H ldap://localhost` → URI del servidor: protocolo `ldap` (sin cifrar, puerto 389) en el propio equipo.
-   - `-b dc=lab,dc=local` → base de la búsqueda: el punto del árbol desde el que se busca.
-   - `-LLL` → salida en formato LDIF; la primera `L` lo limita a LDIFv1, la segunda quita los comentarios y la tercera quita la línea de versión.
-   - `dn` → atributo que se pide; como el DN siempre se imprime, sirve para listar solo los nombres de las entradas. Sin filtro, se usa `(objectClass=*)`, que coincide con todas.
+   mkdir -p ~/lab/ldap/data && cd ~/lab/ldap
+   cat > slapd.conf <<EOF
+   include /etc/openldap/schema/core.schema
+   include /etc/openldap/schema/cosine.schema
+   include /etc/openldap/schema/inetorgperson.schema
 
-   `ss` muestra `0.0.0.0:389`; `ldapsearch` devuelve `dn: dc=lab,dc=local`. Esa consulta fue anónima: anótalo, el directorio deja leer a cualquiera.
-3. Crea el archivo de las dos OUs.
+   database  mdb
+   maxsize   1073741824
+   suffix    "dc=lab,dc=local"
+   rootdn    "cn=admin,dc=lab,dc=local"
+   rootpw    Admin.Lab.2026
+   directory $HOME/lab/ldap/data
+   EOF
+   ```
+   - `mkdir -p ~/lab/ldap/data && cd ~/lab/ldap` → crea la carpeta de datos (y las intermedias) y entra en la de trabajo; `&&` encadena si la primera orden fue bien.
+   - `cat > slapd.conf <<EOF ... EOF` → heredoc **sin** comillas en `EOF`, para que la shell expanda `$HOME` dentro; escribe el archivo de configuración.
+   - `include /etc/openldap/schema/*.schema` → carga los esquemas (definiciones de clases y atributos); `inetorgperson` define la clase de las personas. En Debian/Ubuntu las rutas son `/etc/ldap/schema/...` (ajústalas) y, además, hay que cargar el backend como módulo: añade al principio `modulepath /usr/lib/ldap` y `moduleload back_mdb`. En Arch el backend `mdb` viene integrado y no hace falta.
+   - `database mdb` → backend de almacenamiento LMDB, el recomendado.
+   - `maxsize 1073741824` → tamaño máximo del mapa de memoria de LMDB (1 GiB, de sobra para el laboratorio).
+   - `suffix "dc=lab,dc=local"` → raíz del árbol que sirve este directorio.
+   - `rootdn "cn=admin,dc=lab,dc=local"` → DN del administrador del directorio.
+   - `rootpw Admin.Lab.2026` → su contraseña (en claro vale para un laboratorio; en producción un hash de `slappasswd`).
+   - `directory $HOME/lab/ldap/data` → carpeta donde LMDB guarda la base de datos; debe existir y ser una ruta absoluta (por eso se expande `$HOME`).
+
+2. **Terminal 1 (servidor).** Arranca slapd en primer plano, escuchando solo en loopback.
    ```bash
-   cat > ous.ldif <<'EOF'
+   sudo slapd -f slapd.conf -h "ldap://127.0.0.1:389" -d 256
+   ```
+   - `sudo` → el puerto 389 es privilegiado, hace falta root para abrirlo.
+   - `slapd` → el servidor OpenLDAP (en Arch está en el PATH; en Debian/Ubuntu es `/usr/sbin/slapd`).
+   - `-f slapd.conf` → usa este archivo de configuración clásico.
+   - `-h "ldap://127.0.0.1:389"` → URL donde escuchar: protocolo `ldap` (sin cifrar) en loopback, puerto 389. Al atarlo a `127.0.0.1` el directorio no queda expuesto a la red.
+   - `-d 256` → nivel de depuración 256 (estadísticas de conexión); además mantiene slapd en primer plano. Déjalo corriendo en esta terminal.
+
+   Verás las líneas de arranque y `slapd starting`. Si falla por los esquemas, ajusta las rutas `include` a las de tu distro.
+
+3. **Terminal 2 (cliente).** Crea el archivo con la raíz del árbol y las dos OUs.
+   ```bash
+   cd ~/lab/ldap
+   cat > base.ldif <<'EOF'
+   dn: dc=lab,dc=local
+   objectClass: dcObject
+   objectClass: organization
+   o: Lab
+   dc: lab
+
    dn: ou=Contabilidad,dc=lab,dc=local
    objectClass: organizationalUnit
    ou: Contabilidad
@@ -385,13 +373,15 @@ Necesitas: el laboratorio del [ejercicio 1 de Virtualización](../05-virtualizac
    ou: TI
    EOF
    ```
-   - `cat > ous.ldif <<'EOF' ... EOF` → escribe las líneas del heredoc en `ous.ldif` sin expandir nada (ver ejercicio 2, paso 2).
-   - `dn: ou=Contabilidad,dc=lab,dc=local` → nombre distinguido de la entrada nueva: la OU `Contabilidad` colgando de la raíz.
-   - `objectClass: organizationalUnit` → clase de objeto: define que la entrada es una unidad organizativa y qué atributos admite.
-   - `ou: Contabilidad` → atributo obligatorio de esa clase, con el nombre de la OU; debe coincidir con el del DN.
+   - `cat > base.ldif <<'EOF' ... EOF` → escribe las líneas del heredoc en `base.ldif` sin expandir nada (comillas en `'EOF'`).
+   - `dn: dc=lab,dc=local` → la entrada raíz del árbol; su DN coincide con el `suffix` del servidor.
+   - `objectClass: dcObject` / `objectClass: organization` → clases de la raíz: componente de dominio y organización.
+   - `o: Lab` / `dc: lab` → atributos obligatorios de esas clases (nombre de la organización y componente de dominio).
    - Línea en blanco → separa una entrada de la siguiente en LDIF.
-   - `dn: ou=TI,...`, `objectClass`, `ou: TI` → la segunda OU, con las mismas directivas.
-4. Crea el archivo de los tres usuarios. El heredoc sin comillas ejecuta `slappasswd`, que convierte cada contraseña en un hash `{SSHA}` antes de escribirla (está en `/usr/sbin`, fuera del PATH de un usuario normal).
+   - `dn: ou=Contabilidad,dc=lab,dc=local` → la OU `Contabilidad` colgando de la raíz; `objectClass: organizationalUnit` la define como unidad organizativa y `ou: Contabilidad` es su nombre.
+   - `dn: ou=TI,...` → la segunda OU, con las mismas directivas.
+
+4. **Terminal 2 (cliente).** Crea el archivo de los tres usuarios. El heredoc sin comillas ejecuta `slappasswd`, que convierte cada contraseña en un hash `{SSHA}` antes de escribirla.
    ```bash
    cat > usuarios.ldif <<EOF
    dn: uid=ana,ou=Contabilidad,dc=lab,dc=local
@@ -399,132 +389,134 @@ Necesitas: el laboratorio del [ejercicio 1 de Virtualización](../05-virtualizac
    uid: ana
    cn: Ana Rojas
    sn: Rojas
-   userPassword: $(/usr/sbin/slappasswd -s 'Ana.Lab.2026')
+   userPassword: $(slappasswd -s 'Ana.Lab.2026')
 
    dn: uid=luis,ou=Contabilidad,dc=lab,dc=local
    objectClass: inetOrgPerson
    uid: luis
    cn: Luis Mora
    sn: Mora
-   userPassword: $(/usr/sbin/slappasswd -s 'Luis.Lab.2026')
+   userPassword: $(slappasswd -s 'Luis.Lab.2026')
 
    dn: uid=marta,ou=TI,dc=lab,dc=local
    objectClass: inetOrgPerson
    uid: marta
    cn: Marta Solis
    sn: Solis
-   userPassword: $(/usr/sbin/slappasswd -s 'Marta.Lab.2026')
+   userPassword: $(slappasswd -s 'Marta.Lab.2026')
    EOF
    grep userPassword usuarios.ldif
    ```
-   - `cat > usuarios.ldif <<EOF` → heredoc sin comillas en `EOF`: la shell sí expande `$(...)` dentro, por eso se ejecuta `slappasswd`.
+   - `cat > usuarios.ldif <<EOF` → heredoc **sin** comillas: la shell sí expande `$(...)`, por eso se ejecuta `slappasswd`.
    - `dn: uid=ana,ou=Contabilidad,dc=lab,dc=local` → DN del usuario: `uid=ana` dentro de la OU Contabilidad.
    - `objectClass: inetOrgPerson` → clase estándar para personas de una organización; exige `cn` y `sn`.
    - `uid: ana` → identificador de inicio de sesión.
    - `cn: Ana Rojas` → nombre común (completo).
    - `sn: Rojas` → apellido (surname).
-   - `userPassword: $(...)` → contraseña de la entrada, que se rellena con la salida de `slappasswd`.
-   - `/usr/sbin/slappasswd` → genera el hash de una contraseña en el formato que guarda OpenLDAP; por defecto el esquema `{SSHA}` (SHA-1 con sal).
+   - `userPassword: $(slappasswd -s 'Ana.Lab.2026')` → contraseña de la entrada, rellenada con la salida de `slappasswd`.
+   - `slappasswd` → genera el hash de una contraseña en el formato que guarda OpenLDAP; por defecto el esquema `{SSHA}` (SHA-1 con sal). En Debian/Ubuntu está en `/usr/sbin/slappasswd`.
    - `-s 'Ana.Lab.2026'` → la contraseña a convertir en hash, en lugar de pedirla por teclado.
    - Las entradas de `luis` y `marta` → mismas directivas con otros valores.
-   - `grep userPassword usuarios.ldif` → muestra solo las líneas con `userPassword` para revisar los hashes.
-   Cada `userPassword` debe empezar por `{SSHA}`.
-5. Carga los dos archivos como administrador.
-   ```bash
-   ldapadd -x -H ldap://localhost -D cn=admin,dc=lab,dc=local -W -f ous.ldif
-   ldapadd -x -H ldap://localhost -D cn=admin,dc=lab,dc=local -W -f usuarios.ldif
-   ```
-   - `ldapadd` → añade entradas nuevas a un directorio (es `ldapmodify` con `-a` siempre activo).
-   - `-x`, `-H ldap://localhost` → (ver paso 2).
-   - `-D cn=admin,dc=lab,dc=local` → DN con el que se hace el bind: el administrador.
-   - `-W` → pide la contraseña del bind por teclado (la del paso 1), en vez de escribirla en la línea de comandos.
-   - `-f ous.ldif` → lee las entradas de ese archivo en lugar de la entrada estándar; primero las OUs, porque los usuarios cuelgan de ellas.
-   Cada entrada imprime `adding new entry "..."`. Si sale `Invalid credentials (49)`, la contraseña de admin no es la del paso 1.
-6. Comprueba el árbol.
-   ```bash
-   ldapsearch -x -H ldap://localhost -b dc=lab,dc=local -LLL dn
-   ```
-   - Mismo comando y opciones que en el paso 2.
+   - `grep userPassword usuarios.ldif` → muestra solo las líneas con `userPassword`; cada una debe empezar por `{SSHA}`.
 
-   Deben salir seis DN: la raíz `dc=lab,dc=local`, las dos OUs y los tres usuarios. Si sale un séptimo, `cn=admin,dc=lab,dc=local`, es que tu versión del paquete crea al administrador también como entrada del árbol; si no sale, existe igual como `rootDN` en la configuración de slapd y el bind del paso 5 funciona.
-7. En el atacante, date permisos de captura y abre Wireshark. Capturar exige privilegios; la forma recomendada es añadir tu usuario al grupo `wireshark`, que puede ejecutar `dumpcap` (el programa que captura de verdad):
+5. **Terminal 2 (cliente).** Carga los dos archivos como administrador. Primero la raíz y las OUs, porque los usuarios cuelgan de ellas.
    ```bash
-   sudo usermod -aG wireshark "$USER"
+   ldapadd -x -H ldap://127.0.0.1 -D cn=admin,dc=lab,dc=local -W -f base.ldif
+   ldapadd -x -H ldap://127.0.0.1 -D cn=admin,dc=lab,dc=local -W -f usuarios.ldif
    ```
-   - `sudo` → ejecuta como root; modificar los grupos de una cuenta lo exige.
-   - `usermod -aG wireshark` → añade (`-a`) la cuenta al grupo suplementario (`-G`) `wireshark` sin quitarla de los demás.
-   - `"$USER"` → tu nombre de usuario.
+   - `ldapadd` → añade entradas nuevas a un directorio.
+   - `-x` → usa autenticación simple en vez de SASL.
+   - `-H ldap://127.0.0.1` → URI del servidor: LDAP sin cifrar (puerto 389) en loopback.
+   - `-D cn=admin,dc=lab,dc=local` → DN con el que se hace el bind: el administrador (el `rootdn` del paso 1).
+   - `-W` → pide la contraseña del bind por teclado (`Admin.Lab.2026`), en vez de escribirla en la línea de comandos.
+   - `-f base.ldif` → lee las entradas de ese archivo.
+   Cada entrada imprime `adding new entry "..."`. Si sale `Invalid credentials (49)`, la contraseña no es la del `rootpw`.
 
-   Cierra sesión y vuelve a entrar para que el grupo se aplique, y comprueba con `groups` que aparece `wireshark` (en Kali, si el grupo no existe, `sudo dpkg-reconfigure wireshark-common` y responde "Sí" para crearlo). Alternativa rápida para un laboratorio desechable: capturar con `sudo tshark` o `sudo tcpdump` y abrir el archivo después en Wireshark sin root; evita abrir la interfaz gráfica como root. Después empieza a capturar en la interfaz del laboratorio (`eth0` en Kali) con este filtro de captura en la pantalla de inicio:
-   ```
-   tcp port 389
-   ```
-   - `tcp` → solo segmentos TCP.
-   - `port 389` → con origen o destino en el puerto 389 (LDAP sin cifrar).
-
-   Doble clic en `eth0` para empezar.
-8. En el atacante, en una terminal, autentícate como `ana` con bind simple contra la víctima y busca a todos los usuarios. Cuando pida la contraseña, escribe `Ana.Lab.2026`.
+6. **Terminal 2 (cliente).** Comprueba el árbol con un bind anónimo.
    ```bash
-   ldapsearch -x -H ldap://10.10.10.101 -D uid=ana,ou=Contabilidad,dc=lab,dc=local -W \
+   ldapsearch -x -H ldap://127.0.0.1 -b dc=lab,dc=local -LLL dn
+   ```
+   - `ldapsearch` → cliente que hace búsquedas en un directorio LDAP.
+   - `-x` → autenticación simple; sin `-D` el bind es anónimo.
+   - `-H ldap://127.0.0.1` → (ver paso 5).
+   - `-b dc=lab,dc=local` → base de la búsqueda: el punto del árbol desde el que se busca.
+   - `-LLL` → salida en formato LDIF, sin comentarios ni línea de versión.
+   - `dn` → atributo que se pide; como el DN siempre se imprime, sirve para listar solo los nombres. Sin filtro se usa `(objectClass=*)`, que coincide con todas.
+
+   Salen seis DN: la raíz, las dos OUs y los tres usuarios. Esa consulta fue **anónima** y devolvió datos: anótalo, con esta configuración mínima el directorio deja leer el árbol sin autenticación; en un directorio real eso debe limitarse.
+
+7. **Terminal 3 (captura).** Date permisos de captura (ver "Necesitas") y deja corriendo una captura del puerto LDAP en loopback.
+   ```bash
+   sudo tshark -i lo -f "tcp port 389" -w ~/lab/ldap/ldap.pcapng
+   ```
+   - `sudo` → capturar en una interfaz requiere privilegios (o estar en el grupo `wireshark`).
+   - `tshark` → versión de terminal de Wireshark.
+   - `-i lo` → captura en loopback, por donde habla el cliente con el servidor en `127.0.0.1`.
+   - `-f "tcp port 389"` → filtro de captura (sintaxis BPF): solo TCP con origen o destino en el 389 (LDAP sin cifrar).
+   - `-w ~/lab/ldap/ldap.pcapng` → escribe los paquetes en ese archivo en formato pcapng.
+
+8. **Terminal 2 (cliente).** Autentícate como `ana` con bind simple y busca a las personas. Cuando pida la contraseña, escribe `Ana.Lab.2026`.
+   ```bash
+   ldapsearch -x -H ldap://127.0.0.1 -D uid=ana,ou=Contabilidad,dc=lab,dc=local -W \
      -b dc=lab,dc=local -LLL '(objectClass=inetOrgPerson)' cn uid
    ```
-   - `-x` → bind simple (ver paso 2): la contraseña viaja tal cual dentro del mensaje.
-   - `-H ldap://10.10.10.101` → el servidor LDAP de la víctima, sin cifrar.
+   - `-x` → bind simple: la contraseña viaja tal cual dentro del mensaje.
+   - `-H ldap://127.0.0.1` → el servidor, sin cifrar.
    - `-D uid=ana,ou=Contabilidad,dc=lab,dc=local` → DN con el que te autenticas: la usuaria `ana`.
-   - `-W` → pide la contraseña por teclado (ver paso 5).
+   - `-W` → pide la contraseña por teclado.
    - `\` → continúa el comando en la línea siguiente.
-   - `-b dc=lab,dc=local`, `-LLL` → (ver paso 2).
-   - `'(objectClass=inetOrgPerson)'` → filtro de búsqueda: solo entradas de la clase `inetOrgPerson` (las personas).
+   - `-b dc=lab,dc=local`, `-LLL` → (ver paso 6).
+   - `'(objectClass=inetOrgPerson)'` → filtro de búsqueda: solo las personas.
    - `cn uid` → atributos que se devuelven de cada entrada.
    Devuelve las tres personas con su `cn` y `uid`.
-9. Repite con una contraseña equivocada (escribe cualquier otra cosa cuando la pida).
+
+9. **Terminal 2 (cliente).** Repite con una contraseña equivocada (escribe cualquier otra cosa cuando la pida).
    ```bash
-   ldapsearch -x -H ldap://10.10.10.101 -D uid=ana,ou=Contabilidad,dc=lab,dc=local -W -b dc=lab,dc=local -LLL dn
+   ldapsearch -x -H ldap://127.0.0.1 -D uid=ana,ou=Contabilidad,dc=lab,dc=local -W -b dc=lab,dc=local -LLL dn
    ```
-   - `-x`, `-H`, `-D`, `-W` → (ver paso 8); `-b`, `-LLL`, `dn` → (ver paso 2).
+   - `-x`, `-H`, `-D`, `-W` → (ver paso 8); `-b`, `-LLL`, `dn` → (ver paso 6).
 
    Responde `ldap_bind: Invalid credentials (49)`.
-10. Detén la captura en Wireshark (cuadrado rojo) y aplica el filtro de visualización de las peticiones de bind:
-    ```
-    ldap.protocolOp == 0
-    ```
-    - `ldap.protocolOp` → campo de Wireshark con el tipo de operación del mensaje LDAP.
-    - `== 0` → el valor 0 es `bindRequest`, la petición de autenticación.
 
-    Salen dos paquetes `bindRequest(1) "uid=ana,ou=Contabilidad,dc=lab,dc=local" simple`. En el detalle, abre Lightweight Directory Access Protocol → LDAPMessage bindRequest → authentication: simple: ahí está `simple: Ana.Lab.2026` en el primero y la contraseña errónea en el segundo, en texto claro.
-11. Mira las respuestas con el filtro:
-    ```
-    ldap.protocolOp == 1
-    ```
-    - `ldap.protocolOp == 1` → el valor 1 es `bindResponse`, la respuesta del servidor al bind.
-
-    Son los `bindResponse`: el primero con `resultCode: success (0)` y el segundo con `resultCode: invalidCredentials (49)`. Un IDS o un SIEM que vea muchos 49 seguidos del mismo origen está viendo fuerza bruta.
-12. Guarda la captura (File → Save As → `ldap.pcapng`) y extrae lo mismo desde la terminal:
+10. **Terminal 3 (captura).** Detén la captura con `Ctrl+C` y extrae las peticiones de bind con su contraseña en claro.
     ```bash
-    tshark -r ldap.pcapng -Y 'ldap.protocolOp == 0' -T fields -e ip.src -e ldap.name -e ldap.simple
+    tshark -r ~/lab/ldap/ldap.pcapng -Y 'ldap.protocolOp == 0' -T fields -e ip.src -e ldap.name -e ldap.simple
     ```
-    - `tshark -r ldap.pcapng` → lee la captura guardada.
-    - `-Y 'ldap.protocolOp == 0'` → solo los `bindRequest` (ver paso 10).
+    - `tshark -r ~/lab/ldap/ldap.pcapng` → lee la captura guardada.
+    - `-Y 'ldap.protocolOp == 0'` → filtro de visualización: el valor 0 es `bindRequest`, la petición de autenticación.
     - `-T fields` → imprime solo los campos pedidos con `-e`.
     - `-e ip.src` → IP de origen del paquete.
     - `-e ldap.name` → el DN con el que se hace el bind.
     - `-e ldap.simple` → la contraseña del bind simple.
-    Dos líneas con la IP del atacante, el DN y cada contraseña tal como se tecleó.
+    Dos líneas, ambas desde `127.0.0.1`, con el DN de `ana` y cada contraseña tal como se tecleó (`Ana.Lab.2026` y la errónea): la contraseña viaja en texto claro.
+
+11. **Terminal 3 (captura).** Mira las respuestas del servidor.
+    ```bash
+    tshark -r ~/lab/ldap/ldap.pcapng -Y 'ldap.protocolOp == 1' -T fields -e ldap.resultCode
+    ```
+    - `-Y 'ldap.protocolOp == 1'` → el valor 1 es `bindResponse`, la respuesta del servidor al bind.
+    - `-e ldap.resultCode` → código de resultado del bind.
+    El primero sale `0` (success) y el segundo `49` (invalidCredentials). Un IDS o un SIEM que vea muchos 49 seguidos del mismo origen está viendo fuerza bruta.
 
 ### Resultado esperado
 
-Un directorio `dc=lab,dc=local` con `ou=Contabilidad` (ana, luis) y `ou=TI` (marta), y una captura `ldap.pcapng` donde se leen el DN y la contraseña de dos binds simples, uno con `success` y otro con `invalidCredentials (49)`.
+Un directorio `dc=lab,dc=local` con `ou=Contabilidad` (ana, luis) y `ou=TI` (marta), y una captura `ldap.pcapng` donde se leen el DN y la contraseña de dos binds simples, uno con `success (0)` y otro con `invalidCredentials (49)`.
 
 ### Comprueba que lo lograste
 
 - ¿Qué operación LDAP es la autenticación y en qué paquete viaja la contraseña? Respuesta: el Bind; va en el campo `simple` del `bindRequest`.
 - La contraseña está guardada como `{SSHA}` en el servidor. ¿Por qué igualmente se ve en claro en la red? Respuesta: el hash protege el almacenamiento, no el transporte; el bind simple manda la contraseña tal cual y el servidor la compara con el hash.
 - ¿Qué tres opciones evitan que se vea? Respuesta: StartTLS en el 389 (`ldapsearch -ZZ`), LDAPS en el 636, o un bind SASL (por ejemplo Kerberos/GSSAPI) que no manda la contraseña.
-- ¿Qué hallazgo de configuración apareció en el paso 2? Respuesta: el bind anónimo puede leer el árbol; en un directorio real debe desactivarse o limitarse.
+- ¿Qué hallazgo de configuración apareció en el paso 6? Respuesta: el bind anónimo puede leer el árbol; en un directorio real debe desactivarse o limitarse.
 
 ### Limpieza
 
-En la víctima, si no vas a reutilizar el directorio: `sudo apt purge slapd` y `sudo rm -rf /var/lib/ldap`. O restaura el snapshot `limpio` si lo tomaste antes de instalar slapd.
+1. En la Terminal 1, para el servidor con `Ctrl+C`.
+2. Borra la carpeta del laboratorio (incluye la base de datos y la captura):
+   ```bash
+   rm -rf ~/lab/ldap
+   ```
+   - `rm -rf ~/lab/ldap` → borra la carpeta de forma recursiva y sin preguntar.
 
 ## Ejercicio 4: Exige certificado de cliente en nginx con mTLS
 
@@ -540,7 +532,7 @@ Necesitas: un Linux con `openssl` y `curl` (vienen en casi todas las distribucio
    ```bash
    mkdir -p ~/lab/mtls/certs && cd ~/lab/mtls/certs
    ```
-   - `mkdir -p`, `&&`, `cd` → (ver ejercicio 2, paso 1).
+   - `mkdir -p` → crea el directorio y los padres que falten; `&&` encadena si la orden anterior fue bien; `cd` entra en la carpeta.
 2. Crea la CA: una clave RSA 3072 y un certificado autofirmado de un año marcado como CA.
    ```bash
    openssl req -x509 -newkey rsa:3072 -sha256 -days 365 -nodes \
@@ -574,7 +566,7 @@ Necesitas: un Linux con `openssl` y `curl` (vienen en casi todas las distribucio
    ```
    - `openssl req -newkey rsa:2048 -nodes -keyout servidor.key -subj "/CN=localhost"` → (ver paso 2); sin `-x509` genera una petición (CSR) con una clave RSA de 2048 bits.
    - `-out servidor.csr` → archivo donde se guarda la CSR.
-   - `cat > servidor.ext <<'EOF' ... EOF` → escribe el archivo de extensiones (ver ejercicio 2, paso 2).
+   - `cat > servidor.ext <<'EOF' ... EOF` → `cat` vuelca en `servidor.ext` las líneas del heredoc; con comillas en `'EOF'` la shell no expande nada dentro.
    - `basicConstraints=CA:FALSE` → este certificado no puede firmar otros.
    - `keyUsage=critical,digitalSignature,keyEncipherment` → la clave sirve para firmar y para cifrar claves de sesión.
    - `extendedKeyUsage=serverAuth` → uso permitido: autenticar un servidor TLS.
@@ -632,7 +624,7 @@ Necesitas: un Linux con `openssl` y `curl` (vienen en casi todas las distribucio
    - Primer `openssl req -x509 ...` → crea la segunda CA con las opciones del paso 2 (clave de 2048 bits, 30 días, `CN=Otra CA`, sin `cRLSign`).
    - Segundo `openssl req ...` → CSR del intruso (ver paso 3).
    - `openssl x509 -req ... -CA otra-ca.crt -CAkey otra-ca.key` → firma la CSR con la CA ajena (resto de opciones en el paso 3); reutiliza `cliente.ext`.
-   - `chmod 644` → lectura para todos, escritura solo para el dueño (ver ejercicio 2, paso 3); deja que el nginx del contenedor lea los archivos. En un servidor real las claves serían `600` y propiedad del usuario del servicio.
+   - `chmod 644` → permisos de lectura y escritura para el dueño y solo lectura para grupo y otros; deja que el nginx del contenedor lea los archivos. En un servidor real las claves serían `600` y propiedad del usuario del servicio.
    - `*.crt *.key` → la shell expande los comodines a todos los certificados y claves de la carpeta.
 7. Escribe la configuración completa de nginx. La respuesta devuelve el DN del cliente que nginx validó.
    ```bash
@@ -679,12 +671,12 @@ Necesitas: un Linux con `openssl` y `curl` (vienen en casi todas las distribucio
      nginx:stable
    docker logs nginx-mtls 2>&1 | tail -3
    ```
-   - `docker run --rm -d --name nginx-mtls` → (ver ejercicio 2, paso 4).
+   - `docker run` → crea y arranca un contenedor a partir de una imagen; `--rm` lo borra al detenerse, `-d` (`--detach`) lo deja en segundo plano y `--name nginx-mtls` le da nombre. Docker es solo el envoltorio del servidor nginx: todo sigue ocurriendo en tu equipo, sobre `127.0.0.1`.
    - `-p 127.0.0.1:8443:443` → publica el 443 del contenedor en el 8443 del host, solo en la interfaz `127.0.0.1` (no accesible desde la red).
    - `-v ~/lab/mtls/default.conf:/etc/nginx/conf.d/default.conf:ro` → sustituye la configuración por defecto de nginx por la tuya, en solo lectura.
    - `-v ~/lab/mtls/certs:/etc/nginx/certs:ro` → monta la carpeta de certificados donde la busca la configuración.
    - `nginx:stable` → imagen oficial de nginx, rama estable.
-   - `docker logs nginx-mtls 2>&1 | tail -3` → (ver ejercicio 2, paso 4).
+   - `docker logs nginx-mtls 2>&1 | tail -3` → muestra la salida del contenedor; `2>&1` envía también la salida de errores a la normal y `tail -3` deja las 3 últimas líneas.
    No debe haber líneas `[emerg]`. Si las hay, el mensaje dice qué directiva o archivo falla.
 9. Caso 1, sin certificado de cliente.
    ```bash
@@ -746,4 +738,6 @@ docker stop nginx-mtls
 docker rmi nginx:stable
 rm -r ~/lab/mtls
 ```
-- `docker stop`, `docker rmi`, `rm -r` → (ver la limpieza del ejercicio 2).
+- `docker stop nginx-mtls` → detiene el contenedor; como se lanzó con `--rm`, además se borra.
+- `docker rmi nginx:stable` → borra la imagen descargada.
+- `rm -r ~/lab/mtls` → borra la carpeta del laboratorio de forma recursiva.

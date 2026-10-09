@@ -1,6 +1,6 @@
 # Ejercicios: Detección y monitoreo
 
-Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice qué vas a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría está en [README.md](README.md).
+Ejercicios guiados para hacer en tu propio equipo. Cada uno dice qué vas a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría está en [README.md](README.md).
 
 ## Ejercicio 1: Suricata como IDS y luego como IPS
 
@@ -10,59 +10,41 @@ Objetivo: cargar en Suricata las dos reglas de laboratorio de la nota (ping y ca
 
 Necesitas:
 
-- VirtualBox con dos VMs Ubuntu Server 24.04 (o Debian 12), 2 GB de RAM cada una. Las dos con un adaptador "Red solo-anfitrión" (`vboxnet0`, red `192.168.56.0/24`). El adaptador NAT solo hace falta para instalar paquetes; desactívalo (Configuración → Red → Adaptador 1 → desmarcar "Habilitar adaptador de red") antes de generar tráfico.
-- VM `sensor` con IP `192.168.56.20`: Suricata, `jq` y Python 3. Instalación: `sudo apt update && sudo apt install -y suricata jq python3`.
-- VM `cliente` con IP `192.168.56.10`: `curl` e `iputils-ping` (vienen de serie).
+- Un solo equipo Linux. Todo el ejercicio corre en él, en varias terminales, contra la interfaz de loopback (`127.0.0.1` / `lo`): **Terminal 1 (servidor víctima)** levanta un servidor web, **Terminal 2 (Suricata)** lleva el motor y **Terminal 3 (cliente)** genera el tráfico con `ping` y `curl`. No hacen falta máquinas virtuales ni una segunda tarjeta de red.
+- Suricata, `jq` y Python 3. Instalación:
+  - Debian/Ubuntu: `sudo apt update && sudo apt install -y suricata jq python3`
+  - Arch: `sudo pacman -S suricata jq python`
+  En Arch el binario de Python es `python` (hay symlink `python3` en instalaciones recientes). El paquete `suricata` de Arch no arranca el servicio solo; si lo quisieras como demonio se activa con `sudo systemctl start suricata` (Debian suele dejarlo arrancado tras instalar). En este ejercicio, de hecho, lo pararemos para lanzarlo a mano.
+- nftables (para el modo inline). Instalación:
+  - Debian/Ubuntu: `sudo apt install -y nftables`
+  - Arch: `sudo pacman -S nftables`
+  Arch ya trae nftables por defecto; si usas `iptables`, en Arch el camino moderno es `iptables-nft` (un `iptables` que escribe reglas de nftables por debajo).
+- `curl` e `iputils`/`ping` para generar el tráfico (vienen de serie; en Arch el ping lo trae `iputils`).
 - Tiempo estimado: 60 minutos.
+
+> [!WARNING]
+> Las reglas y el modo inline de este ejercicio actúan solo sobre tráfico de loopback que tú mismo generas contra `127.0.0.1`. No apuntes estas técnicas contra equipos ajenos ni servicios que no hayas levantado tú en este equipo.
 
 ### Pasos
 
-1. Fija las IPs del laboratorio. En cada VM comprueba el nombre de la interfaz solo-anfitrión (normalmente `enp0s8`):
+1. Comprueba que tienes loopback en marcha (donde hablarán el servidor y el cliente) y abre tres terminales en el mismo equipo:
    ```bash
-   ip -br link
+   ip -br addr show lo
+   ping -c 1 127.0.0.1
    ```
    - `ip` → herramienta de iproute2 para ver y configurar interfaces, direcciones y rutas.
    - `-br` → salida breve (`-brief`): una línea por interfaz con nombre, estado y dirección.
-   - `link` → objeto sobre el que actúa: las interfaces de red (capa 2); sin más argumentos las lista todas.
+   - `addr show lo` → muestra las direcciones de la interfaz de loopback `lo`; debe aparecer `lo  UNKNOWN  127.0.0.1/8`.
+   - `ping -c 1 127.0.0.1` → envía un paquete ICMP Echo Request a loopback y espera respuesta (`-c 1` envía uno solo y termina).
 
-   En `sensor`, crea `/etc/netplan/60-lab.yaml` con este contenido completo (en `cliente` cambia la dirección por `192.168.56.10/24`):
-   ```yaml
-   network:
-     version: 2
-     ethernets:
-       enp0s8:
-         addresses: [192.168.56.20/24]
-   ```
-   - `network:` → clave raíz obligatoria de todo archivo de netplan.
-   - `version: 2` → versión del formato de configuración de netplan; la única vigente es la 2.
-   - `ethernets:` → sección de interfaces Ethernet físicas.
-   - `enp0s8:` → nombre de la interfaz que se configura (la solo-anfitrión que viste con `ip -br link`).
-   - `addresses: [192.168.56.20/24]` → lista de direcciones IP estáticas con su prefijo; `/24` es la máscara 255.255.255.0.
-
-   Aplícalo y verifica:
-   ```bash
-   sudo chmod 600 /etc/netplan/60-lab.yaml
-   sudo netplan apply
-   ip -br addr show enp0s8
-   ```
-   - `sudo` → ejecuta el comando que sigue como root.
-   - `chmod 600` → cambia los permisos a lectura y escritura solo para el dueño (root); netplan avisa si sus archivos son legibles por otros.
-   - `/etc/netplan/60-lab.yaml` → archivo al que se aplican los permisos; el `60-` fija el orden en que netplan lo lee.
-   - `netplan apply` → genera la configuración para el backend de red (systemd-networkd o NetworkManager) y la aplica en el momento.
-   - `ip -br` → (ver paso 1).
-   - `addr show enp0s8` → muestra las direcciones IP solo de la interfaz `enp0s8`.
-   - `ping` → envía paquetes ICMP Echo Request y espera la respuesta.
-   - `-c 1` → envía un solo paquete y termina.
-   - `192.168.56.20` → destino del ping (`sensor`).
-
-   Debe verse `enp0s8  UP  192.168.56.20/24`. Desde `cliente`, `ping -c 1 192.168.56.20` tiene que responder.
-2. En `sensor`, detén el servicio de Suricata que el paquete arranca solo, para lanzarlo a mano con tus reglas:
+   En una red real el "sensor" (Suricata) y el "cliente" estarían en máquinas distintas; aquí los dos papeles viven en el mismo equipo y el tráfico que observarás por `lo` es idéntico al que viajaría entre dos hosts.
+2. En la **Terminal 2 (Suricata)**, detén el servicio de Suricata que el paquete arranca solo (si estaba activo), para lanzarlo a mano con tus reglas:
    ```bash
    sudo systemctl stop suricata
    suricata --build-info | grep -E 'Version|NFQueue'
    ```
-   - `sudo` → (ver paso 1).
-   - `systemctl stop suricata` → detiene ahora el servicio `suricata` de systemd (no lo deshabilita para el próximo arranque).
+   - `sudo` → ejecuta el comando que sigue como root.
+   - `systemctl stop suricata` → detiene ahora el servicio `suricata` de systemd (no lo deshabilita para el próximo arranque). En Arch, si nunca lo arrancaste, este comando no hace nada y no pasa nada.
    - `suricata --build-info` → muestra con qué opciones se compiló este binario de Suricata.
    - `|` → tubería: la salida del comando de la izquierda pasa como entrada al de la derecha.
    - `grep` → filtra y muestra solo las líneas que coinciden con un patrón.
@@ -86,7 +68,7 @@ Necesitas:
    - `sid:1000001` / `sid:1000002` → identificador único de la regla; de 1000000 en adelante es el rango reservado para reglas locales.
    - `rev:1` → revisión de la regla; se incrementa cada vez que se edita.
    - `;` → separa cada opción dentro de los paréntesis; la última también lo lleva.
-4. La parte de `/etc/suricata/suricata.yaml` que importa es la variable `HOME_NET`, que por defecto incluye todas las redes privadas:
+4. La parte de `/etc/suricata/suricata.yaml` que importa es la variable `HOME_NET`. Como ahora todo pasa por loopback, la fijaremos a la red de loopback al lanzar Suricata, sin tocar el yaml:
    ```yaml
    vars:
      address-groups:
@@ -94,60 +76,61 @@ Necesitas:
    ```
    - `vars:` → sección de variables que las reglas pueden usar.
    - `address-groups:` → grupo de variables de direcciones IP (las de puertos van en `port-groups`).
-   - `HOME_NET: "[...]"` → la red que se protege; aquí, los tres rangos privados de RFC 1918. Las reglas la usan como `$HOME_NET`.
+   - `HOME_NET: "[...]"` → la red que se protege; aquí, por defecto, los tres rangos privados de RFC 1918. Las reglas la usan como `$HOME_NET`.
 
-   No la edites: se sobrescribe al lanzar Suricata con `--set`. Valida la configuración y las reglas antes de arrancar:
+   No la edites: se sobrescribe al lanzar Suricata con `--set`. Valida la configuración y las reglas antes de arrancar, apuntando `HOME_NET` a loopback:
    ```bash
    sudo suricata -T -c /etc/suricata/suricata.yaml -S /etc/suricata/rules/local.rules \
-     --set "vars.address-groups.HOME_NET=[192.168.56.0/24]" -v
+     --set "vars.address-groups.HOME_NET=[127.0.0.0/8]" -v
    ```
-   - `sudo` → (ver paso 1).
+   - `sudo` → (ver paso 2).
    - `suricata` → el motor IDS/IPS.
    - `-T` → modo prueba: carga configuración y reglas, informa de errores y termina sin inspeccionar tráfico.
-   - `-c /etc/suricata/suricata.yaml` → ruta del archivo de configuración principal.
+   - `-c /etc/suricata/suricata.yaml` → ruta del archivo de configuración principal (en Arch está en la misma ruta).
    - `-S /etc/suricata/rules/local.rules` → carga exclusivamente este archivo de reglas e ignora las reglas que liste el yaml.
    - `\` → al final de la línea, continúa el mismo comando en la línea siguiente.
-   - `--set "vars.address-groups.HOME_NET=[192.168.56.0/24]"` → sobrescribe un valor del yaml solo para esta ejecución; la ruta con puntos sigue la jerarquía `vars` → `address-groups` → `HOME_NET`.
+   - `--set "vars.address-groups.HOME_NET=[127.0.0.0/8]"` → sobrescribe un valor del yaml solo para esta ejecución; `127.0.0.0/8` es toda la red de loopback, que incluye `127.0.0.1`. La ruta con puntos sigue la jerarquía `vars` → `address-groups` → `HOME_NET`.
    - `-v` → aumenta el nivel de detalle de los mensajes de Suricata.
 
    Al final debe aparecer `Configuration provided was successfully loaded. Exiting.` y una línea que dice `2 rules successfully loaded`.
-5. Arranca un servidor web mínimo en `sensor` (en una segunda terminal o sesión SSH) para que el `curl` tenga a quién pedir:
+5. En la **Terminal 1 (servidor víctima)**, arranca un servidor web mínimo en loopback para que el `curl` tenga a quién pedir, y déjalo corriendo:
    ```bash
-   sudo python3 -m http.server 80
+   sudo python3 -m http.server 80 --bind 127.0.0.1
    ```
-   - `sudo` → (ver paso 1); hace falta porque los puertos por debajo de 1024 requieren root.
-   - `python3` → el intérprete de Python 3.
+   - `sudo` → (ver paso 2); hace falta porque los puertos por debajo de 1024 requieren root.
+   - `python3` → el intérprete de Python 3 (en Arch, `python`).
    - `-m http.server` → ejecuta el módulo `http.server` de la biblioteca estándar como programa: un servidor web que sirve el directorio actual.
    - `80` → puerto en el que escucha el servidor (por defecto usaría el 8000).
-6. Lanza Suricata como IDS, escuchando una copia del tráfico de la interfaz:
+   - `--bind 127.0.0.1` → escucha solo en la interfaz de loopback, no en todas las interfaces.
+6. En la **Terminal 2 (Suricata)**, lanza Suricata como IDS, escuchando una copia del tráfico de loopback:
    ```bash
    sudo rm -f /var/log/suricata/fast.log /var/log/suricata/eve.json
    sudo suricata -c /etc/suricata/suricata.yaml -S /etc/suricata/rules/local.rules \
-     --set "vars.address-groups.HOME_NET=[192.168.56.0/24]" -k none -i enp0s8
+     --set "vars.address-groups.HOME_NET=[127.0.0.0/8]" -k none -i lo
    ```
    - `rm` → borra archivos.
    - `-f` → no da error si el archivo no existe y no pide confirmación.
    - `/var/log/suricata/fast.log` → log de alertas de Suricata en una línea por alerta.
    - `/var/log/suricata/eve.json` → log de eventos de Suricata en JSON, un objeto por línea.
    - `-c`, `-S`, `--set`, `\` → (ver paso 4).
-   - `-k none` → desactiva todas las comprobaciones de checksum, que en VirtualBox suelen fallar por el offloading de la tarjeta virtual.
-   - `-i enp0s8` → captura una copia de los paquetes de la interfaz `enp0s8` con el mejor método disponible; Suricata solo observa, no está en el camino.
+   - `-k none` → desactiva todas las comprobaciones de checksum; en loopback el offloading del kernel hace que los checksums no estén calculados y, sin esto, Suricata descartaría los paquetes.
+   - `-i lo` → captura una copia de los paquetes de la interfaz de loopback `lo` con el mejor método disponible; Suricata solo observa, no está en el camino.
    Espera a ver `Engine started.` (en versiones antiguas, `all ... packet processing threads ... started`).
-7. Desde `cliente`, genera el tráfico y luego mira las alertas en `sensor`:
+7. En la **Terminal 3 (cliente)**, genera el tráfico y luego mira las alertas:
    ```bash
-   ping -c 1 192.168.56.20
-   curl http://192.168.56.20/hola-ids
+   ping -c 1 127.0.0.1
+   curl http://127.0.0.1/hola-ids
    ```
-   - `ping -c 1 192.168.56.20` → (ver paso 1); dispara la regla 1000001.
+   - `ping -c 1 127.0.0.1` → (ver paso 1); dispara la regla 1000001.
    - `curl` → cliente HTTP de línea de comandos; sin opciones hace un GET y muestra el cuerpo de la respuesta.
-   - `http://192.168.56.20/hola-ids` → URL pedida; su ruta contiene la cadena de la regla 1000002.
+   - `http://127.0.0.1/hola-ids` → URL pedida al servidor local; su ruta contiene la cadena de la regla 1000002.
 
-   El `curl` devuelve un 404 del servidor Python: es normal, la regla mira la petición, no la respuesta. En `sensor`:
+   El `curl` devuelve un 404 del servidor Python: es normal, la regla mira la petición, no la respuesta. En otra terminal (o en la de Suricata, cuando lo detengas):
    ```bash
    sudo cat /var/log/suricata/fast.log
    sudo jq -c 'select(.event_type=="alert") | {src_ip, dest_ip, sid: .alert.signature_id, action: .alert.action}' /var/log/suricata/eve.json
    ```
-   - `sudo` → (ver paso 1); los logs de Suricata solo los lee root.
+   - `sudo` → (ver paso 2); los logs de Suricata solo los lee root.
    - `cat` → muestra el contenido del archivo en pantalla.
    - `jq` → procesador de JSON en línea de comandos.
    - `-c` → salida compacta: cada resultado en una sola línea.
@@ -155,20 +138,20 @@ Necesitas:
    - `|` (dentro de las comillas) → tubería de jq: pasa cada objeto filtrado a la expresión siguiente.
    - `{src_ip, dest_ip, sid: .alert.signature_id, action: .alert.action}` → construye un objeto nuevo con la IP de origen, la de destino, el sid de la regla y la acción tomada (`allowed` o `blocked`).
    - `/var/log/suricata/eve.json` → archivo de entrada de jq.
-   Salida esperada (las horas cambian):
+   Salida esperada (las horas cambian; origen y destino son `127.0.0.1` porque el tráfico no sale del equipo):
    ```
-   10/02/2026-14:03:11.120344  [**] [1:1000001:1] LAB ICMP Echo Request hacia la red interna [**] [Classification: (null)] [Priority: 3] {ICMP} 192.168.56.10:8 -> 192.168.56.20:0
-   10/02/2026-14:03:15.402981  [**] [1:1000002:1] LAB cadena de prueba en el URI [**] [Classification: (null)] [Priority: 3] {TCP} 192.168.56.10:51544 -> 192.168.56.20:80
-   {"src_ip":"192.168.56.10","dest_ip":"192.168.56.20","sid":1000001,"action":"allowed"}
-   {"src_ip":"192.168.56.10","dest_ip":"192.168.56.20","sid":1000002,"action":"allowed"}
+   10/02/2026-14:03:11.120344  [**] [1:1000001:1] LAB ICMP Echo Request hacia la red interna [**] [Classification: (null)] [Priority: 3] {ICMP} 127.0.0.1:8 -> 127.0.0.1:0
+   10/02/2026-14:03:15.402981  [**] [1:1000002:1] LAB cadena de prueba en el URI [**] [Classification: (null)] [Priority: 3] {TCP} 127.0.0.1:51544 -> 127.0.0.1:80
+   {"src_ip":"127.0.0.1","dest_ip":"127.0.0.1","sid":1000001,"action":"allowed"}
+   {"src_ip":"127.0.0.1","dest_ip":"127.0.0.1","sid":1000002,"action":"allowed"}
    ```
-   `"action":"allowed"`: Suricata vio y avisó, pero el ping tuvo respuesta y el servidor recibió la petición. Eso es un IDS. Detén Suricata con `Ctrl+C`.
+   `"action":"allowed"`: Suricata vio y avisó, pero el ping tuvo respuesta y el servidor recibió la petición. Eso es un IDS. Detén Suricata con `Ctrl+C` en la Terminal 2.
 8. Pasa a IPS. Cambia `alert` por `drop` en las dos reglas y sube la revisión, como se hace al editar una regla:
    ```bash
    sudo sed -i -e 's/^alert /drop /' -e 's/rev:1;/rev:2;/' /etc/suricata/rules/local.rules
    cat /etc/suricata/rules/local.rules
    ```
-   - `sudo` → (ver paso 1).
+   - `sudo` → (ver paso 2).
    - `sed` → editor de flujo: aplica sustituciones a un texto línea por línea.
    - `-i` → edita el archivo en el sitio en lugar de imprimir el resultado.
    - `-e 's/^alert /drop /'` → primera expresión: sustituye `alert ` por `drop ` solo al principio de la línea (`^`).
@@ -184,73 +167,74 @@ Necesitas:
    - `drop` → acción: si la regla coincide, descarta el paquete y genera alerta; solo descarta de verdad si Suricata está inline (paso 10).
    - `rev:2` → nueva revisión tras la edición.
    - Resto de opciones → (ver paso 3).
-9. Pon a Suricata en el camino del tráfico. Con `-i` solo recibe una copia; para poder descartar, el kernel debe entregarle cada paquete y esperar su veredicto. Crea `/etc/suricata/lab-nfqueue.nft` con este contenido completo, que manda a la cola 0 solo el tráfico con `cliente` (tu SSH desde el anfitrión no pasa por Suricata):
+9. Pon a Suricata en el camino del tráfico. Con `-i` solo recibe una copia; para poder descartar, el kernel debe entregarle cada paquete y esperar su veredicto. Crea `/etc/suricata/lab-nfqueue.nft` con este contenido completo, que manda a la cola 0 solo el tráfico del laboratorio por loopback (ping y HTTP al puerto 80); el resto del sistema no se toca:
    ```
    table inet suricata_lab {
        chain input {
            type filter hook input priority 0; policy accept;
-           ip saddr 192.168.56.10 queue num 0 bypass
-       }
-       chain output {
-           type filter hook output priority 0; policy accept;
-           ip daddr 192.168.56.10 queue num 0 bypass
+           iif "lo" icmp type echo-request queue num 0 bypass
+           iif "lo" tcp dport 80 queue num 0 bypass
+           iif "lo" tcp sport 80 queue num 0 bypass
        }
    }
    ```
    - `table inet suricata_lab` → crea una tabla llamada `suricata_lab` de la familia `inet`, que cubre a la vez IPv4 e IPv6.
-   - `chain input` / `chain output` → cadenas (listas de reglas) con esos nombres dentro de la tabla.
+   - `chain input` → cadena (lista de reglas) enganchada al tráfico que llega a esta máquina.
    - `type filter` → tipo de cadena de filtrado de paquetes.
-   - `hook input` → se engancha a los paquetes que llegan dirigidos a esta máquina.
-   - `hook output` → se engancha a los paquetes que genera esta máquina hacia fuera.
+   - `hook input` → se engancha a los paquetes que llegan dirigidos a esta máquina; un paquete que generas hacia `127.0.0.1` sale por el camino de salida y se recibe por este hook de entrada, así que basta con enganchar aquí para inspeccionarlo una sola vez.
    - `priority 0` → orden de evaluación respecto a otras cadenas en el mismo hook; 0 es la prioridad estándar de filtrado.
    - `policy accept` → lo que no coincida con ninguna regla de la cadena se acepta.
-   - `ip saddr 192.168.56.10` → coincide con paquetes IPv4 cuya IP de origen es la de `cliente`.
-   - `ip daddr 192.168.56.10` → coincide con paquetes IPv4 cuya IP de destino es la de `cliente`.
-   - `queue num 0` → en lugar de aceptar o descartar, entrega el paquete a la cola NFQUEUE 0, donde un programa de usuario (Suricata) da el veredicto. Se encolan las dos direcciones para que Suricata reconstruya la sesión TCP completa.
-   - `bypass` → si nadie escucha la cola, el kernel acepta el paquete: es el fail-open de la nota. Sin `bypass` sería fail-closed y, con Suricata caído, `cliente` no podría hablar con `sensor`.
+   - `iif "lo"` → solo paquetes que entran por la interfaz de loopback `lo`; así solo se encola el tráfico del laboratorio y no el resto del sistema.
+   - `icmp type echo-request` → los ping de ida (equivale al `itype:8` de la regla).
+   - `tcp dport 80` → la petición HTTP hacia el servidor (lleva el URI que inspecciona la regla).
+   - `tcp sport 80` → la respuesta del servidor; se encola también para que Suricata reconstruya la sesión TCP completa.
+   - `queue num 0` → en lugar de aceptar o descartar, entrega el paquete a la cola NFQUEUE 0, donde un programa de usuario (Suricata) da el veredicto.
+   - `bypass` → si nadie escucha la cola, el kernel acepta el paquete: es el fail-open de la nota. Sin `bypass` sería fail-closed y, con Suricata caído, el ping y el `curl` por loopback no funcionarían.
 
    Carga las reglas:
    ```bash
    sudo nft -f /etc/suricata/lab-nfqueue.nft
    sudo nft list table inet suricata_lab
    ```
-   - `sudo` → (ver paso 1).
+   - `sudo` → (ver paso 2).
    - `nft` → herramienta de administración de nftables.
    - `-f /etc/suricata/lab-nfqueue.nft` → lee y aplica las órdenes desde ese archivo, de forma atómica.
    - `list table inet suricata_lab` → muestra el contenido de la tabla `suricata_lab` de la familia `inet`, para comprobar que se cargó.
 
    Si tu sistema usa `iptables` en vez de `nft`, el equivalente es:
    ```bash
-   sudo iptables -I INPUT -s 192.168.56.10 -j NFQUEUE --queue-num 0 --queue-bypass
-   sudo iptables -I OUTPUT -d 192.168.56.10 -j NFQUEUE --queue-num 0 --queue-bypass
+   sudo iptables -I INPUT -i lo -p icmp --icmp-type echo-request -j NFQUEUE --queue-num 0 --queue-bypass
+   sudo iptables -I INPUT -i lo -p tcp --dport 80 -j NFQUEUE --queue-num 0 --queue-bypass
+   sudo iptables -I INPUT -i lo -p tcp --sport 80 -j NFQUEUE --queue-num 0 --queue-bypass
    ```
-   - `iptables` → herramienta clásica de filtrado IPv4 del kernel.
-   - `-I INPUT` / `-I OUTPUT` → inserta la regla al principio de la cadena `INPUT` (tráfico entrante) u `OUTPUT` (saliente).
-   - `-s 192.168.56.10` → coincide con paquetes cuyo origen es `cliente`.
-   - `-d 192.168.56.10` → coincide con paquetes cuyo destino es `cliente`.
+   - `iptables` → herramienta clásica de filtrado IPv4 del kernel (en Arch, `iptables-nft`).
+   - `-I INPUT` → inserta la regla al principio de la cadena `INPUT` (tráfico entrante).
+   - `-i lo` → solo paquetes que entran por la interfaz de loopback.
+   - `-p icmp --icmp-type echo-request` → solo los ping de ida.
+   - `-p tcp --dport 80` / `-p tcp --sport 80` → la petición al puerto 80 y la respuesta desde él.
    - `-j NFQUEUE` → salta al objetivo NFQUEUE: entrega el paquete a una cola de espacio de usuario.
    - `--queue-num 0` → número de la cola (0 a 65535).
    - `--queue-bypass` → si no hay ningún programa en la cola, deja pasar el paquete (igual que `bypass` en nft).
-10. Arranca Suricata inline sobre la cola 0:
+10. En la **Terminal 2 (Suricata)**, arranca Suricata inline sobre la cola 0:
     ```bash
     sudo rm -f /var/log/suricata/fast.log /var/log/suricata/eve.json
     sudo suricata -c /etc/suricata/suricata.yaml -S /etc/suricata/rules/local.rules \
-      --set "vars.address-groups.HOME_NET=[192.168.56.0/24]" -k none -q 0
+      --set "vars.address-groups.HOME_NET=[127.0.0.0/8]" -k none -q 0
     ```
     - `rm -f` y archivos → (ver paso 6).
     - `-c`, `-S`, `--set`, `-k none` → (ver pasos 4 y 6).
     - `-q 0` → en lugar de `-i`, funciona inline sobre la cola NFQUEUE 0: recibe cada paquete, lo inspecciona y le devuelve al kernel el veredicto de aceptar o descartar.
-11. Repite el tráfico desde `cliente`:
+11. En la **Terminal 3 (cliente)**, repite el tráfico:
     ```bash
-    ping -c 3 192.168.56.20
-    curl -m 5 http://192.168.56.20/hola-ids
-    curl -m 5 http://192.168.56.20/
+    ping -c 3 127.0.0.1
+    curl -m 5 http://127.0.0.1/hola-ids
+    curl -m 5 http://127.0.0.1/
     ```
-    - `ping -c 3` → (ver paso 1); envía tres paquetes en lugar de uno.
+    - `ping -c 3 127.0.0.1` → (ver paso 1); envía tres paquetes en lugar de uno.
     - `curl` → (ver paso 7).
     - `-m 5` → tiempo máximo total de la operación, en segundos; corta el `curl` a los 5 segundos porque la petición bloqueada nunca obtendrá respuesta.
-    - `http://192.168.56.20/` → la raíz del servidor, sin la cadena de la regla: debe pasar.
-    Esperado: `3 packets transmitted, 0 received, 100% packet loss`; el primer `curl` termina con `curl: (28) Operation timed out`; el segundo, sin la cadena, recibe el listado de directorio del servidor Python. En la terminal del servidor web solo aparece la petición a `/`, nunca la de `/hola-ids`.
+    - `http://127.0.0.1/` → la raíz del servidor, sin la cadena de la regla: debe pasar.
+    Esperado: `3 packets transmitted, 0 received, 100% packet loss`; el primer `curl` termina con `curl: (28) Operation timed out`; el segundo, sin la cadena, recibe el listado de directorio del servidor Python. En la Terminal 1 (servidor web) solo aparece la petición a `/`, nunca la de `/hola-ids`.
 12. Confirma el bloqueo en `eve.json`:
     ```bash
     sudo jq -c 'select(.event_type=="alert") | {sid: .alert.signature_id, action: .alert.action}' /var/log/suricata/eve.json
@@ -263,7 +247,7 @@ Necesitas:
     {"sid":1000002,"action":"blocked"}
     ```
     Puede haber más de una alerta del sid 1000002 si `curl` reenvía el segmento TCP descartado.
-13. Comprueba el fail-open: deja las reglas `nft` cargadas, detén Suricata con `Ctrl+C` y repite `ping -c 3 192.168.56.20` desde `cliente`. Ahora responde, porque con `bypass` y nadie escuchando la cola el kernel acepta. Ningún paquete se inspecciona.
+13. Comprueba el fail-open: deja las reglas `nft` cargadas, detén Suricata con `Ctrl+C` en la Terminal 2 y repite `ping -c 3 127.0.0.1` desde la Terminal 3. Ahora responde, porque con `bypass` y nadie escuchando la cola el kernel acepta. Ningún paquete se inspecciona.
 
 ### Resultado esperado
 
@@ -273,8 +257,8 @@ Las mismas dos reglas producen `"action":"allowed"` cuando Suricata escucha por 
 
 - ¿Qué significa `[1:1000002:1]` en `fast.log`? Generador 1, sid 1000002, revisión 1.
 - En modo IDS, ¿recibió el servidor la petición a `/hola-ids`? Sí: aparece en el log de `python3 -m http.server` con un 404.
-- ¿Qué cambió entre el paso 7 y el 11 además de `alert` por `drop`? Que Suricata pasó de leer una copia (`-i`) a estar inline (`-q 0` con la regla `queue` de nftables). Con `drop` y `-i`, Suricata solo habría alertado.
-- Si quitas `bypass` y Suricata se cae, ¿qué le pasa a `cliente`? Pierde toda la conectividad con `sensor` (fail-closed).
+- ¿Qué cambió entre el paso 7 y el 11 además de `alert` por `drop`? Que Suricata pasó de leer una copia (`-i lo`) a estar inline (`-q 0` con la regla `queue` de nftables). Con `drop` y `-i`, Suricata solo habría alertado.
+- Si quitas `bypass` y Suricata se cae, ¿qué le pasa al tráfico de loopback del laboratorio? Pierde la conectividad encolada (fail-closed), aunque solo afecta al ping y al puerto 80 por `lo`, no al resto del sistema.
 
 ### Limpieza
 
@@ -283,12 +267,12 @@ sudo nft delete table inet suricata_lab
 sudo rm /etc/suricata/lab-nfqueue.nft /etc/suricata/rules/local.rules
 sudo systemctl start suricata
 ```
-- `sudo` → (ver paso 1).
+- `sudo` → (ver paso 2).
 - `nft delete table inet suricata_lab` → borra la tabla y todas sus cadenas y reglas.
 - `rm` → borra los dos archivos; sin `-f`, avisa si alguno no existe.
-- `systemctl start suricata` → vuelve a arrancar el servicio que detuviste en el paso 2.
+- `systemctl start suricata` → vuelve a arrancar el servicio (en Arch, solo si lo quieres como demonio; el paquete no lo arranca solo).
 
-Si usaste `iptables`, borra sus dos reglas repitiendo los comandos del paso 9 con `-D` (borra la regla que coincida exactamente) en lugar de `-I`. Detén el servidor web con `Ctrl+C`. Para desinstalar: `sudo apt purge -y suricata`.
+Si usaste `iptables`, borra sus tres reglas repitiendo los comandos del paso 9 con `-D` (borra la regla que coincida exactamente) en lugar de `-I`. Detén el servidor web con `Ctrl+C` en la Terminal 1. Para desinstalar: `sudo apt purge -y suricata` (Debian/Ubuntu) o `sudo pacman -Rns suricata` (Arch).
 
 ## Ejercicio 2: Rastrea un ataque simulado en el journal y en auditd
 
@@ -298,26 +282,25 @@ Objetivo: activar en Linux la auditoría que la nota da por necesaria (creación
 
 Necesitas:
 
-- Una VM Ubuntu Server 24.04 (o Debian 12) con tu usuario administrador (con `sudo`). Red NAT para instalar paquetes; no hace falta otra máquina, los ataques van contra el propio equipo.
+- Tu propio equipo Linux con un usuario administrador (con `sudo`). Todo ocurre en el mismo equipo contra `127.0.0.1`: no hace falta ninguna máquina virtual ni una segunda máquina.
+- auditd, el servidor SSH y `sshpass` (para automatizar los intentos fallidos). Instalación:
+  - Debian/Ubuntu: `sudo apt update && sudo apt install -y auditd openssh-server sshpass`
+  - Arch: `sudo pacman -S audit openssh sshpass`
+  En Arch el paquete de auditoría es `audit` (trae `auditd`, `auditctl`, `augenrules` y `ausearch`) y el de SSH es `openssh` (el demonio es `sshd`). Ninguno arranca solo tras instalar: actívalos con `sudo systemctl start auditd` y `sudo systemctl start sshd` (en Debian/Ubuntu el servicio SSH se llama `ssh` y suele quedar arrancado al instalar).
 - Tiempo estimado: 45 minutos.
 
 ### Pasos
 
-1. Instala auditd, el servidor SSH y `sshpass` (para automatizar los intentos fallidos), y comprueba que el servidor acepta contraseñas:
+1. Comprueba que el servidor SSH acepta contraseñas (ya lo instalaste en Necesitas):
    ```bash
-   sudo apt update && sudo apt install -y auditd openssh-server sshpass
    grep -ri '^passwordauthentication' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/
    ```
-   - `sudo` → ejecuta el comando como root, necesario para instalar paquetes y leer los logs del sistema.
-   - `apt update` → descarga la lista actualizada de paquetes.
-   - `&&` → ejecuta lo siguiente solo si lo anterior terminó bien.
-   - `apt install -y` → instala los paquetes sin pedir confirmación (`-y`): `auditd` (el demonio de auditoría del kernel, con `auditctl`, `augenrules`, `ausearch`), `openssh-server` (el servicio `ssh`) y `sshpass` (pasa una contraseña a `ssh` sin teclearla).
    - `grep` → busca un patrón en archivos.
    - `-r` → recursivo: busca también en los archivos de la carpeta `sshd_config.d/`.
    - `-i` → ignora mayúsculas y minúsculas.
    - `'^passwordauthentication'` → líneas que empiezan (`^`) por esa opción; las comentadas empiezan por `#` y no cuentan.
    - `/etc/ssh/sshd_config /etc/ssh/sshd_config.d/` → el archivo de configuración del servidor SSH y la carpeta de añadidos que incluye.
-   Si no sale nada, vale el valor por defecto, `yes`. Si sale `PasswordAuthentication no` (habitual en imágenes de nube), cámbialo a `yes` en ese archivo y ejecuta `sudo systemctl restart ssh`; si no, los intentos del paso 4 fallarán sin pedir contraseña y no dejarán `Failed password`.
+   Si no sale nada, vale el valor por defecto, `yes`. Si sale `PasswordAuthentication no` (habitual en imágenes de nube), cámbialo a `yes` en ese archivo y ejecuta `sudo systemctl restart ssh` (en Arch, `sudo systemctl restart sshd`); si no, los intentos del paso 4 fallarán sin pedir contraseña y no dejarán `Failed password`.
 2. Crea las reglas de auditd. Crea `/etc/audit/rules.d/lab.rules` (por ejemplo con `sudo nano /etc/audit/rules.d/lab.rules`) con este contenido completo:
    ```
    -a always,exit -F arch=b64 -S execve -F auid>=1000 -F auid!=unset -k procesos
@@ -343,7 +326,7 @@ Necesitas:
    ```
    - `augenrules --load` → une los archivos `.rules` de `/etc/audit/rules.d/` en `/etc/audit/audit.rules` y los carga en el kernel.
    - `auditctl -l` → lista las reglas cargadas.
-   Deben aparecer tus cinco reglas, con `-F key=procesos` y `-F key=identidad`.
+   Deben aparecer tus cinco reglas, con `-F key=procesos` y `-F key=identidad`. En Arch, si `ausearch` no encuentra eventos luego, asegúrate de que el demonio está activo con `sudo systemctl start auditd`.
 3. Anota la hora de inicio para acotar después las búsquedas:
    ```bash
    date '+%H:%M:%S'
@@ -365,7 +348,7 @@ Necesitas:
    - `noexiste@127.0.0.1` → usuario y servidor: una cuenta que no existe en el propio equipo.
    - `true` → comando remoto que se ejecutaría si el login tuviera éxito; nunca llega a correr.
    Cada intento termina con `Permission denied` o sin mensaje: `sshpass` sale con el código 5, contraseña incorrecta.
-5. Crea la cuenta y añádela al grupo `sudo` (el de administradores en Debian y Ubuntu):
+5. Crea la cuenta y añádela al grupo `sudo` (el de administradores en Debian y Ubuntu; en Arch el grupo equivalente suele ser `wheel`):
    ```bash
    sudo useradd -m -s /bin/bash labuser
    sudo passwd labuser
@@ -376,14 +359,14 @@ Necesitas:
    - `-s /bin/bash` → su shell de inicio de sesión.
    - `passwd labuser` → pide por teclado la contraseña de la cuenta, sin escribirla en la línea de comandos (y por tanto en el registro `EXECVE`).
    - `usermod` → modifica una cuenta existente.
-   - `-aG sudo` → `-G` indica grupos suplementarios y `-a` los añade sin quitar los que ya tenía; `sudo` es el grupo que puede usar `sudo`.
+   - `-aG sudo` → `-G` indica grupos suplementarios y `-a` los añade sin quitar los que ya tenía; `sudo` es el grupo que puede usar `sudo` (en Arch, cambia `sudo` por `wheel` si ese es el que tienes habilitado).
 6. Busca los logins fallidos en el journal del servicio SSH y resúmelos por IP y usuario:
    ```bash
    sudo journalctl -u ssh --since "30 minutes ago" --no-pager -g "Failed password"
    sudo journalctl -u ssh --since "30 minutes ago" --no-pager -g "Failed password" -o cat | awk '{print $(NF-3), $(NF-5)}' | sort | uniq -c
    ```
    - `journalctl` → consulta el journal de systemd.
-   - `-u ssh` → solo los mensajes de la unidad `ssh.service`, el servidor SSH en Debian y Ubuntu (en Arch y Fedora se llama `sshd`).
+   - `-u ssh` → solo los mensajes de la unidad `ssh.service`, el servidor SSH en Debian y Ubuntu (en Arch y Fedora se llama `sshd`, así que allí usa `-u sshd`).
    - `--since "30 minutes ago"` → solo entradas de los últimos 30 minutos.
    - `--no-pager` → imprime sin abrir el paginador `less`.
    - `-g "Failed password"` → (`--grep`) solo mensajes que contienen ese texto.
@@ -396,7 +379,7 @@ Necesitas:
    oct 08 10:41:07 lab sshd[2311]: Failed password for invalid user noexiste from 127.0.0.1 port 51234 ssh2
          5 127.0.0.1 noexiste
    ```
-   `invalid user` significa que la cuenta no existe; contra una cuenta real con contraseña errónea la línea sería `Failed password for ana from ...`. En Ubuntu el mismo texto está también en `/var/log/auth.log` (`sudo grep "Failed password" /var/log/auth.log`); Debian 12 no instala `rsyslog`, así que allí solo está en el journal.
+   `invalid user` significa que la cuenta no existe; contra una cuenta real con contraseña errónea la línea sería `Failed password for ana from ...`. En Ubuntu el mismo texto está también en `/var/log/auth.log` (`sudo grep "Failed password" /var/log/auth.log`); Debian 12 y Arch no instalan `rsyslog` por defecto, así que allí solo está en el journal.
 7. Busca la cuenta creada, su contraseña y su alta en `sudo`, y quién lo hizo:
    ```bash
    sudo journalctl -t useradd -t passwd -t usermod -t sudo --since "30 minutes ago" --no-pager
@@ -466,7 +449,7 @@ sudo augenrules --load
 - `rm /etc/audit/rules.d/lab.rules` → borra el archivo de reglas del paso 2.
 - `augenrules --load` → (ver paso 2); recarga las reglas, ya sin las tuyas.
 
-Para desinstalar lo añadido: `sudo apt purge -y auditd sshpass` (deja `openssh-server` si lo usas para administrar la VM). Si la VM era solo para esto, basta con volver a una instantánea anterior o borrarla.
+Para desinstalar lo añadido: `sudo apt purge -y auditd sshpass` (Debian/Ubuntu) o `sudo pacman -Rns audit sshpass` (Arch); deja el servidor SSH si lo usas para administrar el equipo.
 
 ## Ejercicio 3: Escribe un mensaje syslog y calcula su PRI
 
@@ -474,7 +457,7 @@ Nodo: [syslogs](README.md#syslogs).
 
 Objetivo: escribir un mensaje con facility `auth` y severidad `warning`, encontrarlo con `journalctl -p warning`, calcular a mano su PRI (debe dar 36) y comprobar ese número viendo el mensaje tal como viaja por la red en formato RFC 5424.
 
-Necesitas: cualquier Linux con systemd (Ubuntu, Debian, Arch) y `logger` (paquete `bsdutils` en Debian/Ubuntu, `util-linux` en Arch; vienen instalados). Para leer el journal del sistema sin `sudo` tu usuario debe estar en el grupo `adm`, `systemd-journal` o `wheel`; si no, antepón `sudo` a `journalctl`. Python 3 para el receptor UDP. Tiempo estimado: 15 minutos.
+Necesitas: cualquier Linux con systemd (Ubuntu, Debian, Arch) y `logger` (paquete `bsdutils` en Debian/Ubuntu, `util-linux` en Arch; vienen instalados). Para leer el journal del sistema sin `sudo` tu usuario debe estar en el grupo `adm`, `systemd-journal` o `wheel`; si no, antepón `sudo` a `journalctl`. Python 3 para el receptor UDP (en Arch, `python`). Tiempo estimado: 15 minutos.
 
 ### Pasos
 
@@ -519,7 +502,7 @@ Necesitas: cualquier Linux con systemd (Ubuntu, Debian, Arch) y `logger` (paquet
    ```bash
    python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('127.0.0.1', 5514)); print(s.recv(2048).decode())"
    ```
-   - `python3 -c "..."` → ejecuta el código Python que va entre comillas sin crear un archivo.
+   - `python3 -c "..."` → ejecuta el código Python que va entre comillas sin crear un archivo (en Arch, `python -c`).
    - `import socket` → carga el módulo de sockets de red.
    - `socket.socket(socket.AF_INET, socket.SOCK_DGRAM)` → crea un socket IPv4 (`AF_INET`) de datagramas, es decir, UDP (`SOCK_DGRAM`).
    - `s.bind(('127.0.0.1', 5514))` → escucha en la dirección local 127.0.0.1, puerto 5514.
@@ -566,7 +549,10 @@ Objetivo: capturar 5 minutos de tu propia navegación con `tcpdump` y, usando so
 Necesitas:
 
 - Tu propio equipo Linux y tu propia red. Captura solo tu tráfico; capturar el de otros sin permiso no es un laboratorio.
-- `tcpdump` y Wireshark (que trae `tshark`). Debian/Ubuntu: `sudo apt install -y tcpdump wireshark tshark`. Arch: `sudo pacman -S tcpdump wireshark-qt`. Para usar Wireshark sin root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`) y vuelve a iniciar sesión.
+- `tcpdump` y Wireshark (que trae `tshark`). Instalación:
+  - Debian/Ubuntu: `sudo apt install -y tcpdump wireshark tshark`
+  - Arch: `sudo pacman -S tcpdump wireshark-qt` (la GUI; `wireshark-qt` ya incluye `tshark`). Si solo quieres la línea de comandos, `sudo pacman -S tcpdump wireshark-cli`.
+  Para capturar sin ser root debes estar en el grupo `wireshark`: `sudo usermod -aG wireshark $USER` y vuelve a iniciar sesión. En Debian/Ubuntu, además, `sudo dpkg-reconfigure wireshark-common` y elige "sí" para permitir la captura a los usuarios del grupo `wireshark`.
 - Tiempo estimado: 30 minutos.
 
 ### Pasos
@@ -592,7 +578,7 @@ Necesitas:
    ```bash
    sudo timeout 300 tcpdump -i wlan0 -w navegacion.pcap 'port 53 or port 443'
    ```
-   - `sudo` → (ver ejercicio 1, paso 1); capturar paquetes requiere root.
+   - `sudo` → (ver ejercicio 1, paso 2); capturar paquetes requiere root.
    - `timeout 300` → ejecuta el comando que sigue y lo termina a los 300 segundos (5 minutos).
    - `tcpdump` → capturador de paquetes de línea de comandos.
    - `-i wlan0` → interfaz donde capturar; pon la del paso 2.
@@ -690,7 +676,7 @@ Nodo: [VirusTotal](README.md#virustotal), [WHOIS](README.md#whois) y [Subir una 
 
 Objetivo: calcular el SHA-256 del archivo de prueba EICAR en tu equipo, consultar su informe en VirusTotal buscando por hash (sin subir el archivo) e interpretar el ratio, la primera fecha de envío y los nombres; después obtener la fecha de creación de tres dominios con RDAP, en lookup.icann.org y por línea de comandos.
 
-Necesitas: Linux con navegador, `sha256sum`, `curl` y Python 3. EICAR no es malware: es una cadena de 68 bytes que los antivirus acuerdan detectar para probar que funcionan. Aun así, tu antivirus puede borrarla al crearla; en ese caso calcula el hash directamente desde la cadena como en el paso 1. Tiempo estimado: 20 minutos.
+Necesitas: Linux con navegador, `sha256sum`, `curl` y Python 3 (en Arch, `python`). EICAR no es malware: es una cadena de 68 bytes que los antivirus acuerdan detectar para probar que funcionan. Aun así, tu antivirus puede borrarla al crearla; en ese caso calcula el hash directamente desde la cadena como en el paso 1. Tiempo estimado: 20 minutos.
 
 ### Pasos
 
@@ -737,7 +723,7 @@ Necesitas: Linux con navegador, `sha256sum`, `curl` y Python 3. EICAR no es malw
    - `-s` → modo silencioso: sin barra de progreso ni mensajes de error.
    - `"$url"` → la URL del turno; entre comillas para que la shell no la parta.
    - `|` → pasa el JSON de RDAP a Python.
-   - `python3 -c "..."` → (ver ejercicio 3, paso 5).
+   - `python3 -c "..."` → (ver ejercicio 3, paso 5; en Arch, `python -c`).
    - `import json, sys` → módulos para leer JSON y la entrada estándar.
    - `d = json.load(sys.stdin)` → convierte la respuesta en un diccionario.
    - `d['ldhName']` → nombre del dominio tal como lo devuelve el registro.
@@ -748,7 +734,7 @@ Necesitas: Linux con navegador, `sha256sum`, `curl` y Python 3. EICAR no es malw
    wikipedia.org ['2001-01-13T00:12:14.754Z']
    GITHUB.COM ['2007-10-09T18:20:50Z']
    ```
-6. Si tienes `whois` instalado (`sudo apt install -y whois` o `sudo pacman -S whois`), compáralo con el formato antiguo:
+6. Si tienes `whois` instalado (`sudo apt install -y whois` en Debian/Ubuntu o `sudo pacman -S whois` en Arch), compáralo con el formato antiguo:
    ```bash
    whois github.com | grep -i -E 'creation date|registrar:|registrant organization'
    ```
@@ -772,21 +758,29 @@ Un texto con el SHA-256 de EICAR, su ratio de detección, su fecha de primer env
 
 Nodo: [SIEM](README.md#siem), [Event Logs](README.md#event-logs) y [syslogs](README.md#syslogs).
 
-Objetivo: montar un SIEM real, Wazuh 4.14 (la versión vigente; la 4.14.8 al escribir esto), con un servidor y un agente en un Ubuntu; generar los mismos eventos del ejercicio 2 (logins SSH fallidos, `sudo`, cuenta nueva, alta en el grupo `sudo`) más un cambio de archivo vigilado por FIM; encontrarlos en el dashboard con consultas por regla y por grupo, ver su mapeo a MITRE ATT&CK, cubrir con una regla propia el evento que Wazuh no alerta de fábrica y redactar el triaje de una alerta como lo haría un analista de SOC.
+Objetivo: montar un SIEM real, Wazuh 4.14 (la versión vigente; la 4.14.8 al escribir esto), con el servidor y un agente en tu propio equipo; generar los mismos eventos del ejercicio 2 (logins SSH fallidos, `sudo`, cuenta nueva, alta en el grupo `sudo`) más un cambio de archivo vigilado por FIM; encontrarlos en el dashboard con consultas por regla y por grupo, ver su mapeo a MITRE ATT&CK, cubrir con una regla propia el evento que Wazuh no alerta de fábrica y redactar el triaje de una alerta como lo haría un analista de SOC.
 
 Necesitas:
 
-- VirtualBox con dos VMs Ubuntu Server 24.04, las dos con un adaptador NAT (para instalar paquetes) y otro "Red solo-anfitrión" (`vboxnet0`, red `192.168.56.0/24`), como en el ejercicio 1.
-- VM `wazuh` con IP `192.168.56.20`: el servidor, el indexador y el dashboard juntos. Wazuh recomienda 4 vCPU, 8 GB de RAM y 50 GB de disco para hasta 25 agentes; para este laboratorio bastan 2 vCPU y 4 GB, que es el mínimo que acepta el instalador (con menos de unos 3,7 GB se niega a seguir). Con 4 GB el dashboard va lento; si tu equipo lo permite, dale 8 GB.
-- VM `agente` con IP `192.168.56.10`: 1 vCPU, 1-2 GB de RAM, 10 GB de disco, con `openssh-server` y `sshpass` (`sudo apt install -y openssh-server sshpass`).
-- El navegador de tu equipo anfitrión, que llega a `192.168.56.20` por la red solo-anfitrión.
+- Tu propio equipo Linux. El servidor de Wazuh (manager + indexador + dashboard) y el agente se instalan en el mismo equipo; el agente se conecta al manager por `127.0.0.1`. Usarás varias terminales y el navegador local. No hacen falta máquinas virtuales ni una segunda máquina. En una red real el manager y los agentes estarían en máquinas distintas; aquí el SIEM completo corre en tu equipo y el agente reporta por loopback.
+- Recursos: Wazuh recomienda 4 vCPU, 8 GB de RAM y 50 GB de disco para hasta 25 agentes; el instalador todo-en-uno exige un mínimo de ~4 GB de RAM y 2 núcleos (con menos de unos 3,7 GB se niega a seguir). Con 4 GB el dashboard va lento. Si tu equipo no llega a ese mínimo, o si estás en Arch, usa la variante con Docker.
+- El instalador todo-en-uno oficial (`wazuh-install.sh`) solo soporta Debian/Ubuntu y RHEL/CentOS. En Arch no hay paquete nativo oficial: el camino realista es el despliegue con Docker (contenedores, independiente de la distribución) que se describe en el paso 2. Docker en Arch:
+  - `sudo pacman -S docker docker-compose`
+  - `sudo systemctl start docker` (Arch no arranca el servicio solo; Debian/Ubuntu sí tras instalar `docker.io`).
+- `openssh-server` y `sshpass` para generar los eventos. Instalación:
+  - Debian/Ubuntu: `sudo apt install -y openssh-server sshpass`
+  - Arch: `sudo pacman -S openssh sshpass` (demonio `sshd`, arráncalo con `sudo systemctl start sshd`).
 - Haber hecho el ejercicio 2 ayuda: aquí se repiten sus eventos, pero los ve el SIEM en vez de `journalctl`.
 - Tiempo estimado: 90 minutos (unos 20 son la instalación del servidor).
 
 ### Pasos
 
-1. Fija las IPs del laboratorio con netplan exactamente como en el ejercicio 1, paso 1: `192.168.56.20/24` en `wazuh` y `192.168.56.10/24` en `agente`. Desde `agente`, `ping -c 1 192.168.56.20` tiene que responder.
-2. En `wazuh`, descarga y ejecuta el asistente de instalación, que instala y configura en la misma máquina el servidor (manager), el indexador y el dashboard:
+1. Comprueba que el equipo responde en loopback, por donde hablarán el agente y el manager:
+   ```bash
+   ping -c 1 127.0.0.1
+   ```
+   - `ping -c 1 127.0.0.1` → envía un paquete ICMP a la interfaz de loopback y espera respuesta (ver ejercicio 2, paso 4); el agente y el manager viven en este mismo equipo y se comunican por `127.0.0.1`.
+2. Descarga y ejecuta el asistente de instalación, que instala y configura en la misma máquina el servidor (manager), el indexador y el dashboard (**camino Debian/Ubuntu**; en Arch, salta a la alternativa con Docker más abajo):
    ```bash
    curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh && sudo bash ./wazuh-install.sh -a
    ```
@@ -807,9 +801,9 @@ Necesitas:
        Password: <ADMIN_PASSWORD>
    INFO: Installation finished.
    ```
-   Si dice `Your system does not meet the recommended minimum hardware requirements of 4Gb of RAM and 2 CPU cores`, apaga la VM y súbele RAM o CPU; no uses `-i` (ignorar la comprobación), porque el indexador se caerá por falta de memoria. Si pierdes la contraseña, está en el archivo `wazuh-install-files.tar` que el asistente deja en la carpeta actual: `sudo tar -O -xvf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt` (`-x` extrae, `-v` muestra el nombre, `-f` indica el archivo y `-O` vuelca el contenido a la pantalla en vez de escribirlo en disco).
+   Como el dashboard corre en tu propio equipo, lo abrirás en `https://127.0.0.1` (ver paso 4). Si dice `Your system does not meet the recommended minimum hardware requirements of 4Gb of RAM and 2 CPU cores`, no uses `-i` (ignorar la comprobación), porque el indexador se caerá por falta de memoria: usa la variante con Docker. Si pierdes la contraseña, está en el archivo `wazuh-install-files.tar` que el asistente deja en la carpeta actual: `sudo tar -O -xvf wazuh-install-files.tar wazuh-install-files/wazuh-passwords.txt` (`-x` extrae, `-v` muestra el nombre, `-f` indica el archivo y `-O` vuelca el contenido a la pantalla en vez de escribirlo en disco).
 
-   Alternativa con Docker (en lugar de este paso, en una VM con Docker y Docker Compose, al menos 8 GB de RAM y 50 GB de disco según la documentación de Wazuh):
+   Alternativa con Docker (**el camino en Arch**, y también si no llegas al mínimo de RAM; necesita Docker y Docker Compose, al menos 8 GB de RAM y 50 GB de disco según la documentación de Wazuh):
    ```bash
    sudo sysctl -w vm.max_map_count=262144
    git clone https://github.com/wazuh/wazuh-docker.git -b v4.14.8
@@ -823,8 +817,8 @@ Necesitas:
    - `docker compose -f generate-indexer-certs.yml run --rm generator` → ejecuta una vez el contenedor que genera los certificados TLS entre componentes; `-f` elige ese archivo de Compose y `--rm` borra el contenedor al terminar.
    - `docker compose up -d` → crea y arranca los contenedores definidos en `docker-compose.yml`; `-d` los deja en segundo plano.
 
-   Con Docker el usuario es `admin` y la contraseña inicial `SecretPassword` (cámbiala si la VM no es solo de laboratorio). El resto del ejercicio es igual, salvo que los comandos que se ejecutan "en `wazuh`" sobre `/var/ossec` se lanzan dentro del contenedor del manager con `sudo docker exec -it single-node-wazuh.manager-1 <comando>` (comprueba el nombre exacto con `sudo docker ps`).
-3. Desactiva el repositorio de Wazuh en `wazuh` para que un `apt upgrade` no actualice los componentes por separado y los desincronice:
+   Con Docker el usuario es `admin` y la contraseña inicial `SecretPassword` (cámbiala si el equipo no es solo de laboratorio). El resto del ejercicio es igual, salvo que los comandos que se ejecutan sobre el manager en `/var/ossec` se lanzan dentro del contenedor del manager con `sudo docker exec -it single-node-wazuh.manager-1 <comando>` (comprueba el nombre exacto con `sudo docker ps`). En Arch, arranca Docker antes con `sudo systemctl start docker`.
+3. (Solo camino Debian/Ubuntu.) Desactiva el repositorio de Wazuh para que un `apt upgrade` no actualice los componentes por separado y los desincronice:
    ```bash
    sudo sed -i "s/^deb /#deb /" /etc/apt/sources.list.d/wazuh.list
    sudo apt update
@@ -837,8 +831,8 @@ Necesitas:
    - `/var/ossec/bin/wazuh-control info` → muestra la versión y el tipo de instalación de Wazuh.
 
    Debe salir `WAZUH_VERSION="v4.14.8"` (o la 4.14.x que se instaló) y `WAZUH_TYPE="server"`. Anota la versión: el agente no puede ser más nuevo que el servidor.
-4. Desde el navegador de tu equipo abre `https://192.168.56.20`. El aviso de certificado es esperado (es autofirmado): acéptalo como excepción. Entra con `admin` y la contraseña del paso 2. Verás el panel de inicio con 0 agentes.
-5. En `agente`, añade el repositorio oficial de Wazuh:
+4. Desde el navegador de tu propio equipo abre `https://127.0.0.1` (o `https://localhost`). El aviso de certificado es esperado (es autofirmado): acéptalo como excepción. Entra con `admin` y la contraseña del paso 2. Verás el panel de inicio con 0 agentes.
+5. Instala el agente en este mismo equipo. **Camino Debian/Ubuntu**: añade el repositorio oficial de Wazuh:
    ```bash
    sudo apt-get install -y gnupg apt-transport-https curl
    curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | sudo gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && sudo chmod 644 /usr/share/keyrings/wazuh.gpg
@@ -855,14 +849,16 @@ Necesitas:
    - `echo "deb [signed-by=...] https://packages.wazuh.com/4.x/apt/ stable main"` → línea de repositorio: `deb` (paquetes binarios), `signed-by` (solo se aceptan paquetes firmados con esa clave), URL, distribución `stable` y componente `main`.
    - `| sudo tee /etc/apt/sources.list.d/wazuh.list` → `tee` escribe la línea en ese archivo como root (una redirección `>` tras `sudo` la haría tu usuario y fallaría por permisos).
    - `apt-get update` → descarga la lista de paquetes, ahora con la de Wazuh.
-6. Instala el agente de la misma versión que el servidor, indicándole a qué manager conectarse, y arráncalo:
+
+   En Arch, con el manager en Docker, enrola el agente desde el paquete AUR `wazuh-agent` (`yay -S wazuh-agent`, necesita un ayudante de AUR) o levanta un contenedor de agente de la imagen oficial `wazuh/wazuh-agent`; en ambos casos apúntalo al manager con la variable `WAZUH_MANAGER="127.0.0.1"` del paso 6.
+6. Instala el agente de la misma versión que el servidor, indicándole a qué manager conectarse (el propio equipo, `127.0.0.1`), y arráncalo:
    ```bash
-   sudo WAZUH_MANAGER="192.168.56.20" WAZUH_AGENT_NAME="agente" apt-get install -y wazuh-agent=4.14.8-1
+   sudo WAZUH_MANAGER="127.0.0.1" WAZUH_AGENT_NAME="agente" apt-get install -y wazuh-agent=4.14.8-1
    sudo systemctl daemon-reload
    sudo systemctl enable --now wazuh-agent
    echo "wazuh-agent hold" | sudo dpkg --set-selections
    ```
-   - `WAZUH_MANAGER="192.168.56.20"` → variable de entorno que lee el instalador del paquete para escribir la IP del manager en `/var/ossec/etc/ossec.conf` y registrar (enrolar) el agente con él al arrancar.
+   - `WAZUH_MANAGER="127.0.0.1"` → variable de entorno que lee el instalador del paquete para escribir la IP del manager en `/var/ossec/etc/ossec.conf` y registrar (enrolar) el agente con él al arrancar; como el manager está en el mismo equipo, es loopback.
    - `WAZUH_AGENT_NAME="agente"` → nombre con el que aparecerá en el dashboard; si no se da, usa el nombre del equipo.
    - `sudo VAR=valor comando` → pasa esas variables al comando ejecutado como root (con `sudo VAR=valor` y no `VAR=valor sudo`, porque `sudo` limpia el entorno).
    - `apt-get install -y wazuh-agent=4.14.8-1` → instala el paquete del agente en esa versión exacta; cambia `4.14.8` por la que anotaste en el paso 3. El repositorio `4.x` ofrece siempre la última, que podría ser más nueva que tu servidor.
@@ -870,18 +866,18 @@ Necesitas:
    - `systemctl enable --now wazuh-agent` → activa el servicio en el arranque (`enable`) y lo inicia ya (`--now`).
    - `echo "wazuh-agent hold" | sudo dpkg --set-selections` → marca el paquete como retenido (`hold`): `apt upgrade` no lo actualizará por su cuenta.
 
-   Comprueba la conexión en `agente` y en `wazuh`:
+   Comprueba la conexión (en terminales distintas del mismo equipo):
    ```bash
-   sudo grep -E "Connected to the server|ERROR" /var/ossec/logs/ossec.log | tail -3     # en agente
-   sudo /var/ossec/bin/agent_control -l                                                # en wazuh
+   sudo grep -E "Connected to the server|ERROR" /var/ossec/logs/ossec.log | tail -3     # log del agente
+   sudo /var/ossec/bin/agent_control -l                                                # consulta al manager
    ```
    - `grep -E "Connected to the server|ERROR"` → busca en el log del agente la conexión al manager o cualquier error; `-E` permite el `|` como "o".
-   - `/var/ossec/logs/ossec.log` → log propio de Wazuh (del agente en `agente`, del manager en `wazuh`).
+   - `/var/ossec/logs/ossec.log` → log propio de Wazuh (el del agente y el del manager comparten ruta; en el camino Docker, el del manager está dentro del contenedor).
    - `| tail -3` → muestra solo las 3 últimas líneas que coinciden.
    - `agent_control -l` → en el manager, lista los agentes registrados y su estado.
-   - `# en agente`, `# en wazuh` → comentarios: indican en qué VM va cada línea.
+   - `# log del agente`, `# consulta al manager` → comentarios: indican qué mira cada línea.
 
-   En `agente` debe verse una línea con `Connected to the server`, la IP `192.168.56.20` y el puerto `1514/tcp`; en `wazuh`, el agente `001` con nombre `agente` y estado `Active`. Si no conecta, revisa que nada filtre los puertos 1514/tcp (eventos) y 1515/tcp (registro) de `wazuh`. En el dashboard, el contador de agentes pasa a 1.
+   El log del agente debe mostrar una línea con `Connected to the server`, la IP `127.0.0.1` y el puerto `1514/tcp`; `agent_control -l` debe listar el agente `001` con nombre `agente` y estado `Active`. Si no conecta, revisa que nada filtre los puertos 1514/tcp (eventos) y 1515/tcp (registro) del manager en loopback. En el dashboard, el contador de agentes pasa a 1.
 7. Comprueba de dónde lee logs el agente:
    ```bash
    sudo grep -A2 "<localfile>" /var/ossec/etc/ossec.conf
@@ -890,7 +886,7 @@ Necesitas:
    - `/var/ossec/etc/ossec.conf` → configuración del agente.
 
    Verás un bloque con `<location>journald</location>` (el journal de systemd) o con `<location>/var/log/auth.log</location>`, según lo que detectó el paquete; con cualquiera de los dos llegan al manager los mensajes de `sshd`, `sudo`, `useradd` y `usermod` del ejercicio 2.
-8. Activa en `agente` la vigilancia de integridad de archivos (FIM, el módulo `syscheck`) en tiempo real sobre una carpeta de prueba. Crea primero la carpeta, porque el módulo ignora las que no existen al arrancar:
+8. Activa en el agente la vigilancia de integridad de archivos (FIM, el módulo `syscheck`) en tiempo real sobre una carpeta de prueba. Crea primero la carpeta, porque el módulo ignora las que no existen al arrancar:
    ```bash
    sudo mkdir -p /srv/lab-fim
    sudo nano /var/ossec/etc/ossec.conf
@@ -917,7 +913,7 @@ Necesitas:
    - `tail -2` → (ver paso 6).
 
    Espera hasta ver `(6009): File integrity monitoring scan ended.` (terminó el escaneo inicial, la línea base) y `(6012): Real-time file integrity monitoring started.`. Lo que pase antes de la línea base no genera alerta.
-9. Anota la hora y genera, desde `agente`, la actividad sospechosa:
+9. Anota la hora y genera, en este mismo equipo, la actividad sospechosa:
    ```bash
    date '+%H:%M:%S'
    for i in $(seq 1 10); do
@@ -967,11 +963,11 @@ Necesitas:
 
     No sale nada: Wazuh recibió la línea `usermod[...]: add 'labwazuh' to group 'sudo'`, pero ninguna regla de fábrica la convierte en alerta (sí la hay para la misma acción hecha con `gpasswd -a`, la 2961, de nivel 5). Que un usuario pase a administrador sin alerta es un hueco de detección; lo cierras en el paso 12.
 11. Mira el mapeo a MITRE ATT&CK. En la alerta 5712 los campos `rule.mitre.id`, `rule.mitre.tactic` y `rule.mitre.technique` dicen `T1110`, `Credential Access` y `Brute Force`; en la 5710, `T1110.001` (Password Guessing) y `T1021.004` (SSH); en la 5402, `T1548.003` (Sudo and Sudo Caching); en la 5902, `T1136` (Create Account). Después abre el menú → Threat intelligence → MITRE ATT&CK: el panel agrupa las alertas del agente por táctica y técnica, y es la misma matriz de la nota del tema 12.
-12. Escribe la regla que falta. En `wazuh`, abre el archivo de reglas locales (el único que no se sobrescribe al actualizar):
+12. Escribe la regla que falta. En el manager, abre el archivo de reglas locales (el único que no se sobrescribe al actualizar):
     ```bash
     sudo nano /var/ossec/etc/rules/local_rules.xml
     ```
-    - `/var/ossec/etc/rules/local_rules.xml` → archivo de reglas propias del manager; trae una regla de ejemplo (id 100001) que puedes dejar.
+    - `/var/ossec/etc/rules/local_rules.xml` → archivo de reglas propias del manager; trae una regla de ejemplo (id 100001) que puedes dejar. En el camino Docker, edítalo dentro del contenedor del manager (`sudo docker exec -it single-node-wazuh.manager-1 vi /var/ossec/etc/rules/local_rules.xml`) o monta el volumen correspondiente.
 
     Añade al final del archivo este bloque completo:
     ```xml
@@ -1029,8 +1025,8 @@ Necesitas:
     ```bash
     sudo systemctl restart wazuh-manager
     ```
-    - `systemctl restart wazuh-manager` → reinicia el servidor de Wazuh, que relee las reglas; el agente reconecta solo.
-13. Repite el alta en `agente` y búscala:
+    - `systemctl restart wazuh-manager` → reinicia el servidor de Wazuh, que relee las reglas; el agente reconecta solo. En el camino Docker, `sudo docker restart single-node-wazuh.manager-1`.
+13. Repite el alta y búscala:
     ```bash
     sudo gpasswd -d labwazuh sudo
     sudo usermod -aG sudo labwazuh
@@ -1042,7 +1038,7 @@ Necesitas:
 14. Haz el triaje de una alerta como en un SOC. Elige la 5712 (fuerza bruta) y escribe en tu equipo `triaje-5712.txt` con este formato, rellenando cada campo con los datos de la alerta:
     ```
     Alerta:      5712 - sshd: brute force trying to get access to the system. Non existent user. (nivel 10)
-    Agente:      agente (192.168.56.10)       Hora: <timestamp de la alerta>
+    Agente:      agente (127.0.0.1)       Hora: <timestamp de la alerta>
     Evidencia:   <n> eventos 5710 en <segundos> s, usuario "noexiste", origen 127.0.0.1 (data.srcip)
     Contexto:    la IP de origen es el propio equipo; la cuenta no existe; hubo 1 fallo (5760) contra una cuenta real y ningún 5715 (login correcto) después
     Veredicto:   verdadero positivo benigno: la actividad ocurrió tal como la describe la regla, pero es la prueba autorizada del paso 9
@@ -1056,7 +1052,7 @@ Un Wazuh 4.14 con un agente `Active`; en Threat Hunting, las alertas de autentic
 
 ### Comprueba que lo lograste
 
-- ¿Qué hace el agente y qué hace el manager? El agente lee los logs y vigila los archivos del equipo y lo envía cifrado por el puerto 1514; el manager decodifica, aplica las reglas y decide qué es alerta; el indexador la guarda y el dashboard la muestra.
+- ¿Qué hace el agente y qué hace el manager? El agente lee los logs y vigila los archivos del equipo y lo envía cifrado por el puerto 1514; el manager decodifica, aplica las reglas y decide qué es alerta; el indexador la guarda y el dashboard la muestra. Aquí los dos corren en el mismo equipo y hablan por loopback.
 - ¿Por qué la 5712 salta y la 5710 no tiene nivel 10? La 5710 es un evento suelto; la 5712 es una regla de correlación (`frequency="8"`, `timeframe="120"`) que solo salta cuando se acumulan 8 eventos 5710 en 2 minutos. Es la correlación de la nota de SIEM.
 - ¿Por qué el `usermod` no generaba alerta y el `useradd` sí? Porque hay reglas de fábrica para `useradd` (5902) y para `gpasswd` (2961), pero ninguna para el mensaje de `usermod`. Un SIEM solo alerta de lo que alguna regla describe.
 - ¿Por qué FIM con `realtime="yes"` y no con el escaneo por defecto? Porque el escaneo periódico es cada 12 horas: un archivo creado y borrado entre dos escaneos no dejaría rastro.
@@ -1064,7 +1060,7 @@ Un Wazuh 4.14 con un agente `Active`; en Threat Hunting, las alertas de autentic
 
 ### Limpieza
 
-En `agente`:
+Deshaz lo del agente:
 ```bash
 sudo userdel -r labwazuh
 sudo rm -rf /srv/lab-fim
@@ -1078,7 +1074,7 @@ sudo apt-get update
 - `rm ...wazuh.list ...wazuh.gpg` → quita el repositorio y la clave del paso 5.
 - `apt-get update` → relee las listas de paquetes sin el repositorio de Wazuh.
 
-En `wazuh`:
+Deshaz el servidor:
 ```bash
 sudo /var/ossec/bin/manage_agents -r 001
 sudo bash ./wazuh-install.sh -u
@@ -1086,4 +1082,4 @@ sudo bash ./wazuh-install.sh -u
 - `manage_agents -r 001` → elimina del manager el registro del agente con id `001`.
 - `bash ./wazuh-install.sh -u` → (`--uninstall`) desinstala el manager, el indexador y el dashboard; ejecútalo en la carpeta donde descargaste el asistente.
 
-Con Docker, en `wazuh-docker/single-node/`: `sudo docker compose down -v` (`down` para y borra los contenedores; `-v` borra también los volúmenes con los datos). Si las VMs eran solo para esto, basta con borrarlas o volver a una instantánea anterior.
+Con Docker, en `wazuh-docker/single-node/`: `sudo docker compose down -v` (`down` para y borra los contenedores; `-v` borra también los volúmenes con los datos). En Arch, para Docker al terminar con `sudo systemctl stop docker` si lo arrancaste solo para esto.

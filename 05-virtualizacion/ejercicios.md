@@ -142,7 +142,7 @@ Necesitas: VirtualBox 7 en el host (Debian/Ubuntu: `sudo apt install virtualbox`
 13. Repite los pasos 9 a 11 una segunda vez y anota los dos tiempos. Restaurar no depende de cuánto dañes la VM: solo se descarta el archivo diferencial.
 
 > [!NOTE]
-> Con KVM/libvirt (virt-manager) el flujo es el mismo con `virsh`: red interna = una red de libvirt sin `<forward>` (aislada); snapshot con `virsh snapshot-create-as victima limpio`; restauración con `virsh snapshot-revert victima limpio --running`. Requiere discos `qcow2`.
+> Con KVM/libvirt (virt-manager) el flujo es el mismo con `virsh` (instálalo con Debian/Ubuntu: `sudo apt install virt-manager libvirt-daemon-system qemu-system-x86`; Arch: `sudo pacman -S virt-manager libvirt qemu-desktop`; después `sudo systemctl start libvirtd` y añádete al grupo con `sudo usermod -aG libvirt $USER`): red interna = una red de libvirt sin `<forward>` (aislada); snapshot con `virsh snapshot-create-as victima limpio`; restauración con `virsh snapshot-revert victima limpio --running`. Requiere discos `qcow2`.
 
 ### Resultado esperado
 

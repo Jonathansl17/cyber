@@ -9,7 +9,7 @@ opciones y argumentos. Cuando un comando y una opción ya se explicaron antes en
 mismo archivo, se indica con "(ver ejercicio N)".
 
 El Ejercicio 1 se hace en Cisco Packet Tracer (simulador gratuito); es largo y está
-dividido en partes. Los Ejercicios 2 y 3 se hacen en tu propio equipo o en VMs.
+dividido en partes. Los Ejercicios 2 y 3 se hacen en tu propio equipo.
 
 ## Ejercicio 1: Estrella con switch y malla de cuatro routers en Packet Tracer
 
@@ -322,7 +322,7 @@ línea qué parte corresponde a la capa 2 (MAC), a la capa 3 (IP) y a la capa 4 
 y comprobar que el campo `length` cuadra con la suma de las cabeceras. Al terminar sabrás
 leer una captura separando las capas.
 
-Necesitas: tu propio equipo o VM Linux con una interfaz de red activa; `tcpdump`
+Necesitas: tu propio equipo Linux con una interfaz de red activa; `tcpdump`
 (instalar con `sudo apt install tcpdump` en Debian/Ubuntu o `sudo pacman -S tcpdump` en
 Arch). Necesita `sudo` para capturar. Tiempo estimado: 20 minutos. Capturas tu propio
 tráfico hacia una web; nada de interceptar a terceros.
@@ -411,32 +411,51 @@ qué es capa 4, más la cuenta de que `14 + 20 + 40 = 74` coincide con el `lengt
 No aplica: `tcpdump` solo lee tráfico y `curl` descartó la respuesta a `/dev/null`. No
 queda nada instalado por el ejercicio salvo el propio `tcpdump`, que puedes conservar.
 
-## Ejercicio 3: Comparte una carpeta por NFS y un disco por iSCSI
+## Ejercicio 3: Comparte una carpeta por NFS y un disco por iSCSI en tu propio equipo
 
 Nodo: [Basics of NAS and SAN](README.md#basics-of-nas-and-san).
 
-Objetivo: exportar una carpeta por NFS desde una VM y montarla en otra (modelo NAS, a
-nivel de archivo), luego presentar un disco por iSCSI entre las mismas VMs (modelo SAN,
-a nivel de bloque) y anotar qué lado maneja el sistema de archivos en cada caso. Al
-terminar entenderás en la práctica la diferencia entre archivo y bloque.
+Objetivo: exportar una carpeta por NFS y montarla desde `127.0.0.1` (modelo NAS, a nivel
+de archivo), luego presentar un disco por iSCSI contra `127.0.0.1` (modelo SAN, a nivel
+de bloque) y anotar qué lado maneja el sistema de archivos en cada caso. Todo corre en
+una sola máquina: el servicio se levanta localmente y el cliente lo consume por la
+dirección de loopback. Al terminar entenderás en la práctica la diferencia entre archivo
+y bloque.
 
-Necesitas: dos VM Linux propias (Debian/Ubuntu) en una red aislada host-only o internal,
-una hará de servidor y otra de cliente; `sudo` en ambas. Paquetes: en el servidor
-`nfs-kernel-server` y `targetcli-fb`; en el cliente `nfs-common` y `open-iscsi`. Tiempo
-estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
+Necesitas: tu propio equipo Linux con `sudo`. No hacen falta VM ni una segunda máquina:
+cada servicio se levanta localmente y el cliente lo alcanza en `127.0.0.1` desde otra
+terminal. En una red real el servidor y el cliente estarían en equipos distintos, pero el
+flujo de NFS e iSCSI que vas a observar sobre loopback es idéntico. Abre al menos dos
+terminales y usa cada una para un rol:
+
+- **Terminal 1 (rol servidor)**: exporta la carpeta NFS y configura el target iSCSI.
+- **Terminal 2 (rol cliente)**: monta la carpeta NFS y se conecta al target iSCSI.
+
+Tiempo estimado: 45 minutos.
 
 ### Parte A: NFS (nivel archivo, el modelo NAS)
 
-1. En el servidor, instala NFS, crea la carpeta a compartir y ponle contenido.
+1. En la **Terminal 1 (servidor)**, instala NFS. En Arch el paquete `nfs-utils` trae a la
+   vez el servidor y el cliente; en Debian/Ubuntu van en paquetes separados.
+
+   Instalación:
+   - Debian/Ubuntu: `sudo apt install nfs-kernel-server` (servidor) y `sudo apt install nfs-common` (cliente)
+   - Arch: `sudo pacman -S nfs-utils` (servidor y cliente en un solo paquete)
+
+   - `sudo` → ejecuta como root; instalar, escribir en `/srv` y manejar servicios lo requiere.
+   - `apt` / `pacman` → el gestor de paquetes de Debian/Ubuntu y el de Arch, respectivamente.
+   - `install` / `-S` → el subcomando que instala el paquete en cada gestor.
+   - `nfs-kernel-server` / `nfs-common` → el servidor y el cliente NFS en Debian/Ubuntu.
+   - `nfs-utils` → el paquete único de Arch que incluye ambos.
+
+   En Arch arranca el servicio con `sudo systemctl start nfs-server` (Debian suele
+   arrancarlo solo al instalar).
+
+   Crea la carpeta a compartir y ponle contenido:
    ```bash
-   sudo apt install nfs-kernel-server
    sudo mkdir -p /srv/compartido
    echo "archivo servido por NFS" | sudo tee /srv/compartido/hola.txt
    ```
-   - `sudo` → ejecuta como root; instalar y escribir en `/srv` lo requiere.
-   - `apt` → gestor de paquetes de Debian/Ubuntu.
-   - `install` → subcomando de `apt`: instala el paquete.
-   - `nfs-kernel-server` → el paquete del servidor NFS.
    - `mkdir` → crea un directorio.
    - `-p` → crea las carpetas intermedias que falten y no se queja si ya existen.
    - `/srv/compartido` → la carpeta a crear.
@@ -445,14 +464,14 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    - `tee` → escribe su entrada en un archivo (con `sudo`, puede escribir donde solo root escribe).
    - `/srv/compartido/hola.txt` → el archivo que se crea con ese contenido.
 
-2. Exporta la carpeta hacia la red del cliente. Añade la línea al archivo de exports y
-   recarga.
+2. En la **Terminal 1 (servidor)**, exporta la carpeta hacia loopback. Añade la línea al
+   archivo de exports y recarga.
    ```bash
-   echo "/srv/compartido 192.168.56.0/24(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
+   echo "/srv/compartido 127.0.0.1(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
    sudo exportfs -ra
-   sudo systemctl restart nfs-kernel-server
+   sudo systemctl restart nfs-server
    ```
-   - `echo "..."` → imprime la línea de exportación: la carpeta, la red autorizada y las opciones `rw` (lectura/escritura), `sync` (confirma tras escribir) y `no_subtree_check` (desactiva una comprobación que da problemas).
+   - `echo "..."` → imprime la línea de exportación: la carpeta, el cliente autorizado (`127.0.0.1`, el propio equipo) y las opciones `rw` (lectura/escritura), `sync` (confirma tras escribir) y `no_subtree_check` (desactiva una comprobación que da problemas).
    - `|` → tubería (ver Parte A, paso 1).
    - `tee` → escribe en un archivo.
    - `-a` → append: añade al final del archivo en vez de sobrescribir.
@@ -462,35 +481,35 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    - `-a` → aplica a todas las exportaciones.
    - `systemctl` → controla servicios de systemd.
    - `restart` → reinicia el servicio para que tome la configuración.
-   - `nfs-kernel-server` → el servicio NFS.
+   - `nfs-server` → el servicio del servidor NFS en Arch; en Debian/Ubuntu el servicio se llama `nfs-kernel-server`.
 
-3. En el cliente, instala el soporte NFS y monta la carpeta.
+3. En la **Terminal 2 (cliente)**, consulta y monta la carpeta desde `127.0.0.1`. En Arch
+   el cliente ya vino con `nfs-utils`; en Debian/Ubuntu necesitas `nfs-common` (ver paso 1).
    ```bash
-   sudo apt install nfs-common
-   showmount -e 192.168.56.10
+   showmount -e 127.0.0.1
    sudo mkdir -p /mnt/nas
-   sudo mount -t nfs 192.168.56.10:/srv/compartido /mnt/nas
+   sudo mount -t nfs 127.0.0.1:/srv/compartido /mnt/nas
    ls /mnt/nas
    ```
-   - `sudo apt install nfs-common` → ver Parte A (paso 1); `nfs-common` trae el cliente NFS.
-   - `showmount` → pregunta a un servidor NFS qué tiene exportado (viene en `nfs-common`).
+   - `showmount` → pregunta a un servidor NFS qué tiene exportado (viene con NFS).
    - `-e` → exports: muestra la lista de carpetas exportadas y a quién.
-   - `192.168.56.10` → la IP del servidor a consultar.
+   - `127.0.0.1` → el servidor a consultar, aquí tu propio equipo por loopback.
    - `sudo mkdir -p /mnt/nas` → ver Parte A (paso 1); crea el punto de montaje.
    - `mount` → monta un sistema de archivos en un directorio.
    - `-t nfs` → type: indica que el recurso es de tipo NFS.
-   - `192.168.56.10:/srv/compartido` → origen: la IP del servidor y la carpeta exportada.
+   - `127.0.0.1:/srv/compartido` → origen: la dirección del servidor y la carpeta exportada.
    - `/mnt/nas` → destino: dónde se monta localmente.
    - `ls` → lista el contenido.
    - `/mnt/nas` → la carpeta montada que se lista.
 
-   `showmount -e` debe responder `Export list for 192.168.56.10:` y debajo
-   `/srv/compartido 192.168.56.0/24`. Es lo mismo que haría un atacante en la red para
-   ver qué comparte un servidor, así que un export abierto a toda la red se ve desde
-   cualquier equipo de ella. Después del `ls` debe aparecer `hola.txt`. Acabas de acceder a nivel de archivo: pediste un archivo por
-   su nombre y el servidor te lo entregó.
+   `showmount -e` debe responder `Export list for 127.0.0.1:` y debajo `/srv/compartido
+   127.0.0.1`. Eso mismo haría un atacante contra un servidor NFS para ver qué comparte;
+   en una red real apuntaría a la IP del servidor en vez de a loopback, y un export
+   abierto a toda una red (`*` o `0.0.0.0/0`) se vería desde cualquier equipo de ella.
+   Después del `ls` debe aparecer `hola.txt`. Acabas de acceder a nivel de archivo:
+   pediste un archivo por su nombre y el servidor te lo entregó.
 
-4. Observa quién maneja el sistema de archivos. En el cliente, mira el montaje:
+4. Observa quién maneja el sistema de archivos. En la **Terminal 2 (cliente)**, mira el montaje:
    ```bash
    mount | grep nas
    ```
@@ -503,8 +522,8 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    con `-t nfs`). El cliente no formateó nada: el servidor es el dueño del sistema de
    archivos y tú solo pides archivos. Ese es el comportamiento NAS.
 
-5. Comprueba qué pasa con root a través de NFS. En el cliente, intenta crear un archivo
-   como root dentro del montaje:
+5. Comprueba qué pasa con root a través de NFS. En la **Terminal 2 (cliente)**, intenta
+   crear un archivo como root dentro del montaje:
    ```bash
    sudo touch /mnt/nas/prueba-root
    ```
@@ -529,19 +548,25 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
 
 ### Parte B: iSCSI (nivel bloque, el modelo SAN)
 
-1. En el servidor, instala `targetcli` y crea una carpeta para el archivo que hará de
-   disco.
+1. En la **Terminal 1 (servidor)**, instala el target iSCSI y crea una carpeta para el
+   archivo que hará de disco.
+
+   Instalación:
+   - Debian/Ubuntu: `sudo apt install targetcli-fb`
+   - Arch (AUR): `yay -S targetcli-fb` (no está en los repos oficiales; necesita un ayudante de AUR como `yay`)
+
+   - `apt install` / `yay -S` → instala el paquete desde los repos de Debian/Ubuntu o desde el AUR de Arch.
+   - `targetcli-fb` → la herramienta que configura el target iSCSI (consola `targetcli`).
+
    ```bash
-   sudo apt install targetcli-fb
    sudo mkdir -p /srv/iscsi
    sudo targetcli
    ```
-   - `sudo apt install targetcli-fb` → ver Parte A (paso 1); instala la herramienta de target iSCSI.
    - `sudo mkdir -p /srv/iscsi` → ver Parte A (paso 1); carpeta para el archivo-disco.
    - `targetcli` → abre la consola interactiva para configurar el target iSCSI.
 
 2. Dentro de la consola interactiva de `targetcli`, crea el backstore (el disco de
-   respaldo), el target (IQN), el LUN y el permiso de acceso para el cliente. Escribe
+   respaldo), el target (IQN), el LUN y el permiso de acceso para el iniciador. Escribe
    cada línea y termina con `exit`:
    ```
    /backstores/fileio create disk01 /srv/iscsi/disk01.img 500M
@@ -551,33 +576,40 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    exit
    ```
    - `/backstores/fileio create disk01 /srv/iscsi/disk01.img 500M` → crea un disco de respaldo basado en archivo llamado `disk01`, en esa ruta y de 500 MB.
-   - `/iscsi create iqn.2026-10.lab.servidor:disco1` → crea un target iSCSI con ese IQN (nombre único del target).
+   - `/iscsi create iqn.2026-10.lab.servidor:disco1` → crea un target iSCSI con ese IQN (nombre único del target); por defecto queda escuchando en el portal `0.0.0.0:3260`, así que es alcanzable por `127.0.0.1`.
    - `.../tpg1/luns create /backstores/fileio/disk01` → asocia el disco de respaldo como un LUN dentro del grupo de portales `tpg1` del target.
-   - `.../tpg1/acls create iqn.2026-10.lab.cliente:init01` → autoriza a ese IQN de iniciador (el del cliente) a usar el LUN.
+   - `.../tpg1/acls create iqn.2026-10.lab.cliente:init01` → autoriza a ese IQN de iniciador (el del rol cliente) a usar el LUN.
    - `exit` → sale de la consola de `targetcli` guardando la configuración.
 
-3. En el cliente, instala el iniciador iSCSI y ponle el mismo IQN que autorizaste.
+3. En la **Terminal 2 (cliente)**, instala el iniciador iSCSI y ponle el mismo IQN que
+   autorizaste.
+
+   Instalación:
+   - Debian/Ubuntu: `sudo apt install open-iscsi`
+   - Arch: `sudo pacman -S open-iscsi`
+
+   En Arch arranca el servicio con `sudo systemctl start iscsid` (Debian suele arrancarlo
+   solo al instalar).
    ```bash
-   sudo apt install open-iscsi
    echo "InitiatorName=iqn.2026-10.lab.cliente:init01" | sudo tee /etc/iscsi/initiatorname.iscsi
    sudo systemctl restart iscsid
    ```
-   - `sudo apt install open-iscsi` → ver Parte A (paso 1); `open-iscsi` es el iniciador.
+   - `open-iscsi` → el paquete del iniciador iSCSI.
    - `echo "InitiatorName=..." | sudo tee /etc/iscsi/initiatorname.iscsi` → escribe el IQN del iniciador en su archivo de configuración (`echo`, `|`, `tee` ver Parte A, paso 1; aquí `tee` sin `-a` sobrescribe).
    - `sudo systemctl restart iscsid` → reinicia el servicio iniciador para tomar el nuevo IQN (`systemctl restart` ver Parte A, paso 2).
 
-4. Descubre el target del servidor e inicia sesión en él.
+4. En la **Terminal 2 (cliente)**, descubre el target e inicia sesión en él contra loopback.
    ```bash
-   sudo iscsiadm -m discovery -t sendtargets -p 192.168.56.10
-   sudo iscsiadm -m node -T iqn.2026-10.lab.servidor:disco1 -p 192.168.56.10 --login
+   sudo iscsiadm -m discovery -t sendtargets -p 127.0.0.1
+   sudo iscsiadm -m node -T iqn.2026-10.lab.servidor:disco1 -p 127.0.0.1 --login
    ```
    - `iscsiadm` → administra las conexiones iSCSI del iniciador.
    - `-m discovery` → mode discovery: busca targets disponibles.
    - `-t sendtargets` → tipo de descubrimiento: pregunta al portal qué targets ofrece.
-   - `-p 192.168.56.10` → portal: la IP (y puerto por defecto 3260) del servidor.
+   - `-p 127.0.0.1` → portal: la dirección (y puerto por defecto 3260) del servidor, aquí tu propio equipo.
    - `-m node` → mode node: opera sobre un target concreto ya descubierto.
    - `-T iqn.2026-10.lab.servidor:disco1` → target: el IQN del servidor al que conectarse.
-   - `-p 192.168.56.10` → el portal del target.
+   - `-p 127.0.0.1` → el portal del target.
    - `--login` → inicia sesión en el target, de modo que aparezca como disco local.
 
    El `discovery` debe listar el IQN del servidor; el `--login` conecta.
@@ -592,7 +624,7 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    archivos todavía: ese trabajo te toca a ti, el cliente.
 
 6. Antes de formatear, identifica el disco iSCSI sin adivinar la letra. `mkfs` borra lo
-   que haya en el dispositivo; si escribes `/dev/sdb` y en tu VM `sdb` resulta ser otro
+   que haya en el dispositivo; si escribes `/dev/sdb` y en tu equipo `sdb` resulta ser otro
    disco, lo destruyes. La ruta estable está en `/dev/disk/by-path/`, que nombra los
    discos por cómo están conectados e incluye el IQN del target.
    ```bash
@@ -602,7 +634,7 @@ estimado: 45 minutos. Supón servidor `192.168.56.10` y cliente `192.168.56.20`.
    - `DISCO=$(...)` → guarda en la variable `DISCO` lo que imprima el comando de dentro.
    - `readlink` → resuelve un enlace simbólico y muestra a dónde apunta.
    - `-e` → resuelve la ruta completa y falla (sin imprimir nada) si no existe.
-   - `/dev/disk/by-path/*iscsi-iqn.2026-10.lab.servidor:disco1-lun-0` → el enlace del LUN 0 de tu target; el `*` cubre la parte inicial con la IP y el puerto (`ip-192.168.56.10:3260-`).
+   - `/dev/disk/by-path/*iscsi-iqn.2026-10.lab.servidor:disco1-lun-0` → el enlace del LUN 0 de tu target; el `*` cubre la parte inicial con la IP y el puerto (`ip-127.0.0.1:3260-`).
    - `lsblk` → ver paso 5.
    - `-o NAME,SIZE,TRAN,FSTYPE,MOUNTPOINTS` → columnas a mostrar: nombre, tamaño, transporte, sistema de archivos y dónde está montado.
    - `"$DISCO"` → muestra solo ese dispositivo.
@@ -645,7 +677,9 @@ el sistema de archivos".
 - ¿En cuál pediste un archivo por su nombre sin preocuparte de dónde estaban los bloques?
   En NFS, el modelo NAS a nivel de archivo.
 - ¿Por qué iSCSI suele ir en una red separada de la de usuarios? Para que el tráfico de
-  disco (bloques) no compita con el tráfico normal y mantenga el rendimiento.
+  disco (bloques) no compita con el tráfico normal y mantenga el rendimiento; aquí lo
+  corriste todo por loopback en un solo equipo, pero en producción esa red sería física y
+  aparte.
 - ¿Por qué `sudo touch` falló dentro de `/mnt/nas` y qué pasaría con `no_root_squash`?
   Por `root_squash`: el root del cliente llega al servidor como `nobody`. Con
   `no_root_squash`, root de cualquier cliente autorizado sería root sobre los archivos
@@ -653,18 +687,19 @@ el sistema de archivos".
 
 ### Limpieza
 
-En el cliente, desmonta y cierra sesión iSCSI:
+En la **Terminal 2 (cliente)**, desmonta y cierra sesión iSCSI:
 ```bash
 sudo umount /mnt/san
 sudo umount /mnt/nas
-sudo iscsiadm -m node -T iqn.2026-10.lab.servidor:disco1 -p 192.168.56.10 --logout
+sudo iscsiadm -m node -T iqn.2026-10.lab.servidor:disco1 -p 127.0.0.1 --logout
 ```
 - `umount` → desmonta un sistema de archivos.
 - `/mnt/san` / `/mnt/nas` → los puntos de montaje a desmontar.
 - `iscsiadm -m node -T ... -p ...` → ver Parte B (paso 4).
 - `--logout` → cierra la sesión iSCSI, con lo que el disco desaparece del cliente.
 
-En el servidor, quita la exportación NFS (borra la línea de `/etc/exports` y vuelve a
-correr `sudo exportfs -ra`, ver Parte A, paso 2) y elimina el target iSCSI entrando de
-nuevo a `targetcli` con `/iscsi delete iqn.2026-10.lab.servidor:disco1` (`delete` borra
-el target indicado). Desinstala los paquetes si no los vas a reutilizar.
+En la **Terminal 1 (servidor)**, quita la exportación NFS (borra la línea de
+`/etc/exports` y vuelve a correr `sudo exportfs -ra`, ver Parte A, paso 2) y elimina el
+target iSCSI entrando de nuevo a `targetcli` con `/iscsi delete
+iqn.2026-10.lab.servidor:disco1` (`delete` borra el target indicado). Desinstala los
+paquetes si no los vas a reutilizar.

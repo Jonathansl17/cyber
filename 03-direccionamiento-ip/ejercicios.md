@@ -251,7 +251,7 @@ Request, Acknowledge) al reconectar la red e identificar en la salida las opcion
 (máscara), 3 (gateway), 6 (DNS) y 51 (duración del lease). Al terminar reconocerás el
 intercambio DORA en una captura real.
 
-Necesitas: tu propio equipo o VM Linux que obtenga IP por DHCP; `tcpdump` (instalar con
+Necesitas: tu propio equipo Linux que obtenga IP por DHCP; `tcpdump` (instalar con
 `sudo apt install tcpdump` en Debian/Ubuntu o `sudo pacman -S tcpdump` en Arch); `sudo`.
 Tiempo estimado: 20 minutos. Capturas tu propio tráfico DHCP.
 
@@ -280,7 +280,7 @@ Tiempo estimado: 20 minutos. Capturas tu propio tráfico DHCP.
    - `'udp port 67 or udp port 68'` → filtro de captura: solo tráfico UDP de los puertos 67 o 68 (los de DHCP).
 
 3. En otra terminal, fuerza al cliente DHCP a pedir de nuevo la concesión. Hazlo desde
-   la consola de la VM, no por SSH: al soltar la IP se corta la conexión. El comando
+   una consola local del equipo, no por SSH: al soltar la IP se corta la conexión. El comando
    depende de qué gestiona la red en tu sistema; mira cuál está activo con
    `systemctl is-active NetworkManager systemd-networkd` (`is-active` responde `active`
    o `inactive` por cada servicio).
@@ -309,8 +309,8 @@ Tiempo estimado: 20 minutos. Capturas tu propio tráfico DHCP.
    descubrir servidores.
 
    Con `dhclient` (el cliente ISC clásico; no viene instalado en Ubuntu 24.04, se instala
-   con `sudo apt install isc-dhcp-client`, y solo debes usarlo si nada más gestiona la
-   interfaz):
+   en Debian/Ubuntu con `sudo apt install isc-dhcp-client` o en Arch con `sudo pacman -S
+   dhclient`, y solo debes usarlo si nada más gestiona la interfaz):
    ```bash
    sudo dhclient -r eth0 && sudo dhclient eth0
    ```
@@ -324,8 +324,8 @@ Tiempo estimado: 20 minutos. Capturas tu propio tráfico DHCP.
    anterior puede saltarse el Discover y el Offer y pedir directamente su IP de antes
    (Request y ACK), igual que en una renovación. Si solo ves esos dos, es el mismo
    protocolo a mitad de camino; para el DORA completo prueba otra de las opciones de
-   arriba o conecta la VM a una red nueva (por ejemplo, cambiando su adaptador en
-   VirtualBox), donde el cliente no tiene concesión previa.
+   arriba o conéctate a una red distinta (por ejemplo, otra red Wi-Fi), donde el cliente
+   no tiene concesión previa.
 
 4. Vuelve a la captura. Busca los cuatro mensajes en orden. Con `-v`, `tcpdump` etiqueta
    cada uno (`Discover`, `Offer`, `Request`, `ACK`):
@@ -371,7 +371,7 @@ Objetivo: usar `dig +trace` para ver cómo una consulta recorre la raíz, el TLD
 servidor autoritativo, y luego consultar los registros MX, TXT y PTR de un dominio. Al
 terminar sabrás leer la jerarquía del DNS y distinguir los tipos de registro.
 
-Necesitas: tu propio equipo o VM con salida a Internet; `dig` (instalar con `sudo apt
+Necesitas: tu propio equipo con salida a Internet; `dig` (instalar con `sudo apt
 install dnsutils` en Debian/Ubuntu o `sudo pacman -S bind` en Arch). Tiempo estimado: 20
 minutos. Usa un dominio tuyo o uno muy conocido como `wikipedia.org`.
 
@@ -463,7 +463,7 @@ Objetivo: en tu propia máquina, identificar tu puerta de enlace con `ip route`,
 del gateway en la caché ARP con `ip neigh`, y qué servicios escuchan solo en `127.0.0.1`
 con `ss -tln`. Al terminar sabrás leer el estado de red de un equipo de un vistazo.
 
-Necesitas: tu propio equipo o VM Linux. `ip` y `ss` vienen en el paquete `iproute2`, ya
+Necesitas: tu propio equipo Linux. `ip` y `ss` vienen en el paquete `iproute2`, ya
 instalado. Tiempo estimado: 15 minutos.
 
 ### Pasos
@@ -653,11 +653,10 @@ descubrir los equipos IPv6 de tu enlace con un solo ping, y provocar y capturar 
 mensajes ICMP tipos 8, 0, 11 y 3. Al terminar sabrás leer el estado IPv6 de un equipo y
 reconocer cada tipo de ICMP en una captura.
 
-Necesitas: tu propio equipo o VM Linux con red (en VirtualBox, adaptador en modo puente
-para ver otros equipos IPv6; en NAT solo verás a la VM y al router virtual). `ip` y
-`ping` ya vienen instalados; `tcpdump` se instala con `sudo apt install tcpdump` o `sudo
-pacman -S tcpdump`. Tiempo estimado: 20 minutos. Haz el ping a `ff02::1` solo en tu red;
-en una red ajena es un barrido de hosts.
+Necesitas: tu propio equipo Linux con red. `ip` y `ping` ya vienen instalados; `tcpdump`
+se instala con `sudo apt install tcpdump` en Debian/Ubuntu o `sudo pacman -S tcpdump` en
+Arch. Tiempo estimado: 20 minutos. Haz el ping a `ff02::1` solo en tu red; en una red
+ajena es un barrido de hosts.
 
 ### Pasos
 

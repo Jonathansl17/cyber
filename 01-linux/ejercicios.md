@@ -18,8 +18,8 @@ escribir pero ninguno pueda borrar los archivos del otro, y comprobar con `ls -l
 los archivos nuevos heredan el grupo de la carpeta. Al terminar sabrás por qué `/tmp`
 protege lo que cada usuario deja dentro.
 
-Necesitas: una VM Linux propia con acceso a `sudo` (Debian, Ubuntu o similar). Todo con
-herramientas del sistema base. Tiempo estimado: 20 minutos.
+Necesitas: tu propio equipo Linux con acceso a `sudo` (Debian, Ubuntu, Arch o similar).
+Todo con herramientas del sistema base. Tiempo estimado: 20 minutos.
 
 ### Pasos
 
@@ -163,12 +163,12 @@ sudo groupdel equipo
 
 Nodo: [Los permisos son el mapa de la escalada de privilegios](README.md#los-permisos-son-el-mapa-de-la-escalada-de-privilegios).
 
-Objetivo: listar todos los binarios SUID de tu VM, guardar la lista y revisar cada uno
-en GTFOBins para saber cuáles serían peligrosos si estuvieran mal puestos. Al terminar
-harás la misma búsqueda que hace un auditor (o un atacante) al entrar a una máquina.
+Objetivo: listar todos los binarios SUID de tu propio equipo, guardar la lista y revisar
+cada uno en GTFOBins para saber cuáles serían peligrosos si estuvieran mal puestos. Al
+terminar harás la misma búsqueda que hace un auditor (o un atacante) al entrar a una máquina.
 
-Necesitas: una VM Linux propia. Solo herramientas del sistema base y un navegador para
-consultar GTFOBins. Tiempo estimado: 25 minutos. Se practica sobre tu propia VM, nunca
+Necesitas: tu propio equipo Linux. Solo herramientas del sistema base y un navegador para
+consultar GTFOBins. Tiempo estimado: 25 minutos. Se practica sobre tu propia máquina, nunca
 sobre equipos ajenos.
 
 ### Pasos
@@ -228,7 +228,7 @@ sobre equipos ajenos.
 
 ### Resultado esperado
 
-Un archivo `~/suid.txt` con todos los SUID de tu VM y, al lado de cada uno, una nota de
+Un archivo `~/suid.txt` con todos los SUID de tu equipo y, al lado de cada uno, una nota de
 si GTFOBins lo lista como abusable con SUID. Sabrás distinguir los SUID legítimos del
 sistema de los que serían una puerta a root si estuvieran mal puestos.
 
@@ -255,9 +255,15 @@ Objetivo: provocar que nginx no arranque porque el puerto 80 ya está ocupado y
 diagnosticar la causa usando solo `systemctl status`, `journalctl -u` y `ss -tulpn`,
 sin tocar nada a ciegas. Al terminar seguirás el orden práctico que recomienda la nota.
 
-Necesitas: una VM Linux propia con `sudo` (Debian/Ubuntu). Instalación de nginx: `sudo
-apt install nginx` (Debian/Ubuntu) o `sudo pacman -S nginx` (Arch). `python3`, `ss` y
-`journalctl` ya vienen. Tiempo estimado: 25 minutos.
+Necesitas: tu propio equipo Linux con `sudo`. `python3`, `ss` y `journalctl` ya vienen.
+Tiempo estimado: 25 minutos.
+
+Instalación de nginx:
+- Debian/Ubuntu: `sudo apt install nginx`
+- Arch: `sudo pacman -S nginx`
+
+En Arch arranca el servicio con `sudo systemctl start nginx` (Debian suele arrancarlo
+solo al instalar).
 
 ### Pasos
 
@@ -398,45 +404,55 @@ paso 7).
 Nodo: [Common Commands](README.md#common-commands), en concreto la cadena
 `grep | awk | sort | uniq -c | sort -rn`.
 
-Objetivo: generar varios intentos de login SSH fallidos contra tu propia VM y reconstruir
-la cadena de comandos que cuenta cuántos intentos vinieron de cada IP, ordenados de mayor
-a menor. Al terminar sabrás leer un ataque de fuerza bruta en los logs.
+Objetivo: generar varios intentos de login SSH fallidos contra tu propio equipo y
+reconstruir la cadena de comandos que cuenta cuántos intentos vinieron de cada IP,
+ordenados de mayor a menor. Al terminar sabrás leer un ataque de fuerza bruta en los logs.
 
-Necesitas: una VM Linux propia con el servicio SSH instalado y corriendo, y otra máquina
-(o la misma VM) desde donde lanzar los intentos. Instalación del servidor SSH: `sudo apt
-install openssh-server` (Debian/Ubuntu) o `sudo pacman -S openssh` (Arch). Red aislada
-host-only recomendada, ya que vas a generar tráfico de login fallido; todo contra tu
-propia VM. Tiempo estimado: 25 minutos.
+Necesitas: tu propio equipo Linux con el servicio SSH instalado y corriendo. Todo el
+ejercicio corre en esta misma máquina usando dos terminales: en la **Terminal 1
+(servidor)** levantas SSH y lees los logs; en la **Terminal 2 (cliente)** lanzas los
+intentos de login contra `127.0.0.1`. Tiempo estimado: 25 minutos. Los intentos fallidos
+se generan solo contra `127.0.0.1` / servicios que tú mismo levantaste en este equipo,
+nunca contra equipos ajenos.
+
+Instalación del servidor SSH:
+- Debian/Ubuntu: `sudo apt install openssh-server`
+- Arch: `sudo pacman -S openssh`
+
+En Arch arranca el servicio con `sudo systemctl start sshd` (Debian suele arrancarlo solo
+al instalar).
 
 ### Pasos
 
-1. En la VM que hace de servidor, asegúrate de que SSH está activo y anota su IP.
+1. **Terminal 1 (servidor):** asegúrate de que SSH está activo y escuchando en este equipo.
    ```bash
    sudo systemctl enable --now ssh
-   ip -br addr
+   ss -tlnp | grep ':22'
    ```
    - `sudo` → ver ejercicio 1 (paso 1).
    - `systemctl` → ver ejercicio 3 (paso 1).
    - `enable` → subcomando de `systemctl`: marca el servicio para arrancar en cada inicio del sistema.
    - `--now` → además de habilitarlo, lo arranca ya mismo.
-   - `ssh` → el servicio (en Arch se llama `sshd`).
-   - `ip` → ver ejercicio 1 del archivo 01; herramienta de red.
-   - `-br` → brief: salida resumida, una línea por interfaz.
-   - `addr` → subcomando de `ip`: muestra las direcciones de las interfaces.
+   - `ssh` → el servicio (en Arch se llama `sshd`: usa `sudo systemctl enable --now sshd`).
+   - `ss -tlnp` → ver ejercicio 3 (paso 6); lista los sockets TCP en escucha con su proceso.
+   - `| grep ':22'` → deja solo la línea del puerto 22. Debe salir `sshd` escuchando (en `0.0.0.0:22` o `[::]:22`), lo que incluye la dirección de loopback `127.0.0.1`.
 
-2. Desde la otra máquina (o desde la misma VM apuntando a su propia IP), genera varios
-   intentos fallidos usando un usuario que no existe. Repite el comando varias veces y
-   escribe cualquier contraseña incorrecta cuando la pida.
+2. **Terminal 2 (cliente):** genera varios intentos fallidos contra `127.0.0.1` usando un
+   usuario que no existe. Repite el comando varias veces y escribe cualquier contraseña
+   incorrecta cuando la pida.
    ```bash
-   ssh usuariofalso@192.168.56.10
+   ssh -4 usuariofalso@127.0.0.1
    ```
    - `ssh` → cliente de shell remota cifrada.
-   - `usuariofalso@192.168.56.10` → argumento de `ssh`: el usuario (`usuariofalso`, que no existe) y la IP del servidor, separados por `@`.
+   - `-4` → fuerza IPv4. Sin esto `127.0.0.1` ya es IPv4, pero el `-4` evita que, si cambiaras el destino por `localhost`, resuelva a `::1` (IPv6) y el origen que registra sshd sea `::1` en vez de `127.0.0.1`.
+   - `usuariofalso@127.0.0.1` → argumento de `ssh`: el usuario (`usuariofalso`, que no existe) y la IP del servidor, aquí tu propia máquina por loopback, separados por `@`.
 
    Hazlo unas cinco o seis veces para tener datos que contar. Cada intento fallido deja
-   una línea en el log del servidor.
+   una línea en el log del servidor. En una red real este tráfico vendría desde otra
+   máquina con su propia IP; sobre loopback el registro de login fallido es idéntico, solo
+   que el origen es `127.0.0.1`.
 
-3. De vuelta en el servidor, localiza las líneas de contraseña fallida. En Debian/Ubuntu
+3. De vuelta en la Terminal 1 (servidor), localiza las líneas de contraseña fallida. En Debian/Ubuntu
    están en `/var/log/auth.log`; en distros con journal puro, en `journalctl`.
    ```bash
    sudo grep "Failed password" /var/log/auth.log | tail
@@ -478,11 +494,14 @@ propia VM. Tiempo estimado: 25 minutos.
    - `-n` → numeric: ordena por valor numérico, no alfabético.
    - `head` → muestra solo las primeras líneas (por defecto 10): las IP con más intentos.
 
-   La salida es el número de intentos y la IP, lo más alto primero:
+   La salida es el número de intentos y la IP, lo más alto primero. Como todo salió de
+   loopback, verás una sola IP con todos tus intentos:
    ```
-        6 192.168.56.1
-        1 192.168.56.20
+        6 127.0.0.1
    ```
+   En una red real aparecería una línea por cada IP atacante; aquí, al correr cliente y
+   servidor en el mismo equipo, el origen es siempre `127.0.0.1`, pero la cadena que lo
+   cuenta es exactamente la misma.
 
 6. Interpreta el resultado. Cada eslabón de la cadena hace una cosa: `grep` filtra las
    líneas de fallo, `awk` saca la IP, `sort` las junta, `uniq -c` cuenta repetidas (por
@@ -519,8 +538,9 @@ sudo systemctl disable --now ssh
 Los intentos fallidos quedan en el log como evidencia; si quieres limpiarlos, rota el log
 con `sudo logrotate -f /etc/logrotate.conf` (`logrotate` rota logs, `-f` fuerza la
 rotación aunque no toque todavía, y el argumento es su archivo de configuración) en lugar
-de borrarlo a mano. Desinstala el servidor SSH si no lo necesitas con `sudo apt purge
-openssh-server -y` (ver ejercicio 3, limpieza).
+de borrarlo a mano. Desinstala el servidor SSH si no lo necesitas: en Debian/Ubuntu con
+`sudo apt purge openssh-server -y` (ver ejercicio 3, limpieza), en Arch con `sudo pacman
+-Rns openssh`.
 
 ## Ejercicio 5: Audita tareas programadas, PATH y capabilities
 
@@ -531,7 +551,7 @@ luego auditar tu propia máquina como lo haría un defensor: qué tareas program
 como root, si el `PATH` tiene carpetas peligrosas y qué binarios tienen capabilities o
 SUID. Al terminar sabrás revisar los sitios donde un permiso de más termina en root.
 
-Necesitas: una VM Linux propia con `sudo` (Debian, Ubuntu o similar; en Arch funciona
+Necesitas: tu propio equipo Linux con `sudo` (Debian, Ubuntu o similar; en Arch funciona
 igual salvo cron, que no viene instalado). `getcap` viene en el paquete `libcap2-bin`
 (Debian/Ubuntu) o `libcap` (Arch), normalmente ya instalado. Tiempo estimado: 25
 minutos. Solo se audita tu propia máquina; el único cambio es el timer de prueba, que se

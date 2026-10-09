@@ -4,20 +4,31 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-Todo se hace sobre equipos, cuentas y logs tuyos. Los intentos fallidos se generan contra tu
-propia máquina o VM, nunca contra equipos de terceros.
+Todo se hace sobre equipos, cuentas y logs tuyos. Los intentos fallidos se generan contra
+`127.0.0.1` / servicios que tú mismo levantaste en tu propia máquina, nunca contra equipos
+de terceros.
 
 ## Ejercicio 1: Distingue fuerza bruta de password spray en tus logs
 
 Nodo: Brute Force vs Password Spray ([README](README.md#brute-force-vs-password-spray)).
 
-Objetivo: a partir de los logs de autenticación de tu propio equipo o VM, contar fallos por
+Objetivo: a partir de los logs de autenticación de tu propio equipo, contar fallos por
 cuenta y cuentas distintas por IP de origen, y decidir con esos dos números si un patrón se
 parece más a fuerza bruta (muchos fallos en una cuenta) o a password spray (un fallo en cada
 una de muchas cuentas desde el mismo origen).
 
-Necesitas: una VM o equipo Linux con `sshd` corriendo y acceso a `journalctl` (con `sudo` o
-siendo miembro del grupo `systemd-journal`). 30 minutos.
+Necesitas: tu propio equipo Linux con `sshd` corriendo y acceso a `journalctl` (con `sudo` o
+siendo miembro del grupo `systemd-journal`). Todo corre en esta misma máquina: generas los
+fallos contra `127.0.0.1` y luego lees tus propios logs. 30 minutos. Los intentos fallidos se
+generan solo contra `127.0.0.1` / servicios que tú mismo levantaste en este equipo, nunca
+contra equipos ajenos.
+
+Instalación del servidor SSH:
+- Debian/Ubuntu: `sudo apt install openssh-server`
+- Arch: `sudo pacman -S openssh`
+
+En Arch arranca el servicio con `sudo systemctl start sshd` (Debian suele arrancarlo solo al
+instalar).
 
 ### Pasos
 
@@ -57,7 +68,7 @@ siendo miembro del grupo `systemd-journal`). 30 minutos.
    > fallos seguidos desde la misma IP, el servidor penaliza ese origen y rechaza o retrasa los
    > intentos siguientes (verás `banner exchange ... Connection closed`). Es justo una defensa
    > contra lo que estás simulando. Si los intentos empiezan a cortarse, espera unos minutos, o
-   > baja el ritmo, o en una VM de laboratorio desactívalo temporalmente con
+   > baja el ritmo, o en este equipo de laboratorio desactívalo temporalmente con
    > `PerSourcePenalties no` en `/etc/ssh/sshd_config` y `sudo systemctl restart sshd`. En equipos
    > reales se deja activado.
 

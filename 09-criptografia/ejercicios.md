@@ -4,9 +4,12 @@ Ejercicios guiados para hacer en tu propio equipo o laboratorio. Cada uno dice q
 a lograr, qué necesitas, los pasos exactos y cómo comprobar que salió bien. La teoría
 está en [README.md](README.md).
 
-Todo se hace sobre equipos, máquinas virtuales, claves y dominios tuyos. Cuando hay tráfico
-que capturar o cifrar entre máquinas, se usan dos VMs en una red aislada (host-only o
-interna), nunca contra servicios de terceros.
+Todo se hace sobre tu propio equipo, tus claves y tus dominios. Cuando hay tráfico que
+capturar o cifrar entre dos extremos, se levanta un servicio local atado a loopback y se le
+habla desde otra terminal contra `127.0.0.1` (o `127.0.0.2`), con la captura en la interfaz
+`lo`; nunca contra servicios de terceros. Donde el concepto pide dos máquinas distintas, se
+usa loopback igual y se indica que en una red real serían dos equipos: el flujo de paquetes
+que observas es el mismo.
 
 ## Ejercicio 1: Haz Diffie-Hellman a mano y en Python
 
@@ -16,7 +19,7 @@ Objetivo: reproducir el intercambio Diffie-Hellman de la nota, primero a mano co
 de juguete y luego en Python, comprobar que los dos lados llegan a la misma llave sin haberla
 enviado, y repetirlo con un primo real de 2048 bits generado con openssl.
 
-Necesitas: Python 3 y OpenSSL (ambos vienen en Linux). 20 minutos. No hace falta red.
+Necesitas: Python 3 y OpenSSL (suelen venir en Linux; si faltan, Debian/Ubuntu: `sudo apt install python3 openssl`; Arch: `sudo pacman -S python openssl`). 20 minutos. No hace falta red.
 
 ### Pasos
 
@@ -130,7 +133,7 @@ Objetivo: montar la cadena de confianza de la nota (CA raíz, CA intermedia y ce
 hoja) con openssl, verificar la cadena con `openssl verify`, revocar la hoja y generar la
 CRL, y comprobar que tras la revocación la verificación con `-crl_check` falla.
 
-Necesitas: OpenSSL (viene en Linux; probado con OpenSSL 3.x). 40 minutos. No hace falta red.
+Necesitas: OpenSSL (suele venir en Linux; probado con OpenSSL 3.x; si falta, Debian/Ubuntu: `sudo apt install openssl`; Arch: `sudo pacman -S openssl`). 40 minutos. No hace falta red.
 
 ### Pasos
 
@@ -323,26 +326,19 @@ rm -rf ~/pki-lab
 
 Nodo: FTP vs SFTP ([README](README.md#ftp-vs-sftp)).
 
-Objetivo: subir un archivo por FTP y por SFTP entre dos VMs tuyas mientras capturas el
-tráfico, y ver con tus ojos que en FTP aparecen `USER` y `PASS` en texto claro mientras que
-en SFTP todo son paquetes SSH cifrados.
+Objetivo: subir un archivo por FTP y por SFTP en tu propio equipo, entre un servidor en `127.0.0.1` y un cliente en otra terminal, mientras capturas el tráfico en loopback, y ver con tus ojos que en FTP aparecen `USER` y `PASS` en texto claro mientras que en SFTP todo son paquetes SSH cifrados.
 
-Necesitas: dos VMs Linux en una red interna aislada (host-only o interna), nada de internet.
-Una hace de servidor (IP de ejemplo `10.0.0.10`) con `vsftpd` y el servidor SSH ya incluido;
-la otra de cliente con un cliente FTP, `sftp` y Wireshark. Cuenta de prueba en el servidor,
-nunca una real. 45 minutos.
+Necesitas: un Linux con `vsftpd` (servidor FTP), un servidor SSH (`openssh`), un cliente FTP, el cliente `sftp` y `tshark`/Wireshark. Todo corre en el mismo equipo, en varias terminales: el servidor escucha en `127.0.0.1` y el cliente se conecta a `127.0.0.1` desde otra terminal. En una red real el servidor y el cliente estarían en máquinas distintas; aquí comparten loopback, pero el `USER`/`PASS` en claro que vas a ver es idéntico. Cuenta de prueba creada solo para el laboratorio, nunca una real. Trabaja únicamente contra los servicios que tú mismo levantas en `127.0.0.1`.
 
-- Servidor Debian/Ubuntu: `sudo apt install vsftpd` (SSH suele venir con `openssh-server`).
-- Servidor Arch: `sudo pacman -S vsftpd openssh && sudo systemctl enable --now vsftpd sshd`
-- Cliente Debian/Ubuntu: `sudo apt install ftp wireshark openssh-client`
-- Cliente Arch: `sudo pacman -S inetutils wireshark-qt openssh`
+Instalación:
+- Debian/Ubuntu: `sudo apt install vsftpd openssh-server ftp wireshark openssh-client`
+- Arch: `sudo pacman -S vsftpd openssh inetutils wireshark-qt` (el cliente `ftp` viene en `inetutils`; usa `wireshark-cli` si solo quieres `tshark`)
+
+En Arch los demonios no arrancan solos al instalar: `sudo systemctl start sshd` (el servidor SSH) y, tras configurarlo en el paso 1, `vsftpd`. En Debian/Ubuntu `ssh` suele arrancar solo. Para capturar con `tshark`/Wireshark sin ser root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`, luego reinicia sesión; en Debian/Ubuntu además `sudo dpkg-reconfigure wireshark-common`). Tiempo: 45 minutos.
 
 ### Pasos
 
-1. En el servidor, configura vsftpd de forma explícita, arráncalo y crea un usuario de prueba
-   solo para el laboratorio. No confíes en los valores por defecto: en Debian/Ubuntu vsftpd
-   trae `write_enable=NO`, así que el `put` del paso 3 fallaría con "550 Permission denied" si
-   no lo activas; otras opciones también cambian entre distros. Fíjalas tú:
+1. **Terminal 1 (servidor).** Configura vsftpd de forma explícita, arráncalo y crea un usuario de prueba solo para el laboratorio. No confíes en los valores por defecto: en varias distros vsftpd trae `write_enable=NO`, así que el `put` del paso 3 fallaría con "550 Permission denied" si no lo activas; otras opciones también cambian entre distros. Fíjalas tú:
    ```bash
    sudo tee /etc/vsftpd.conf >/dev/null <<'EOF'
    listen=YES
@@ -356,54 +352,53 @@ nunca una real. 45 minutos.
    sudo systemctl restart vsftpd
    sudo useradd -m pruebaftp && echo 'pruebaftp:Lab12345' | sudo chpasswd
    ```
-   - `sudo tee /etc/vsftpd.conf >/dev/null <<'EOF' ... EOF` → `tee` escribe en el archivo lo que llega por el here-document (y `>/dev/null` descarta la copia que haría por pantalla); sobrescribe la configuración con la del laboratorio.
+   - `sudo tee /etc/vsftpd.conf >/dev/null <<'EOF' ... EOF` → `tee` escribe en el archivo lo que llega por el here-document (y `>/dev/null` descarta la copia que haría por pantalla); sobrescribe la configuración con la del laboratorio. En Arch y en Debian/Ubuntu el archivo es el mismo, `/etc/vsftpd.conf`.
    - `listen=YES` / `listen_ipv6=NO` → vsftpd escucha como demonio en IPv4 (solo una de las dos opciones de escucha puede estar activa).
    - `local_enable=YES` → permite iniciar sesión a los usuarios locales del sistema (como `pruebaftp`).
    - `write_enable=YES` → habilita las órdenes de escritura (`STOR`, `DELE`...); sin esto el `put` falla aunque los permisos del sistema de archivos lo permitan.
    - `anonymous_enable=NO` → desactiva el acceso anónimo; solo entra la cuenta de prueba.
-   - `pam_service_name=vsftpd` → nombre del servicio PAM con el que vsftpd valida la contraseña.
+   - `pam_service_name=vsftpd` → nombre del servicio PAM con el que vsftpd valida la contraseña (el archivo `/etc/pam.d/vsftpd`, que trae el paquete). Si el login diera "530 Login incorrect", comprueba que existe ese archivo.
    - `sudo` → ejecuta el comando como root.
    - `systemctl enable --now vsftpd` → activa el servicio en cada inicio y lo arranca ahora; `restart` lo reinicia para que lea la configuración recién escrita.
    - `useradd -m pruebaftp` → crea el usuario y su directorio personal (`/home/pruebaftp`).
    - `&&` → ejecuta lo siguiente solo si `useradd` tuvo éxito.
    - `echo 'pruebaftp:Lab12345' | sudo chpasswd` → `chpasswd` lee de la entrada estándar líneas `usuario:contraseña` en claro y fija esa contraseña (la cifra él).
 
-2. En el cliente, arranca la captura en la interfaz de la red interna. Puedes usar la GUI de
-   Wireshark o `tshark` en terminal. Deja la captura corriendo.
+2. **Terminal 2 (captura).** Arranca la captura en la interfaz de loopback. Puedes usar la GUI de Wireshark o `tshark` en terminal. Deja la captura corriendo.
    ```bash
-   sudo tshark -i eth1 -f "host 10.0.0.10" -w ~/captura.pcapng
+   sudo tshark -i lo -f "tcp port 21 or tcp port 20 or tcp port 22" -w ~/captura.pcapng
    ```
-   - `sudo` → capturar en una interfaz requiere privilegios.
+   - `sudo` → capturar en una interfaz requiere privilegios (o estar en el grupo `wireshark`).
    - `tshark` → la versión de terminal de Wireshark.
-   - `-i eth1` → interfaz donde se captura. Ajusta `eth1` a tu interfaz de la red interna (mírala con `ip a`).
-   - `-f "host 10.0.0.10"` → filtro de captura (sintaxis BPF/libpcap): solo guarda paquetes que vayan a o vengan del servidor.
+   - `-i lo` → interfaz de loopback, por donde viaja todo lo que va a `127.0.0.1`.
+   - `-f "tcp port 21 or tcp port 20 or tcp port 22"` → filtro de captura (sintaxis BPF/libpcap): control FTP (21), datos FTP (20) y SSH/SFTP (22).
    - `-w ~/captura.pcapng` → escribe los paquetes en ese archivo en formato pcapng en vez de mostrarlos.
 
-3. En otra terminal del cliente, sube un archivo por FTP con la cuenta de prueba.
+3. **Terminal 3 (cliente).** Sube un archivo por FTP con la cuenta de prueba.
    ```bash
    echo "contenido de laboratorio" > ~/subida.txt
-   ftp 10.0.0.10
+   ftp 127.0.0.1
    # dentro del prompt: usuario pruebaftp, contraseña Lab12345
    # ftp> put subida.txt
    # ftp> bye
    ```
    - `echo "contenido de laboratorio" > ~/subida.txt` → crea el archivo de prueba con ese texto (`>` redirige la salida al archivo).
-   - `ftp 10.0.0.10` → abre una sesión FTP interactiva con el servidor (puerto 21); pide usuario y contraseña.
+   - `ftp 127.0.0.1` → abre una sesión FTP interactiva con el servidor local (puerto 21); pide usuario y contraseña.
    - `put subida.txt` → dentro del cliente, sube ese archivo local al directorio actual del servidor.
    - `bye` → cierra la sesión y sale del cliente.
 
-4. Sube el mismo archivo por SFTP (va por SSH en el puerto 22).
+4. **Terminal 3 (cliente).** Sube el mismo archivo por SFTP (va por SSH en el puerto 22).
    ```bash
-   sftp pruebaftp@10.0.0.10
+   sftp pruebaftp@127.0.0.1
    # sftp> put subida.txt
    # sftp> bye
    ```
    - `sftp` → cliente de transferencia de archivos sobre SSH.
-   - `pruebaftp@10.0.0.10` → usuario y servidor al que se conecta (puerto 22 por defecto); pide la contraseña.
+   - `pruebaftp@127.0.0.1` → usuario y servidor al que se conecta (puerto 22 por defecto); pide la contraseña. La primera vez acepta la huella del host con `yes`.
    - `put subida.txt` → sube el archivo local al servidor.
    - `bye` → sale de `sftp`.
 
-5. Para la captura (Ctrl-C en la terminal de tshark) y busca las credenciales del FTP en claro.
+5. **Terminal 2 (captura).** Para la captura (Ctrl-C en la terminal de tshark) y busca las credenciales del FTP en claro.
    ```bash
    tshark -r ~/captura.pcapng -Y 'ftp.request.command == "USER" || ftp.request.command == "PASS"' \
      -T fields -e ftp.request.command -e ftp.request.arg
@@ -417,7 +412,7 @@ nunca una real. 45 minutos.
 
    Esperado: dos líneas, `USER pruebaftp` y `PASS Lab12345`. La contraseña viaja legible.
 
-6. Comprueba que el tráfico SFTP no enseña nada: filtra por SSH y verás solo paquetes cifrados.
+6. **Terminal 2 (captura).** Comprueba que el tráfico SFTP no enseña nada: filtra por SSH y verás solo paquetes cifrados.
    ```bash
    tshark -r ~/captura.pcapng -Y 'ssh' -T fields -e tcp.dstport -e ssh.message_code | head
    ```
@@ -427,66 +422,74 @@ nunca una real. 45 minutos.
    - `-e ssh.message_code` → código del mensaje SSH; solo se ve en los paquetes de la negociación sin cifrar, después queda vacío.
    - `| head` → muestra solo las 10 primeras líneas.
 
-   Verás el puerto 22 y mensajes de SSH, pero ni el usuario ni la contraseña ni el contenido
-   del archivo aparecen en claro.
+   Verás el puerto 22 y mensajes de SSH, pero ni el usuario ni la contraseña ni el contenido del archivo aparecen en claro.
 
 ### Resultado esperado
 
-Una captura donde el FTP revela `USER pruebaftp` y `PASS Lab12345` en texto plano y el SFTP
-solo muestra SSH cifrado en el puerto 22, aunque el archivo transferido sea el mismo. Es la
-idea de la nota: el protocolo seguro es el mismo trasiego metido en un túnel cifrado.
+Una captura donde el FTP revela `USER pruebaftp` y `PASS Lab12345` en texto plano y el SFTP solo muestra SSH cifrado en el puerto 22, aunque el archivo transferido sea el mismo. Es la idea de la nota: el protocolo seguro es el mismo trasiego metido en un túnel cifrado.
 
 ### Comprueba que lo lograste
 
 - ¿Qué puerto usa cada uno? FTP control en 21 (datos en 20 o pasivo); SFTP todo por el 22 de SSH.
-- ¿Podrías recuperar la contraseña del SFTP de la captura? No: va dentro del canal SSH cifrado,
-  solo ves bytes ilegibles.
+- ¿Podrías recuperar la contraseña del SFTP de la captura? No: va dentro del canal SSH cifrado, solo ves bytes ilegibles.
 
 ### Limpieza
 
 ```bash
-sudo userdel -r pruebaftp          # en el servidor
+sudo userdel -r pruebaftp
 sudo systemctl disable --now vsftpd
 rm -f ~/captura.pcapng ~/subida.txt
 ```
 - `userdel` → borra un usuario.
 - `-r` → borra también su directorio personal y su buzón de correo.
 - `pruebaftp` → el usuario de prueba.
-- `# en el servidor` → comentario: la shell ignora desde `#` hasta el final de la línea.
-- `systemctl disable --now vsftpd` → deshabilita el arranque automático y, por `--now`, para el servicio ya.
-- `rm -f` → (ver ejercicio 1); aquí borra la captura y el archivo subido en el cliente.
+- `systemctl disable --now vsftpd` → deshabilita el arranque automático y, por `--now`, para el servicio ya. El servidor SSH puedes dejarlo o pararlo con `sudo systemctl stop sshd` si lo arrancaste solo para esto.
+- `rm -f` → (ver ejercicio 1); aquí borra la captura y el archivo subido.
 
 ## Ejercicio 4: Levanta un túnel IPsec y observa ESP en Wireshark
 
 Nodo: IPSEC ([README](README.md#ipsec)).
 
-Objetivo: unir dos VMs con un túnel IPsec/IKEv2 usando strongSwan, confirmar la SA con
-`swanctl --list-sas` como en la nota, y comparar en Wireshark un ping sin túnel (ICMP
-legible) con el mismo ping dentro del túnel (solo paquetes ESP, sin ver el ICMP).
+Objetivo: levantar en tu propio equipo un túnel IPsec/IKEv2 con strongSwan entre dos direcciones de loopback (`127.0.0.1` y `127.0.0.2`), confirmar la SA con `swanctl --list-sas` como en la nota, y comparar en Wireshark un ping sin túnel (ICMP legible) con el mismo ping dentro del túnel (solo paquetes ESP, sin ver el ICMP).
 
-Necesitas: dos VMs Linux en una red interna aislada, con IPs de ejemplo `10.0.0.1` y
-`10.0.0.2`. strongSwan en ambas. Wireshark o tshark para capturar. 1 hora.
+Necesitas: un Linux con strongSwan y con `tshark`/Wireshark. Todo corre en un solo equipo: `127.0.0.1` y `127.0.0.2` son dos direcciones de la interfaz de loopback (toda la red `127.0.0.0/8` va a `lo`, así que `127.0.0.2` ya funciona sin configurar nada), y strongSwan negocia el túnel consigo mismo entre esas dos direcciones. En un entorno real los dos extremos serían dos máquinas con IPs distintas; aquí ambos papeles comparten la pila de loopback, pero la negociación IKEv2 y el encapsulado ESP que vas a observar son los mismos.
 
+Instalación:
 - Debian/Ubuntu: `sudo apt install strongswan strongswan-swanctl charon-systemd tshark` (el paquete `charon-systemd` aporta la unidad `strongswan.service` y el demonio `charon-systemd`; sin él no existe el servicio `strongswan` que se usa más abajo)
 - Arch: `sudo pacman -S strongswan wireshark-cli`
 
+En Arch el servicio no arranca solo al instalar: se levanta con `sudo systemctl start strongswan` (paso 2). Para capturar con `tshark`/Wireshark sin ser root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`, luego reinicia sesión; en Debian/Ubuntu además `sudo dpkg-reconfigure wireshark-common`). Tiempo: 1 hora.
+
 ### Pasos
 
-1. En las dos VMs, escribe las credenciales compartidas. Guarda en cada una
-   `/etc/swanctl/conf.d/lab.conf` con el mismo secreto (es laboratorio; en producción serían
-   certificados). Este es el de la VM `10.0.0.1`:
+1. Escribe la configuración con dos conexiones (una por sentido, porque el mismo equipo hace de los dos extremos) y el secreto compartido. Guárdala, con `sudo`, en `/etc/swanctl/conf.d/lab.conf` (por ejemplo con `sudo tee /etc/swanctl/conf.d/lab.conf`):
    ```
    connections {
-       lab {
+       lab-izq {
            version = 2
-           local_addrs  = 10.0.0.1
-           remote_addrs = 10.0.0.2
+           local_addrs  = 127.0.0.1
+           remote_addrs = 127.0.0.2
            local  { auth = psk }
            remote { auth = psk }
            children {
                net {
-                   local_ts  = 10.0.0.1/32
-                   remote_ts = 10.0.0.2/32
+                   local_ts  = 127.0.0.1/32
+                   remote_ts = 127.0.0.2/32
+                   esp_proposals = aes256gcm16-x25519
+                   start_action = none
+               }
+           }
+       }
+       lab-der {
+           version = 2
+           local_addrs  = 127.0.0.2
+           remote_addrs = 127.0.0.1
+           local  { auth = psk }
+           remote { auth = psk }
+           children {
+               net {
+                   local_ts  = 127.0.0.2/32
+                   remote_ts = 127.0.0.1/32
                    esp_proposals = aes256gcm16-x25519
                    start_action = none
                }
@@ -498,45 +501,46 @@ Necesitas: dos VMs Linux en una red interna aislada, con IPs de ejemplo `10.0.0.
    }
    ```
    - `connections { }` → bloque con las conexiones IKE definidas.
-   - `lab { }` → nombre de esta conexión (el que se usa para referirse a ella).
+   - `lab-izq { }` / `lab-der { }` → las dos conexiones: la que inicia (local `127.0.0.1`, remoto `127.0.0.2`) y la que responde (al revés). Hacen falta las dos porque el mismo `charon` actúa a la vez de iniciador y de respondedor consigo mismo.
    - `version = 2` → usa IKEv2 (`1` sería el IKEv1 obsoleto).
-   - `local_addrs = 10.0.0.1` → dirección local desde la que se negocia IKE.
-   - `remote_addrs = 10.0.0.2` → dirección del otro extremo.
-   - `local { auth = psk }` → este equipo se autentica con clave precompartida (PSK).
-   - `remote { auth = psk }` → se exige que el otro extremo también se autentique con PSK.
+   - `local_addrs` / `remote_addrs` → la dirección propia desde la que se negocia IKE y la del otro extremo.
+   - `local { auth = psk }` / `remote { auth = psk }` → cada extremo se autentica con clave precompartida (PSK) y exige PSK al otro.
    - `children { }` → bloque con las CHILD_SA, las asociaciones que protegen el tráfico de verdad.
    - `net { }` → nombre de la CHILD_SA (el que usa `--child net` más abajo).
-   - `local_ts = 10.0.0.1/32` → selector de tráfico local: qué tráfico propio entra en el túnel (solo esta IP).
-   - `remote_ts = 10.0.0.2/32` → selector de tráfico remoto: hacia qué destino se cifra.
+   - `local_ts` / `remote_ts` → selectores de tráfico: qué origen y qué destino entran en el túnel (solo esas IPs `/32`).
    - `esp_proposals = aes256gcm16-x25519` → algoritmos de ESP: AES-256 en modo GCM con ICV de 16 bytes (cifra y autentica a la vez) y el grupo X25519 para el Diffie-Hellman de las renegociaciones (secreto perfecto hacia adelante).
    - `start_action = none` → al cargar la conexión no se instala ninguna política ni se levanta nada: el túnel solo sube cuando tú lo inicias a mano con `swanctl --initiate` (paso 4). Es justo lo que este ejercicio necesita: así el ping del paso 3 viaja de verdad en claro. Con `start_action = trap` strongSwan instalaría al cargar una política "trampa" que levanta el túnel en cuanto aparece tráfico que encaja con los selectores, y entonces el primer ping del paso 3 ya dispararía el túnel y no verías ICMP legible.
    - `secrets { }` → bloque de credenciales.
-   - `ike-lab { secret = "SecretoDeLaboratorio" }` → una PSK para IKE (el prefijo `ike` es obligatorio, `-lab` es un nombre libre); como no lleva `id`, se usa para cualquier identidad si no hay otra mejor.
+   - `ike-lab { secret = "SecretoDeLaboratorio" }` → una PSK para IKE (el prefijo `ike` es obligatorio, `-lab` es un nombre libre); como no lleva `id`, sirve para las dos conexiones.
 
-   En la VM `10.0.0.2`, intercambia `local_addrs`/`remote_addrs` y `local_ts`/`remote_ts`.
-
-2. Carga la configuración y arranca strongSwan en ambas VMs.
+2. **Terminal 1.** Arranca strongSwan y carga la configuración.
    ```bash
-   sudo systemctl enable --now strongswan
+   sudo systemctl start strongswan
    sudo swanctl --load-all
    ```
-   - `systemctl enable --now strongswan` → (ver ejercicio 3); habilita y arranca el servicio `strongswan`, el demonio IKE (`charon-systemd`) al que habla `swanctl`.
+   - `systemctl start strongswan` → arranca el servicio, el demonio IKE (`charon`) al que habla `swanctl`. En Arch no estaba activo; en Debian/Ubuntu puede arrancarse solo tras instalar `charon-systemd`.
    - `swanctl` → herramienta de control de strongSwan.
    - `--load-all` → (re)carga credenciales, pools, autoridades y conexiones desde `/etc/swanctl/`.
 
-3. Antes del túnel, captura un ping en claro para tener la referencia. En la VM `10.0.0.1`:
+   Debe cargar 2 conexiones y 1 secreto.
+
+3. **Terminal 2 (captura) + Terminal 3 (ping).** Antes del túnel, captura un ping en claro para tener la referencia. En la Terminal 2:
    ```bash
-   sudo tshark -i eth1 -f "host 10.0.0.2" -w ~/sin-tunel.pcapng &
-   ping -c 3 10.0.0.2
-   kill %1
+   sudo tshark -i lo -f "host 127.0.0.2" -w ~/sin-tunel.pcapng &
+   ```
+   En la Terminal 3:
+   ```bash
+   ping -c 3 -I 127.0.0.1 127.0.0.2
+   ```
+   Para la captura (Ctrl-C en la Terminal 2) y revisa:
+   ```bash
    tshark -r ~/sin-tunel.pcapng -Y icmp -T fields -e ip.proto -e icmp.type | head
    ```
-   - `sudo tshark -i eth1 -f "host 10.0.0.2" -w ~/sin-tunel.pcapng` → (ver ejercicio 3, paso 2); captura el tráfico con la otra VM.
-   - `&` → deja la captura corriendo en segundo plano, como trabajo número 1 de la shell.
+   - `sudo tshark -i lo -f "host 127.0.0.2" -w ~/sin-tunel.pcapng` → captura en loopback el tráfico con la otra dirección; `&` la deja en segundo plano si prefieres no usar otra terminal.
    - `ping` → manda ICMP echo request.
    - `-c 3` → solo 3 paquetes y termina.
-   - `10.0.0.2` → la otra VM.
-   - `kill %1` → termina el trabajo en segundo plano número 1 (la captura).
+   - `-I 127.0.0.1` → fuerza `127.0.0.1` como IP de origen, la que casa con los selectores del túnel.
+   - `127.0.0.2` → el otro extremo.
    - `tshark -r ... -T fields` → (ver ejercicio 3, paso 5).
    - `-Y icmp` → solo paquetes ICMP.
    - `-e ip.proto` → número de protocolo IP del paquete.
@@ -545,55 +549,56 @@ Necesitas: dos VMs Linux en una red interna aislada, con IPs de ejemplo `10.0.0.
 
    Verás protocolo `1` (ICMP) y los tipos de echo request/reply: el ping es legible.
 
-4. Fuerza el túnel y confirma la SA como en la nota.
+4. **Terminal 1.** Fuerza el túnel y confirma la SA como en la nota.
    ```bash
-   sudo swanctl --initiate --child net
+   sudo swanctl --initiate --ike lab-izq --child net
    sudo swanctl --list-sas
    ```
    - `swanctl --initiate` → inicia una conexión.
+   - `--ike lab-izq` → la conexión que inicia (la de `127.0.0.1` → `127.0.0.2`); el otro extremo responde con `lab-der`.
    - `--child net` → la CHILD_SA que se inicia, por su nombre (`net`, del paso 1); strongSwan levanta también la IKE_SA padre.
    - `swanctl --list-sas` → lista las IKE_SA activas y sus CHILD_SA.
 
-   Esperado: una línea `ESTABLISHED, IKEv2` y debajo el hijo `INSTALLED, TUNNEL,
-   ESP:AES_GCM_16-256`, igual que el ejemplo del README.
+   Esperado: una línea `ESTABLISHED, IKEv2` y debajo el hijo `INSTALLED, TUNNEL, ESP:AES_GCM_16-256`, igual que el ejemplo del README. Si no estableciera, comprueba que no haya otra política IPsec previa cargada y que `charon` esté escuchando (lo hace en todas las direcciones, loopback incluido).
 
-5. Con el túnel arriba, captura otra vez el mismo ping y mira el protocolo.
+5. **Terminal 2 (captura) + Terminal 3 (ping).** Con el túnel arriba, captura otra vez el mismo ping y mira el protocolo. En la Terminal 2:
    ```bash
-   sudo tshark -i eth1 -f "host 10.0.0.2" -w ~/con-tunel.pcapng &
-   ping -c 3 10.0.0.2
-   kill %1
+   sudo tshark -i lo -f "host 127.0.0.2" -w ~/con-tunel.pcapng &
+   ```
+   En la Terminal 3:
+   ```bash
+   ping -c 3 -I 127.0.0.1 127.0.0.2
+   ```
+   Para la captura y revisa:
+   ```bash
    tshark -r ~/con-tunel.pcapng -Y "esp || icmp" -T fields -e ip.proto -e icmp.type | head
    ```
-   - `tshark`, `&`, `ping -c 3`, `kill %1`, `-T fields`, `-e ip.proto`, `-e icmp.type` y `head` → (ver paso 3).
+   - `tshark`, `ping -c 3 -I`, `-T fields`, `-e ip.proto`, `-e icmp.type` y `head` → (ver paso 3).
    - `-w ~/con-tunel.pcapng` → archivo de esta segunda captura.
    - `-Y "esp || icmp"` → muestra los paquetes ESP o ICMP.
 
-   Esperado: protocolo `50` (ESP) y ninguna línea de ICMP visible: el ping viaja cifrado dentro
-   de ESP.
+   Esperado: protocolo `50` (ESP) y ninguna línea de ICMP visible: el ping viaja cifrado dentro de ESP.
 
 ### Resultado esperado
 
-Una SA establecida con IKEv2 y ESP, y dos capturas comparables: sin túnel el ICMP se lee como
-protocolo 1 con sus echo request/reply; con túnel solo hay protocolo 50 (ESP) y el ICMP
-desaparece de la vista. Eso demuestra que IPsec protege el paquete entero en capa 3.
+Una SA establecida con IKEv2 y ESP, y dos capturas comparables: sin túnel el ICMP se lee como protocolo 1 con sus echo request/reply; con túnel solo hay protocolo 50 (ESP) y el ICMP desaparece de la vista. Eso demuestra que IPsec protege el paquete entero en capa 3, aunque aquí los dos extremos vivan en la misma máquina sobre loopback.
 
 ### Comprueba que lo lograste
 
-- ¿Qué número de protocolo IP identifica a ESP y a AH? ESP es 50, AH es 51; aquí ves 50 porque
-  ESP es el que cifra y el que se usa casi siempre.
-- ¿Por qué no ves el ICMP con el túnel arriba? Porque el paquete ICMP va dentro de la carga
-  cifrada de ESP; Wireshark solo ve el envoltorio ESP.
+- ¿Qué número de protocolo IP identifica a ESP y a AH? ESP es 50, AH es 51; aquí ves 50 porque ESP es el que cifra y el que se usa casi siempre.
+- ¿Por qué no ves el ICMP con el túnel arriba? Porque el paquete ICMP va dentro de la carga cifrada de ESP; Wireshark solo ve el envoltorio ESP.
 
 ### Limpieza
 
 ```bash
-sudo swanctl --terminate --child net
-sudo systemctl disable --now strongswan
+sudo swanctl --terminate --ike lab-izq --child net
+sudo systemctl stop strongswan
+sudo rm -f /etc/swanctl/conf.d/lab.conf
 rm -f ~/sin-tunel.pcapng ~/con-tunel.pcapng
 ```
-- `swanctl --terminate` → cierra una conexión.
-- `--child net` → la CHILD_SA que se cierra, por su nombre.
-- `systemctl disable --now strongswan` → (ver ejercicio 3).
+- `swanctl --terminate --ike lab-izq --child net` → cierra la conexión y su CHILD_SA.
+- `systemctl stop strongswan` → para el servicio.
+- `sudo rm -f /etc/swanctl/conf.d/lab.conf` → borra la configuración del laboratorio.
 - `rm -f` → (ver ejercicio 1); borra las dos capturas.
 
 ## Ejercicio 5: Mide el coste de MD5 frente a bcrypt
@@ -605,7 +610,7 @@ hashcat cuántos hashes por segundo prueba cada algoritmo (benchmark y un ataque
 contra tus propios hashes), y concluir con tus números por qué un hash lento con sal y coste
 protege mucho mejor las contraseñas que un hash rápido como MD5.
 
-Necesitas: una VM Linux tuya. Python 3 con el módulo `bcrypt` (o `htpasswd`), y `hashcat`.
+Necesitas: tu propio equipo Linux. Python 3 con el módulo `bcrypt` (o `htpasswd`), y `hashcat`.
 Trabajas solo contra hashes que tú generas. 45 minutos. Nota: el benchmark de hashcat usa
 GPU si hay; sin GPU corre en CPU y los números son más bajos, pero la comparación entre MD5 y
 bcrypt sigue siendo válida.
@@ -795,22 +800,22 @@ rm -rf ~/bcrypt-lab
 
 Nodo: Hashing ([README](README.md#hashing)) y Salting ([README](README.md#salting)).
 
-Objetivo: crear en una VM tuya un usuario con una contraseña débil, combinar `/etc/passwd` y
+Objetivo: crear en tu propio equipo un usuario con una contraseña débil, combinar `/etc/passwd` y
 `/etc/shadow` con `unshadow`, romper su hash con John the Ripper usando un diccionario
 minúsculo, y comprobar con tus ojos qué algoritmo usa tu distro (sha512crypt `$6$` o yescrypt
 `$y$`) y por qué una contraseña fuerte y un hash moderno con coste alto frustran este ataque.
 
-Necesitas: una VM Linux **tuya** donde puedas ser root (todo el ejercicio es sobre cuentas que
-tú creas; nunca contra el `/etc/shadow` de un equipo ajeno). `john` (John the Ripper). 30
-minutos. No hace falta red.
+Necesitas: tu propio equipo Linux donde puedas ser root (todo el ejercicio es sobre cuentas que
+tú creas en este equipo; nunca contra el `/etc/shadow` de una máquina ajena). `john` (John the
+Ripper). 30 minutos. No hace falta red.
 
 - Debian/Ubuntu: `sudo apt install john`
 - Arch: `sudo pacman -S john`
 
 > [!WARNING]
 > Crackear hashes de contraseñas solo es legítimo sobre cuentas tuyas, en equipos tuyos, o con
-> autorización por escrito. Aquí todo ocurre dentro de tu VM y sobre un usuario que tú acabas de
-> crear. Hacerlo contra el `/etc/shadow` de otra persona es un delito.
+> autorización por escrito. Aquí todo ocurre dentro de tu propio equipo y sobre usuarios que tú
+> acabas de crear. Hacerlo contra el `/etc/shadow` de otra persona es un delito.
 
 ### Pasos
 
