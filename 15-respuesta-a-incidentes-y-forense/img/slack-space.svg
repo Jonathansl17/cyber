@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 250" width="760" height="250" font-family="sans-serif">
+  <rect x="0" y="0" width="760" height="250" fill="#ffffff"/>
+  <text x="380" y="28" text-anchor="middle" font-size="16" font-weight="bold" fill="#1f2328">Archivo de 5000 bytes en un sistema de archivos con bloques de 4096 bytes</text>
+
+  <!-- block labels -->
+  <text x="200" y="62" text-anchor="middle" font-size="14" fill="#1f2328">Bloque 1 (4096 bytes)</text>
+  <text x="560" y="62" text-anchor="middle" font-size="14" fill="#1f2328">Bloque 2 (4096 bytes)</text>
+
+  <!-- block 1: all file data -->
+  <rect x="40" y="75" width="320" height="70" fill="#d0e4f7" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="200" y="107" text-anchor="middle" font-size="14" fill="#1f2328">Datos del archivo</text>
+  <text x="200" y="127" text-anchor="middle" font-size="13" fill="#1f2328">4096 bytes</text>
+
+  <!-- block 2: 904 file + 3192 slack; 904/4096*320 = 70.6 -->
+  <rect x="400" y="75" width="71" height="70" fill="#d0e4f7" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="435" y="107" text-anchor="middle" font-size="12" fill="#1f2328">Datos</text>
+  <text x="435" y="127" text-anchor="middle" font-size="12" fill="#1f2328">904 B</text>
+  <rect x="471" y="75" width="249" height="70" fill="#eeeeee" stroke="#1f2328" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="595" y="107" text-anchor="middle" font-size="14" fill="#1f2328">Slack space</text>
+  <text x="595" y="127" text-anchor="middle" font-size="13" fill="#1f2328">3192 bytes</text>
+
+  <!-- brace for file -->
+  <line x1="40" y1="165" x2="471" y2="165" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="40" y1="158" x2="40" y2="172" stroke="#1f2328" stroke-width="1.5"/>
+  <line x1="471" y1="158" x2="471" y2="172" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="255" y="190" text-anchor="middle" font-size="13" fill="#1f2328">El archivo: 4096 + 904 = 5000 bytes</text>
+
+  <!-- slack note -->
+  <line x1="595" y1="150" x2="595" y2="200" stroke="#1f2328" stroke-width="1.2"/>
+  <text x="595" y="218" text-anchor="middle" font-size="13" fill="#1f2328">Puede conservar restos de un</text>
+  <text x="595" y="236" text-anchor="middle" font-size="13" fill="#1f2328">archivo anterior; la imagen forense lo copia</text>
+</svg>

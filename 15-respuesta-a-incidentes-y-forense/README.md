@@ -91,6 +91,17 @@ Cómo funciona por dentro:
 4. Alcance (scoping): se buscan los IoC encontrados en todo el entorno. Un hash de malware visto en un equipo se busca en los 500; la IP del C2 se busca en los logs del firewall de los últimos 30 días.
 5. Documentación desde el minuto uno: quién vio qué, a qué hora, con qué herramienta. Ese registro alimenta la línea de tiempo y, si el caso llega a juicio, la evidencia.
 
+```mermaid
+flowchart TD
+    S["Señal: alerta SIEM o EDR,<br/>usuario, tercero o rescate"] --> T{"Triaje: ¿se confirma<br/>con otras fuentes?"}
+    T -- No --> FP["Falso positivo:<br/>se documenta y se cierra"]
+    T -- Sí --> D["Declarar el incidente<br/>(registro con hora exacta)"]
+    D --> SEV["Asignar severidad<br/>(por ejemplo de 1 a 4)"]
+    SEV --> SC["Scoping: buscar los IoC<br/>en todo el entorno"]
+    SC -- "aparecen más equipos" --> SEV
+    SC --> C["Containment"]
+```
+
 Analogía: un médico de urgencias. Primero decide si el paciente que llega con dolor de pecho tiene un infarto o una indigestión (triaje); si es infarto, mide qué tan extendido está antes de operar.
 
 Ejemplo: el EDR alerta de que el lector de PDF lanzó `bash -c 'echo Y3VybCAtcyBo... | base64 -d | bash'` (comando codificado en Base64) en el portátil Linux de contabilidad a las 02:14. El analista decodifica el comando: descarga un script de `hxxp://update-check[.]example/a.sh`. Busca ese dominio en el proxy: lo contactaron 3 equipos más en las últimas 48 horas. Ya no es un incidente de un equipo, son cuatro, y la severidad sube.
@@ -117,6 +128,16 @@ SANS la divide en tres momentos:
 - Contención a largo plazo: arreglos temporales que permiten seguir operando mientras se prepara la limpieza: parchear el servidor expuesto, rotar contraseñas de cuentas de servicio, poner reglas extra en el firewall, mover un servicio crítico a un servidor limpio.
 
 Decisión clave: no siempre se contiene de inmediato. Si el atacante tiene acceso a 50 equipos y solo se conocen 4, bloquear esos 4 le avisa de que fue descubierto y puede activar el ransomware en los otros 46. A veces se observa en silencio unas horas para medir el alcance completo y luego se corta todo a la vez. Esa decisión la toma el líder del incidente con dirección y legal, nunca un analista solo.
+
+```mermaid
+flowchart TD
+    A{"¿Se conoce todo<br/>el alcance?"} -- Sí --> B["Contención a corto plazo:<br/>aislar por EDR o VLAN,<br/>bloquear C2, deshabilitar cuentas"]
+    A -- "No: cortar ya avisaría<br/>al atacante" --> O["Observar en silencio unas horas<br/>(decide el líder con<br/>dirección y legal)"]
+    O --> B
+    B --> CP["Copia del sistema:<br/>RAM e imagen de disco"]
+    CP --> LP["Contención a largo plazo:<br/>parches, rotar contraseñas,<br/>servicio en servidor limpio"]
+    LP --> E["Eradication"]
+```
 
 Analogía: un médico que pone un torniquete. No cura la herida, pero evita que el paciente se desangre mientras llega el quirófano.
 
@@ -147,6 +168,21 @@ Analogía: sacar las termitas de una casa. Matar las que se ven (contención) no
 
 Ejemplo: tras un phishing, se encuentran en 4 equipos un timer de systemd `apt-check.timer` que ejecuta un script cada 30 minutos y una cuenta local `support01` creada a las 03:10. Se reimaginan los 4 equipos, se elimina la cuenta en todos los demás donde aparezca, se resetea la contraseña de los 4 usuarios y se bloquea el dominio del correo original.
 
+Estado de un equipo afectado a lo largo de las fases:
+
+```mermaid
+stateDiagram-v2
+    state "Evidencia capturada" as Evidencia
+    state "Vigilado (30-90 días)" as Vigilado
+    [*] --> Comprometido
+    Comprometido --> Aislado: contención (EDR o VLAN)
+    Aislado --> Evidencia: volcado de RAM e imagen de disco
+    Evidencia --> Reimaginado: erradicación desde gold image
+    Reimaginado --> Vigilado: recovery por etapas
+    Vigilado --> Comprometido: reaparece un IoC
+    Vigilado --> [*]: cierre aprobado por el negocio
+```
+
 ```
 Causa raíz → por dónde entró el atacante.
 Persistencia → lo que el atacante dejó para volver (tareas, servicios, cuentas, claves).
@@ -168,6 +204,15 @@ Cómo se hace:
 Analogía: un paciente que sale del hospital. Recibe el alta, pero tiene controles a la semana y al mes, porque las recaídas aparecen justo después.
 
 Ejemplo: un ransomware cifró 20 servidores. La línea de tiempo dice que el atacante entró el 3 de marzo. Se descartan los backups posteriores a esa fecha, se restaura el del 1 de marzo en servidores reinstalados, se aplican los parches y se repiten los datos de los días perdidos desde otras fuentes (correo, facturas en papel). Durante 60 días, una regla del SIEM alerta de cualquier conexión a las IP del C2.
+
+```mermaid
+timeline
+    title Elección del backup en el ejemplo
+    1 de marzo : Backup anterior a la intrusión : Se restaura en servidores reinstalados
+    3 de marzo : Primera actividad del atacante
+    Después del 3 de marzo : Backups posteriores contaminados : Se descartan
+    60 días siguientes : Regla del SIEM con las IP del C2
+```
 
 ```
 Backup limpio → anterior a la primera actividad del atacante.
@@ -219,6 +264,33 @@ Después          Lessons Learned           Post-Incident Activity
 La fila "Frenar / Limpiar / Volver" es la diferencia entera: SANS separa en tres pasos lo que NIST agrupa en uno, porque en la práctica contener, erradicar y recuperar se entrelazan (se contiene un equipo mientras se erradica otro). NIST además dibuja una flecha de vuelta desde esa fase a Detection & Analysis, que es la misma idea del bucle de SANS.
 
 En abril de 2025 NIST publicó la SP 800-61 Rev. 3, que reemplaza a la Rev. 2 y abandona el ciclo de cuatro fases: organiza la respuesta a incidentes según las seis funciones del NIST Cybersecurity Framework 2.0 (Govern, Identify, Protect, Detect, Respond, Recover), integrándola en la gestión de riesgos general. Las actividades son las mismas; lo que cambia es que la preparación se reparte entre Govern, Identify y Protect, y las lecciones aprendidas se vuelven mejora continua en todas las funciones. Los exámenes como Security+ siguen usando el ciclo clásico, así que conviene saber los tres.
+
+```mermaid
+flowchart LR
+    subgraph R2["Ciclo clásico (SANS / NIST Rev. 2)"]
+        P["Preparation"]
+        I["Identification /<br/>Detection & Analysis"]
+        CE["Containment,<br/>Eradication"]
+        RE["Recovery"]
+        L["Lessons Learned"]
+    end
+    subgraph R3["NIST SP 800-61 Rev. 3 (funciones CSF 2.0)"]
+        GV["Govern"]
+        ID["Identify"]
+        PR["Protect"]
+        DE["Detect"]
+        RS["Respond"]
+        RC["Recover"]
+        MC["Mejora continua en<br/>todas las funciones"]
+    end
+    P --> GV
+    P --> ID
+    P --> PR
+    I --> DE
+    CE --> RS
+    RE --> RC
+    L --> MC
+```
 
 Analogía: dividir un viaje en "ida, estancia, vuelta" o en "maleta, aeropuerto, vuelo, hotel, playa, regreso". Es el mismo viaje contado con más o menos cortes.
 
@@ -276,6 +348,17 @@ Primer paso real → RAM e información de red, luego disco.
 
 La captura en vivo (live response) es la práctica de recoger la evidencia volátil con el equipo encendido antes de cualquier apagado. Cobró importancia porque el malware moderno es cada vez más fileless: se inyecta en procesos legítimos y nunca escribe un ejecutable en disco. Una imagen de disco de ese equipo no muestra nada; un volcado de RAM lo muestra todo.
 
+Secuencia de recogida en un servidor Linux comprometido:
+
+```mermaid
+flowchart LR
+    A["Aislar por red<br/>(EDR o VLAN)"] --> B["Volcar la RAM<br/>con AVML o LiME<br/>a disco externo"]
+    B --> C["Guardar red volátil:<br/>ss -tanp, ip neigh,<br/>caché DNS"]
+    C --> D["Apagar"]
+    D --> E["Imagen del disco<br/>con write blocker"]
+    E --> F["Logs remotos<br/>(firewall, SIEM)"]
+```
+
 ```
                       Apagar ya         Aislar + capturar RAM + apagar
 Malware solo en RAM   perdido           capturado
@@ -324,6 +407,21 @@ Traspasos:
 
 El análisis nunca se hace sobre el original ni sobre la imagen maestra: se hace sobre una copia de trabajo cuyo hash coincide con el de la maestra. Si algo sale mal, se vuelve a copiar desde la maestra.
 
+Recorrido de la evidencia E03 del ejemplo:
+
+```mermaid
+sequenceDiagram
+    participant R as A. Rojas
+    participant M as L. Mora
+    participant A as Armario E2
+    participant V as J. Vega
+    Note over R: 04/03 10.42 recoge el disco<br/>y anota su SHA-256
+    R->>M: 04/03 11.15 traslado a laboratorio (firmas)
+    M->>A: 05/03 08.30 almacenamiento (firmas)
+    A->>V: 06/03 09.00 creación de copia de trabajo (firmas)
+    Note over V: analiza solo la copia de trabajo,<br/>con hash igual al de la maestra
+```
+
 ```
 Chain of custody → registro de quién tuvo la evidencia, cuándo y para qué.
 Precinto numerado → demuestra que el contenedor no se abrió.
@@ -341,6 +439,10 @@ Conceptos que vienen con ella:
 - Write blocker: se conecta entre el disco de evidencia y el equipo del analista; deja pasar lecturas y bloquea escrituras. Sin él, el simple hecho de montar el disco puede escribir metadatos: Linux reproduce el journal de ext4 al montarlo, incluso con `-o ro`, si quedó pendiente.
 - Formatos de imagen: raw o dd (`.img`, `.dd`, `.001`): copia pura, sin compresión ni metadatos, la entiende cualquier herramienta. E01 (Expert Witness Format, de EnCase): comprimida, guarda metadatos del caso (examinador, número de caso, notas), incluye sumas de verificación por bloque y el hash total, y se puede partir en trozos (`.E01`, `.E02`...). AFF4: formato abierto alternativo.
 - Imagen física (todo el disco, incluida la tabla de particiones) frente a imagen lógica (solo una partición o solo ciertos archivos, cuando no hay tiempo o el disco es enorme).
+
+Slack space del ejemplo: un archivo de 5000 bytes en bloques de 4096.
+
+![Archivo de 5000 bytes que ocupa dos bloques de 4096 y deja 3192 bytes de slack space](img/slack-space.svg)
 
 Analogía: fotocopiar un cuaderno página por página, incluidas las páginas arrancadas cuyo relieve quedó marcado en la siguiente, frente a pasar a limpio solo lo que se lee.
 
@@ -365,6 +467,20 @@ Cómo funciona:
 2. Se calcula el hash de la imagen resultante. Si coinciden, la imagen es fiel.
 3. El hash se anota en la cadena de custodia.
 4. Antes de cada análisis y antes de presentar resultados, se recalcula el hash de la copia de trabajo. Si sigue igual, nadie la alteró.
+
+```mermaid
+flowchart LR
+    O["Disco original"] --> WB["Write blocker"]
+    WB --> H1["Hash del original"]
+    WB --> IM["Imagen maestra<br/>(no se toca)"]
+    IM --> H2["Hash de la imagen"]
+    H1 --> CMP{"¿Coinciden?"}
+    H2 --> CMP
+    CMP -- Sí --> CC["Hash anotado en la<br/>cadena de custodia"]
+    CMP -- No --> RE["Documentar la causa<br/>(sectores ilegibles) o repetir"]
+    IM --> WC["Copia de trabajo"]
+    WC --> H3["Recalcular el hash antes<br/>de cada análisis"]
+```
 
 Algoritmos: MD5 (128 bits) y SHA-1 (160 bits) están rotos frente a colisiones (se pueden fabricar dos archivos distintos con el mismo hash), pero siguen usándose en forense por compatibilidad. Lo recomendable hoy es SHA-256 (256 bits), o calcular dos algoritmos a la vez (MD5 y SHA-256): fabricar un archivo que choque en ambos a la vez no es factible.
 
@@ -787,6 +903,17 @@ Plugins básicos:
 
 Por qué `pslist` y `psscan` dan resultados distintos: el kernel de Linux enlaza los procesos activos en una lista doblemente enlazada. Un rootkit puede desenganchar su proceso de esa lista (técnica llamada DKOM, Direct Kernel Object Manipulation) y el proceso sigue corriendo pero desaparece de `linux.pslist` y de cualquier herramienta que recorra la lista. `psscan` no usa la lista: barre toda la memoria buscando la firma de la estructura de proceso, así que lo encuentra igual. Un proceso que aparece en `psscan` y no en `pslist` está oculto o ya terminó; las dos cosas merecen mirarse.
 
+```mermaid
+flowchart LR
+    subgraph Lista["Lista enlazada de procesos del kernel"]
+        A["systemd"] <--> B["sshd"] <--> D["bash"]
+    end
+    C["Proceso oculto<br/>(desenganchado por DKOM)"]
+    PL["linux.pslist<br/>recorre la lista"] --> Lista
+    PS["linux.psscan<br/>barre toda la RAM<br/>buscando firmas"] --> Lista
+    PS --> C
+```
+
 Ejemplo de análisis:
 
 ```
@@ -807,6 +934,14 @@ bash  4522  AF_INET  STREAM  TCP  10.0.0.15  49822  203.0.113.50  443  ESTABLISH
 ```
 
 Lectura: el proceso de PHP lanzó una shell con un comando codificado, que lanzó un `bash` con una conexión abierta al 203.0.113.50:443. PHP nunca tiene motivo para abrir una shell: es el rastro de una web shell, y la IP es el C2. Nada de esto tenía por qué estar en el disco como archivo.
+
+```mermaid
+flowchart LR
+    S["systemd<br/>PID 1"] --> P["php-fpm8.2<br/>PID 1312"]
+    P --> SH["sh, PID 4410<br/>comando en Base64"]
+    SH --> B["bash<br/>PID 4522"]
+    B -- "TCP ESTABLISHED" --> C2["203.0.113.50:443<br/>(C2)"]
+```
 
 > [!TIP]
 > Primera pasada sobre cualquier volcado de Linux: `pstree` (relaciones raras padre-hijo, como un servidor web lanzando una shell), `psaux` (comandos codificados u ocultos), `sockstat` (conexiones a IP externas), `bash` (lo que se tecleó) y `malfind` (código inyectado). Cinco plugins cubren la mayoría de los casos.
@@ -957,6 +1092,16 @@ Analogía: el abogado que acompaña a alguien después de un accidente de tráfi
 Ejemplo: un analista quiere escribir en el ticket "nuestra culpa, el servidor llevaba 2 años sin parchear". Legal pide que el ticket solo registre hechos verificables ("el servidor tenía la versión X, afectada por la vulnerabilidad Y"), porque ese texto puede aparecer en una demanda.
 
 Ante la duda de si algo hay que contárselo a legal, la respuesta es sí y pronto: los plazos legales cuentan desde que la organización "tiene conocimiento", no desde que termina la investigación.
+
+```mermaid
+flowchart TD
+    A["La organización<br/>tiene conocimiento"] --> B["Aviso inmediato a legal"]
+    B --> H["Legal hold: suspender<br/>el borrado automático"]
+    B --> C{"¿Datos personales<br/>afectados (RGPD)?"}
+    C -- Sí --> D["Notificar a la autoridad<br/>de control en máx. 72 h"]
+    B --> S{"¿Empresa cotizada en EE. UU.<br/>e incidente material?"}
+    S -- Sí --> K["Formulario 8-K en 4 días hábiles<br/>desde que se determina material"]
+```
 
 ```
 Legal → obligaciones de notificación, privilegio, legal hold, aprobación de mensajes.

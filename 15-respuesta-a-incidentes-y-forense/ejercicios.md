@@ -48,6 +48,22 @@ sigue su `Running_Linux_OSX.md` (necesita Java 17 con JavaFX).
 
 Tiempo estimado: 45-60 minutos.
 
+Qué pasa en tu equipo durante el ejercicio:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux"]
+        O["Medio de evidencia:<br/>USB /dev/sdX o archivo<br/>evidencia-origen.img"]
+        L["Dispositivo loop<br/>(solo para montar el .img)"]
+        M["/tmp/mnt<br/>punto de montaje"]
+        I["~/lab-forense/caso.img<br/>imagen raw"]
+        R["recuperado.txt"]
+    end
+    O -- "mount -o loop<br/>(pasos 2 y 3)" --> L --> M
+    O -- "dd (paso 6)" --> I
+    I -- "fls + icat o Autopsy<br/>(pasos 8 y 9)" --> R
+```
+
 ### Pasos
 
 1. Elige el medio. Con una USB física, conéctala y averigua su nombre de dispositivo;
@@ -231,6 +247,18 @@ paso 3. El medio original nunca se escribió.
   documenta) o si montaste el medio sin bloqueo de escritura por error.
 - ¿El contenido de `recuperado.txt` es exactamente el texto que escribiste antes de borrar?
 - `sudo blockdev --getro /dev/sdX` seguía devolviendo `1` al final: no se escribió nada en el
+
+Si los hashes no coinciden:
+
+```mermaid
+flowchart TD
+    A{"¿SHA-256 de caso.img igual<br/>al de caso.original.sha256?"} -- Sí --> OK["Copia forense válida"]
+    A -- No --> B{"¿dd reportó errores<br/>de lectura?"}
+    B -- Sí --> DOC["Esperado: los ceros de relleno<br/>cambian el hash; se documenta"]
+    B -- No --> C{"¿records in terminó en +1?"}
+    C -- Sí --> BS["bs no divide el medio: repetir<br/>el paso 6 con bs=512"]
+    C -- No --> W["¿Se montó el original sin<br/>bloqueo de escritura? Documentarlo"]
+```
   original durante todo el proceso.
 
 ### Limpieza
@@ -305,6 +333,22 @@ chmod +x dwarf2json
 - `chmod +x avml` / `chmod +x dwarf2json` → da permiso de ejecución al binario descargado.
 
 Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la primera vez).
+
+Montaje del ejercicio, todo en un solo equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux (un solo host)"]
+        T2["Terminal 2: bash<br/>historial con echo marcador<br/>y nc en segundo plano"]
+        LO(["Interfaz lo<br/>127.0.0.1"])
+        T1["Terminal 1: nc -l<br/>escucha en el puerto 9000"]
+        RAM["RAM del equipo"]
+        AV["sudo ./avml"]
+        F["memoria.lime"]
+    end
+    T2 -- "TCP a 127.0.0.1:9000" --> LO --> T1
+    RAM -- "lee la memoria" --> AV --> F
+```
 
 ### Pasos
 
@@ -445,6 +489,17 @@ Tiempo estimado: 60-90 minutos (la tabla de símbolos es lo que más cuesta la p
 ### Resultado esperado
 
 Tienes `memoria.lime` con su hash, una tabla de símbolos propia del kernel de este equipo, y la
+
+```mermaid
+flowchart LR
+    K["uname -r:<br/>versión del kernel"] --> DBG["vmlinux con símbolos<br/>(paquete -dbg o -dbgsym)"]
+    DBG --> DJ["dwarf2json"] --> ISF["ISF JSON en<br/>~/vol3-symbols/linux"]
+    ISF --> V["Volatility 3"]
+    MEM["memoria.lime"] --> V
+    V --> P1["linux.pslist:<br/>proceso nc y su PID"]
+    V --> P2["linux.sockstat:<br/>socket TCP al 9000"]
+    V --> P3["linux.bash:<br/>echo marcador-volatility-2026"]
+```
 salida de tres plugins que, juntos, reconstruyen lo que estaba pasando: el proceso `nc`, su
 conexión al puerto 9000 y el comando `echo marcador-volatility-2026` que tecleaste. Nada de
 esto queda en el disco: solo vivía en RAM.
@@ -457,6 +512,15 @@ esto queda en el disco: solo vivía en RAM.
 - Si algún plugin falla con un error de símbolos ("unsatisfied requirement ... symbol table"),
   la tabla ISF no corresponde al kernel del volcado: revisa que la versión de `uname -r` del
   paso 3 sea la misma con la que generaste el JSON en el paso 4.
+
+```mermaid
+flowchart TD
+    E["Un plugin falla con<br/>error de tabla de símbolos"] --> Q{"¿uname -r del paso 3 coincide<br/>con el kernel del JSON?"}
+    Q -- No --> R["Regenerar el ISF con dwarf2json<br/>para el kernel del volcado"]
+    Q -- Sí --> S{"¿El JSON está en<br/>~/vol3-symbols/linux y<br/>se pasa -s ~/vol3-symbols?"}
+    S -- No --> C["Copiarlo ahí e invocar<br/>vol con -s"]
+    S -- Sí --> M["Si se partió de System.map,<br/>faltan tipos: usar el vmlinux"]
+```
 
 ### Limpieza
 
@@ -491,6 +555,24 @@ mismo levantaste en este equipo, para practicar el análisis del log. Herramient
 envíe una contraseña (errónea) sin teclearla. Tiempo estimado: 30 minutos.
 
 En un caso real la fuente de los intentos estaría en otra máquina y aparecería con su propia IP
+
+Montaje del ejercicio, todo en un solo equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux (un solo host)"]
+        T2["Terminal 2:<br/>bucle sshpass + ssh"]
+        LO(["Interfaz lo<br/>127.0.0.1"])
+        SD["sshd<br/>escucha en el puerto 22"]
+        LOG["/var/log/auth.log<br/>o journal"]
+        T3["Terminal 3:<br/>tail -f o journalctl -f"]
+        T1["Terminal 1:<br/>ss -tlnp y sshd -T"]
+    end
+    T2 -- "TCP a 127.0.0.1:22" --> LO --> SD
+    SD -- "Invalid user y<br/>Failed password" --> LOG
+    LOG --> T3
+    T1 -. "comprueba" .-> SD
+```
 en el log; en local, origen y servidor son el mismo equipo y la IP de origen será `127.0.0.1`.
 La tubería de triaje es exactamente la misma y las líneas `Failed password ... from <ip>` son
 idénticas: lo único que cambia es la dirección, que aquí será siempre loopback.
@@ -586,6 +668,22 @@ sudo pacman -S sshpass        # Arch
    son el mismo equipo, el log registrará `from 127.0.0.1`; en un ataque real esa sería la IP de
    la máquina atacante.
 
+   Una vuelta del bucle:
+
+   ```mermaid
+   sequenceDiagram
+       participant C as sshpass + ssh
+       participant S as sshd en 127.0.0.1:22
+       participant L as Log de autenticación
+       C->>S: Conexión TCP y negociación SSH
+       C->>S: Usuario usuario-inexistente
+       S->>L: Invalid user usuario-inexistente from 127.0.0.1
+       C->>S: Contraseña clave-incorrecta
+       S->>L: Failed password for invalid user ... from 127.0.0.1
+       S-->>C: Rechazo, vuelve a pedir contraseña
+       Note over C: sshpass termina: un único intento por vuelta
+   ```
+
 3. En **Terminal 3 (log)**, mira en vivo cómo entran los registros mientras el bucle del paso 2
    corre (puedes lanzar el paso 2 y este a la vez en terminales distintas del mismo equipo).
    ```bash
@@ -664,6 +762,19 @@ en una red real sería la dirección de la máquina atacante.
   mayor a menor y `head` deja el top. Quita el último `| head` y verás el listado completo.
 - ¿`grep "Accepted"` para esa IP no devuelve nada? Confirma que ningún intento tuvo éxito, que
   es lo esperable contra un usuario inexistente.
+
+Si no aparece ninguna línea "Failed password":
+
+```mermaid
+flowchart TD
+    Z["Sin líneas Failed password"] --> A{"¿ss -tlnp muestra<br/>sshd en el puerto 22?"}
+    A -- No --> A1["systemctl enable --now<br/>ssh o sshd"]
+    A -- Sí --> B{"¿sshd -T dice<br/>passwordauthentication yes?"}
+    B -- No --> B1["99-lab.conf con<br/>PasswordAuthentication yes<br/>y reiniciar el servicio"]
+    B -- Sí --> C{"¿Existe /var/log/auth.log?"}
+    C -- No --> C1["Usar journalctl -u sshd<br/>(-u ssh en Debian/Ubuntu)"]
+    C -- Sí --> D["Revisar que el cliente envía<br/>contraseña: sshpass, sin BatchMode=yes"]
+```
 
 ### Limpieza
 
