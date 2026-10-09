@@ -25,12 +25,40 @@ Un **CTF (Capture the Flag)** es una competición o ejercicio de seguridad en el
 
 Analogía: un escape room. La sala está diseñada para que haya una salida, las pistas están puestas a propósito y el candado final confirma si se resolvió. Nadie entra a una casa ajena para practicar cómo abrir cerraduras.
 
+Ciclo de un reto:
+
+```mermaid
+flowchart LR
+    R["Reto vulnerable<br/>a propósito"] --> S["Resolverlo"]
+    S --> F["Encontrar la bandera<br/>flag{...}"]
+    F --> E["Enviarla a la plataforma"]
+    E --> V{"¿Coincide?"}
+    V -- Sí --> P["Puntos"]
+    V -- No --> S
+    P --> W["Writeup: documentar<br/>cómo se resolvió"]
+```
+
 ### Jeopardy y Attack-Defense
 
 Los formatos de CTF son las reglas de juego que definen si se resuelven retos aislados o se compite contra otros equipos en vivo. CTFtime, el sitio que lleva el calendario y la clasificación mundial de CTF, distingue tres:
 
 - Jeopardy: un tablero de retos independientes agrupados por categorías, cada uno con un valor en puntos (más puntos cuanto más difícil). Gana el equipo con más puntos al acabar el tiempo. Categorías típicas: Web (vulnerabilidades en aplicaciones web), Crypto (romper cifrados mal usados), Pwn o Binary (explotar programas compilados, desbordamientos de memoria), Reversing (entender qué hace un ejecutable sin su código fuente), Forensics (analizar capturas, imágenes de disco, volcados de memoria), OSINT (encontrar información pública) y Misc.
 - Attack-Defense: cada equipo recibe una máquina con los mismos servicios vulnerables. Hay que parchear los propios servicios (puntos de defensa, y los servicios tienen que seguir funcionando) mientras se explotan los de los rivales para robar sus banderas (puntos de ataque). Las rondas duran pocos minutos y las banderas cambian en cada ronda.
+
+```mermaid
+sequenceDiagram
+    participant O as Organizador
+    participant A as Equipo A
+    participant B as Equipo B
+    Note over O,B: Una ronda de pocos minutos
+    O->>A: Bandera nueva en sus servicios
+    O->>B: Bandera nueva en sus servicios
+    A->>A: Parchea sus servicios sin romperlos
+    A->>B: Explota un servicio y roba la bandera
+    A->>O: Entrega la bandera robada (puntos de ataque)
+    O->>B: Comprueba que sus servicios siguen funcionando
+    Note over O,B: En la ronda siguiente las banderas cambian
+```
 - Mixed: mezcla de los anteriores, por ejemplo un tablero Jeopardy más una fase de ataque y defensa. Una variante popular es King of the Hill: varios jugadores atacan la misma máquina y gana quien la controla más tiempo escribiendo su nombre en un archivo concreto.
 
 ```
@@ -93,6 +121,17 @@ Cómo se usa:
 
 - Cada máquina (entry) trae una descripción, su dificultad y a veces una pista; el objetivo suele ser conseguir root y leer una bandera.
 - Se importa en una red host-only o interna, nunca en modo bridged, para que una máquina deliberadamente vulnerable no quede expuesta a tu red de casa (ver [`05-virtualizacion`](../05-virtualizacion/)).
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo anfitrión"]
+        subgraph HO["Red host-only (aislada)"]
+            AT["VM de ataque"] -- "escaneo y ataque" --> VU["VM de VulnHub<br/>(Kioptrix)"]
+        end
+    end
+    LAN["Red de tu casa"]
+    VU -. "sin conexión<br/>(nunca bridged)" .- LAN
+```
 - Las máquinas son antiguas en su mayoría (el sitio se actualiza poco), lo que las hace buenas para aprender metodología clásica: enumerar, encontrar un servicio viejo, entrar, escalar privilegios.
 - Clásicas para empezar: la serie Kioptrix y Mr-Robot.
 
@@ -139,6 +178,17 @@ Analogía: si picoCTF es el cuaderno de ejercicios, pwn.college es el curso univ
 
 Ejemplo: después de leer sobre buffer overflow en [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/) y sobre C++ y ensamblador en [`18-programacion-y-hacking-practico`](../18-programacion-y-hacking-practico/), el dojo de corrupción de memoria te hace ver, reto a reto, cómo una copia sin control de longitud llega a cambiar lo que hace un programa.
 
+Cuándo usar cada plataforma, según lo visto:
+
+```mermaid
+flowchart TD
+    Q{"¿Qué necesitas?"} -- "Empezar de cero, guiado" --> T["TryHackMe"]
+    Q -- "Ejercicios graduados por categoría" --> P["picoCTF / picoGym"]
+    Q -- "Laboratorio propio sin conexión" --> V["VulnHub"]
+    Q -- "Sistemas a bajo nivel, curso completo" --> PW["pwn.college"]
+    Q -- "Competir contra otros equipos" --> C["CTF con fecha<br/>(calendario en CTFtime)"]
+```
+
 ```
 pwn.college → curso universitario gratuito de seguridad de sistemas en dojos.
 Dojo → módulo con clases en video y retos en un entorno Linux en el navegador.
@@ -169,6 +219,16 @@ Analogía: el carné de conducir. No demuestra que alguien sea buen piloto, pero
 Analogía: el curso de mecánico general antes de especializarse en motores.
 
 Ejemplo de PBQ típico: se muestra un equipo que no arranca con una lista de síntomas (pitidos, luz de disco apagada) y hay que ordenar los pasos de la metodología de resolución de problemas de CompTIA: identificar el problema, establecer una teoría, probarla, planificar la solución, verificar el funcionamiento y documentar.
+
+```mermaid
+flowchart LR
+    A["Identificar<br/>el problema"] --> B["Establecer<br/>una teoría"]
+    B --> C{"Probar<br/>la teoría"}
+    C -- "no se confirma" --> B
+    C -- "se confirma" --> D["Planificar<br/>la solución"]
+    D --> E["Verificar el<br/>funcionamiento"]
+    E --> F["Documentar"]
+```
 
 > [!TIP]
 > Si ya trabajas en TI o sabes armar y reparar equipos, A+ es la certificación más prescindible de la ruta: muchos saltan directo a Network+ o Security+. Tiene valor real cuando se busca un primer empleo de soporte.
@@ -217,6 +277,18 @@ Analogía: conocer el sistema de carreteras de un país (tipos de vía, señales
 
 Ejemplo de pregunta típica: un host con `192.168.10.70/26` no llega a `192.168.10.130`. Hay que ver que un /26 tiene bloques de 64 direcciones, así que el host está en la subred `.64-.127` y el destino en `.128-.191`: necesita pasar por el router, y el fallo está en la puerta de enlace.
 
+```mermaid
+flowchart LR
+    subgraph S1["Subred 192.168.10.64/26<br/>(.64 a .127)"]
+        H["Host .70"]
+    end
+    subgraph S2["Subred 192.168.10.128/26<br/>(.128 a .191)"]
+        D["Destino .130"]
+    end
+    H -- "otra subred: va a la<br/>puerta de enlace" --> R["Router"]
+    R --> D
+```
+
 ```
 CompTIA Network+ → fundamentos de redes neutrales; V9, N10-009.
 Formato Network+ → 90 preguntas máx., 90 min; 720/900.
@@ -259,6 +331,16 @@ R1(config-if)# ip access-group 10 out
 
 Esos detalles de sintaxis son los que el CCNA evalúa y Network+ no.
 
+Cómo evalúa el router la ACL 10, aplicada en salida en g0/1:
+
+```mermaid
+flowchart TD
+    P["Paquete que sale por g0/1"] --> L1{"¿Origen en 10.1.1.0<br/>0.0.0.255?"}
+    L1 -- Sí --> D["deny: se descarta"]
+    L1 -- No --> L2{"permit any"}
+    L2 --> OK["Se reenvía"]
+```
+
 ```
 CCNA → redes Cisco, práctica en IOS; 200-301 v1.1 (v2.0 desde el 3 feb 2027).
 Formato CCNA → 120 min, simulaciones incluidas; 300 USD; validez 3 años.
@@ -285,6 +367,14 @@ Ejemplo de PBQ: se muestran los logs de un firewall y un servidor web con cinco 
 
 > [!NOTE]
 > Entre noviembre de 2026 y junio de 2027 conviven SY0-701 y SY0-801. Quien ya estudió con material de la 701 puede presentarla hasta su retiro; quien empieza de cero después de noviembre de 2026 debería ir directo a la 801.
+
+```mermaid
+timeline
+    title Versiones de Security+
+    7 nov 2023 : Lanza V7 (SY0-701)
+    ~17 nov 2026 : Lanzamiento estimado de V8 (SY0-801) : Conviven las dos
+    ~11 jun 2027 : Retiro anunciado de SY0-701 en inglés
+```
 
 ```
 CompTIA Security+ → base de ciberseguridad; DoD 8140.
@@ -319,6 +409,22 @@ Se dividen en dos familias muy distintas:
 
 - Técnicas y prácticas: demuestran habilidad con las manos, con exámenes de laboratorio (OSCP, CREST CRT, GIAC con CyberLive) o con preguntas técnicas (CEH, GSEC).
 - De gestión y auditoría: demuestran criterio y experiencia para dirigir programas de seguridad o auditarlos (CISSP, CISM, CISA). Exigen 5 años de experiencia verificada.
+
+```mermaid
+mindmap
+  root((Certificaciones avanzadas))
+    Técnicas y prácticas
+      CEH
+      GSEC
+      GPEN
+      GWAPT
+      OSCP
+      CREST CRT
+    Gestión y auditoría
+      CISA
+      CISM
+      CISSP
+```
 
 ### CEH
 
@@ -386,6 +492,18 @@ Precio CISA → 575 USD miembros / 760 USD no miembros + 50 USD solicitud.
 Analogía: el director de un hospital frente al cirujano. No opera, pero decide cuántos quirófanos hay, qué riesgos se aceptan y qué hacer cuando algo sale mal.
 
 Ejemplo de pregunta típica: "La dirección quiere lanzar un producto que incumple la política de cifrado. ¿Qué hace el gerente de seguridad?" La respuesta CISM no es bloquearlo: es presentar el riesgo a la dirección en términos de negocio para que el dueño del riesgo decida aceptarlo, mitigarlo o transferirlo, y documentar la decisión.
+
+```mermaid
+flowchart LR
+    R["Producto que incumple<br/>la política de cifrado"] --> G["Gerente de seguridad:<br/>presenta el riesgo en<br/>términos de negocio"]
+    G --> DU{"Dueño del riesgo<br/>decide"}
+    DU --> A["Aceptar"]
+    DU --> M["Mitigar"]
+    DU --> T["Transferir"]
+    A --> DOC["Documentar la decisión"]
+    M --> DOC
+    T --> DOC
+```
 
 ```
 CISM → gestión de programas de seguridad; ISACA.
@@ -493,6 +611,15 @@ Precio GIAC → 999 USD la mayoría; reintento 899; renovación 499; validez 4 a
 - Enfoque: pentesting práctico de principio a fin: enumeración, explotación y escalada de privilegios en Linux. Su lema histórico es "Try Harder".
 - Nivel: intermedio; no tiene requisitos formales, pero se espera soltura en redes, Linux y scripting básico.
 - Formato: 23 horas y 45 minutos de examen práctico supervisado por cámara, más 24 horas para entregar el informe. Se aprueba con 70 de 100 puntos: tres máquinas independientes de 20 puntos cada una y un conjunto de Active Directory de 40 puntos. Desde el 1 de noviembre de 2024 ya no hay puntos extra por ejercicios del curso.
+
+```mermaid
+flowchart LR
+    EX["Examen práctico<br/>23 h 45 min"] --> PT["3 máquinas x 20 pts<br/>+ Active Directory 40 pts"]
+    PT --> IN["24 h para<br/>entregar el informe"]
+    IN --> Q{"¿70 de 100 o más,<br/>con informe?"}
+    Q -- Sí --> OK["OSCP+<br/>caduca a los 3 años"]
+    Q -- No --> NO["Sin certificación"]
+```
 - OSCP+: quien aprueba desde esa fecha recibe OSCP+, que caduca a los 3 años; el OSCP clásico no caduca.
 - Precio verificado: 1.749 USD el paquete con curso, laboratorios y un intento.
 - Rol: pentester junior, red team, consultor de seguridad ofensiva.
@@ -537,6 +664,17 @@ CCT  → nivel senior, infraestructura o aplicaciones.
 - Enfoque: amplitud y gestión, no técnica profunda: "piensa como un gerente". Se dice que mide un kilómetro de ancho y un centímetro de profundidad.
 - Requisitos: 5 años de experiencia remunerada en al menos 2 de los 8 dominios (1 año se puede convalidar con un título universitario o con ciertas certificaciones). Quien aprueba sin la experiencia queda como Associate of ISC2 hasta reunirla.
 - Formato: examen adaptativo (CAT) de 100 a 150 preguntas en 3 horas; la dificultad se ajusta según las respuestas.
+
+```mermaid
+flowchart TD
+    Q["Pregunta"] --> R{"¿Respuesta correcta?"}
+    R -- Sí --> UP["La siguiente se elige<br/>más difícil"]
+    R -- No --> DN["La siguiente se elige<br/>más fácil"]
+    UP --> C{"¿El sistema ya tiene<br/>confianza suficiente?<br/>(entre 100 y 150 preguntas)"}
+    DN --> C
+    C -- No --> Q
+    C -- Sí --> F["Fin: aprobado o suspenso"]
+```
 - Precio verificado: 749 USD.
 - Los 8 dominios, con su peso en el examen:
   1. Security and Risk Management, 16 %.

@@ -22,6 +22,21 @@ Necesitas: VirtualBox (o VMware); la imagen de
 una VM de ataque con Nmap (Kali, Parrot o cualquier Linux tuyo con Nmap). Tiempo: 1 h.
 Todo en red host-only, sin salida a internet para la máquina objetivo.
 
+Montaje del laboratorio aislado:
+
+```mermaid
+flowchart LR
+    subgraph HOST["Tu equipo anfitrión"]
+        subgraph HO["Red host-only 192.168.56.0/24 (sin salida a internet)"]
+            AT["VM de ataque<br/>Nmap, searchsploit"]
+            VU["VM objetivo<br/>Kioptrix Level 1"]
+        end
+    end
+    LAN["Red de tu casa e internet"]
+    AT -- "escaneo y ataque" --> VU
+    HO -. "nunca en modo bridged" .- LAN
+```
+
 ### Pasos
 
 1. Crea una red host-only en VirtualBox: `Herramientas > Red > Host-only Networks >
@@ -70,6 +85,14 @@ Todo en red host-only, sin salida a internet para la máquina objetivo.
    - `-oN kioptrix_nmap.txt` → guarda la salida en formato normal (legible) en ese archivo.
 
    Guarda la salida: es la base de tu informe.
+
+```mermaid
+flowchart LR
+    A["ip -brief address:<br/>tu rango host-only"] --> B["nmap -sn del rango:<br/>hosts vivos"]
+    B --> C["La IP que no reconoces<br/>es Kioptrix"]
+    C --> D["nmap -sV -sC -p-:<br/>puertos, versiones, scripts"]
+    D --> E["kioptrix_nmap.txt:<br/>base del informe"]
+```
 
 ### Resultado esperado
 
@@ -164,6 +187,17 @@ solo después de intentarlo, y documenta con tus palabras.
    Guarda una captura o el texto como evidencia.
 6. Informe: rellena la plantilla de abajo. Para cada hallazgo, incluye evidencia (el
    comando y su salida) y una recomendación de corrección.
+
+Ciclo del pentest que documentas:
+
+```mermaid
+flowchart LR
+    R["Reconocimiento:<br/>servicio más antiguo,<br/>searchsploit, gobuster"] --> V["Análisis:<br/>qué fallo, requisito,<br/>impacto"]
+    V --> E["Explotación:<br/>shell en el objetivo"]
+    E --> P["Post-explotación:<br/>id, uname -a,<br/>escalada a root"]
+    P --> F["Prueba: buzón de root<br/>e id con uid=0"]
+    F --> I["Informe con la plantilla"]
+```
 
 #### Plantilla de informe
 
