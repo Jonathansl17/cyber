@@ -49,6 +49,17 @@ Qué hace el atacante en cada fase y cómo corta el defensor:
 
 Ejemplo: un SOC ve en una semana 200 intentos de explotar una vulnerabilidad de ejecución remota recién publicada en su aplicación web. 190 los bloquea el WAF (corte en Delivery). De los 10 que llegan, 9 golpean servidores ya parcheados (corte en Exploitation). El último servidor, `web03`, seguía sin parche; el payload descarga un binario en `/tmp`, lo deja en el crontab del usuario del servidor web y a los 5 minutos empieza a contactar `update-cdn-sync[.]com` cada 60 segundos. El proxy bloquea el dominio porque tiene 3 días de registrado (corte en C2). El atacante tuvo que ganar 7 veces seguidas; el defensor ganó con cualquiera de esas barreras.
 
+```mermaid
+flowchart LR
+    A["200 intentos<br/>del exploit"] --> W{"WAF<br/>(Delivery)"}
+    W -->|"190 bloqueados"| X1["Cortado"]
+    W -->|"10 pasan"| P{"¿Servidor parcheado?<br/>(Exploitation)"}
+    P -->|"9 sí"| X2["Cortado"]
+    P -->|"1 no: web03"| I["Binario en /tmp + crontab<br/>(Installation)"]
+    I --> C{"Proxy<br/>(Command and Control)"}
+    C -->|"dominio de 3 días"| X3["Cortado"]
+```
+
 ```
 Hora      Fuente   Evento
 09:14:02  waf      ALLOW POST /api/import con payload del exploit -> web03
@@ -92,6 +103,13 @@ Defensor B:    -     -     -     -     -     CORTA       → intrusión fallida,
 ```
 
 Las dos filas de defensores terminan igual, pero cortar en Delivery cuesta un correo en cuarentena, y cortar en C2 cuesta reimaginar una máquina e investigar qué más hizo.
+
+```mermaid
+flowchart LR
+    R["1 Reconnaissance"] --> We["2 Weaponization"] --> D["3 Delivery"] --> E["4 Exploitation"] --> I["5 Installation"] --> C2["6 Command and Control"] --> AO["7 Actions on Objectives"]
+    D -.->|"Defensor A corta"| FA["Correo en cuarentena<br/>(barato)"]
+    C2 -.->|"Defensor B corta"| FB["Reimaginar la máquina<br/>e investigar (caro)"]
+```
 
 Analogía: un dominó de 7 fichas. Basta sacar una para que la última no caiga.
 
@@ -150,6 +168,17 @@ Analogía: la ficha de un detective sobre un robo. Sospechoso (adversario), arma
 
 Ejemplo: un SOC recibe un correo de phishing. Anota: víctima = 3 contadores del área de finanzas; capacidad = documento Excel con macro que descarga un troyano; infraestructura = dominio `factura-pagos[.]net` con IP `203.0.113.50`; adversario = desconocido. Pivotea desde la IP en un servicio de DNS pasivo y encuentra 12 dominios más que resolvieron a la misma IP en los últimos 90 días, con temas de facturas. Bloquea los 12 de antemano y busca en el proxy si algún empleado visitó alguno. Así un solo correo se convierte en el mapa de una campaña.
 
+```mermaid
+flowchart LR
+    Adv["Adversary<br/>desconocido"] --- Cap["Capability<br/>Excel con macro"]
+    Adv --- Inf["Infrastructure<br/>factura-pagos[.]net<br/>203.0.113.50"]
+    Cap --- Vic["Victim<br/>3 contadores de finanzas"]
+    Inf --- Vic
+    Inf -->|"pivot por DNS pasivo"| D12["12 dominios más<br/>en la misma IP"]
+    D12 --> B["Bloqueo de antemano"]
+    D12 --> P["Búsqueda en el proxy"]
+```
+
 > [!TIP]
 > Si la pregunta es "qué relaciona a estos dos incidentes", la respuesta va por el Diamond Model; si es "en qué paso estaba el atacante", va por la Kill Chain; si es "qué técnica exacta usó", va por ATT&CK.
 
@@ -187,6 +216,14 @@ OUT (Action on Objectives: cumplir el objetivo)
 
 8 + 6 + 4 = 18 fases. La diferencia práctica: en la UKC el ciclo "Through" puede darse muchas veces, y el atacante puede volver a "In" desde una máquina interna hacia otra red. Nótese que la UKC usa nombres de táctica de ATT&CK de 2017 (por ejemplo "Defense Evasion"), no los de la versión actual de ATT&CK (ver el nodo siguiente).
 
+```mermaid
+flowchart LR
+    IN["IN<br/>Initial Foothold<br/>8 fases"] --> TH["THROUGH<br/>Network Propagation<br/>6 fases"]
+    TH -->|"cada máquina nueva"| TH
+    TH -->|"hacia otra red"| IN
+    TH --> OUT["OUT<br/>Action on Objectives<br/>4 fases"]
+```
+
 Analogía: la Kill Chain original es el plano de cómo un ladrón entra a una casa; la UKC también describe cómo, ya dentro, recorre cuarto por cuarto buscando la caja fuerte, y que puede salir por el patio a la casa vecina.
 
 Ejemplo: un ransomware moderno entra por phishing (In), pasa 10 días robando contraseñas y saltando de 1 a 40 servidores (Through, repetido 40 veces) y al final cifra los 40 de golpe (Out). En la Kill Chain original esos 10 días caben enteros en la fase 7; en la UKC cada salto tiene su fase y su oportunidad de detección.
@@ -215,6 +252,18 @@ Estructura:
 - **Grupos (groups)**: actores de amenaza conocidos con sus técnicas observadas. ID `G####`; por ejemplo G0007 es APT28.
 - **Software**: malware y herramientas, ID `S####`. **Mitigations**: contramedidas, ID `M####`. **Campaigns**: campañas concretas, ID `C####`.
 
+Cómo se encadenan los objetos, con T1566 como ejemplo:
+
+```mermaid
+flowchart TD
+    TA["Táctica TA0001 Initial Access<br/>(por qué)"] --> T["Técnica T1566 Phishing<br/>(cómo)"]
+    T --> S1["Sub-técnica T1566.001<br/>Spearphishing Attachment"]
+    T --> S2["Sub-técnica T1566.002<br/>Spearphishing Link"]
+    S1 --> PR["Procedimiento: cómo lo hizo<br/>un grupo concreto"]
+    G["Grupo G0007 APT28"] -->|"usa técnicas"| T
+    M["Mitigation M1017<br/>User Training"] -->|"mitiga"| T
+```
+
 La matriz Enterprise vigente (ATT&CK v19.2, publicada el 28 de abril de 2026) tiene 15 tácticas, en este orden:
 
 ```
@@ -236,6 +285,12 @@ La matriz Enterprise vigente (ATT&CK v19.2, publicada el 28 de abril de 2026) ti
 ```
 
 Hasta la v18 eran 14 tácticas: la v19 dividió la antigua Defense Evasion (TA0005) en dos. Stealth conserva el ID TA0005 y agrupa lo que busca pasar desapercibido sin tocar las defensas (ofuscar archivos T1027, enmascarar nombres T1036, inyectar en procesos T1055, borrar indicadores T1070). Defense Impairment es nueva (TA0112) y agrupa lo que ataca a las propias defensas: desactivar o modificar herramientas de seguridad como EDR, antivirus o agentes de logs (T1685), desactivar el firewall (T1686), subvertir controles de confianza como la firma de código (T1553).
+
+```mermaid
+flowchart LR
+    DE["Defense Evasion TA0005<br/>(hasta v18)"] --> ST["Stealth TA0005<br/>T1027, T1036, T1055, T1070"]
+    DE --> DI["Defense Impairment TA0112<br/>T1685, T1686, T1553"]
+```
 
 > [!WARNING]
 > Muchos cursos, preguntas de certificación y salas de práctica aún dicen "14 tácticas" e incluyen Defense Evasion: eso era cierto hasta ATT&CK v18. La versión vigente (v19.2) tiene 15, con Stealth y Defense Impairment en su lugar.
@@ -296,6 +351,13 @@ La fila "Responde" es la que importa: tres preguntas distintas, ninguna sustituy
 
 Ejemplo: un mismo correo de phishing se anota como fase 3 Delivery (Kill Chain), como evento con víctima = finanzas, capacidad = macro, infraestructura = dominio X (Diamond, con meta-característica Phase = Delivery) y como T1566.001 Spearphishing Attachment (ATT&CK).
 
+```mermaid
+flowchart LR
+    C["Un correo de phishing"] --> KC["Kill Chain<br/>fase 3 Delivery<br/>¿en qué paso va?"]
+    C --> DM["Diamond Model<br/>víctima finanzas, capacidad macro,<br/>infraestructura dominio X<br/>¿quién, con qué, desde dónde?"]
+    C --> AT["ATT&CK<br/>T1566.001<br/>¿cómo exactamente?"]
+```
+
 Límite: ninguno de los tres detecta nada por sí solo; son formas de organizar lo que la telemetría ya muestra.
 
 ```
@@ -325,6 +387,14 @@ Se clasifica en cuatro tipos según quién la usa y a qué plazo:
 > Las fuentes no se ponen de acuerdo en el borde entre táctica, operacional y técnica: algunas llaman "táctica" a la lista de IOCs y reservan TTPs para la operacional. Lo estable es el eje: estratégica para decidir inversiones, técnica para alimentar máquinas, y las otras dos en medio.
 
 Ejemplo de la misma amenaza en los cuatro tipos: a la junta se le dice "el phishing con facturas falsas es nuestro riesgo número 1 este año" (estratégica); al equipo de detección, "usan documentos con macros que descargan y ejecutan un script codificado en Base64" (táctica); al SOC, "la campaña empezó el lunes y apunta a finanzas" (operacional); al firewall, "bloquear `factura-pagos[.]net` y estos 4 hashes" (técnica).
+
+```mermaid
+flowchart LR
+    A["Phishing con<br/>facturas falsas"] --> E["Estratégica<br/>meses a años"] --> J["Junta directiva"]
+    A --> T["Táctica<br/>semanas a meses"] --> D["Equipo de detección"]
+    A --> O["Operacional<br/>días"] --> S["SOC / respuesta"]
+    A --> Te["Técnica<br/>horas a días"] --> F["Firewall, SIEM, EDR"]
+```
 
 ```
 Estratégica → tendencias y riesgo de negocio, para directivos; meses a años.
@@ -440,6 +510,19 @@ Analogía: echar a un vendedor ambulante molesto. Si lo reconoces por la camisa 
 
 Ejemplo: tras un incidente, el SOC bloquea 1 hash, 1 IP y 1 dominio. Al día siguiente, el mismo grupo vuelve con otro hash, otra IP y otro dominio: los tres bloqueos sirvieron 24 horas. Entonces el SOC escribe una regla de comportamiento: "alertar cuando cualquier proceso que no sea un agente de backup conocido borre las instantáneas LVM con `lvremove`". Esa regla atrapa el siguiente intento aunque todo lo de abajo haya cambiado.
 
+```mermaid
+sequenceDiagram
+    participant A as Atacante
+    participant S as SOC
+    A->>S: Intrusión con hash, IP y dominio
+    S->>S: Bloquea 1 hash, 1 IP y 1 dominio
+    A->>S: Al día siguiente, otro hash, otra IP y otro dominio
+    Note over S: Los bloqueos duraron 24 horas
+    S->>S: Regla de comportamiento sobre lvremove
+    A->>S: Nuevo intento con todo lo de abajo cambiado
+    Note over S: La regla lo detecta (TTP)
+```
+
 ```
 Hash values → trivial de cambiar.
 IP addresses → fácil de cambiar.
@@ -485,6 +568,17 @@ STIX 2.1 define objetos:
 
 - SDOs (STIX Domain Objects), 18 tipos, entre ellos: Indicator, Malware, Threat Actor, Intrusion Set, Campaign, Attack Pattern (una técnica, se enlaza con su ID de ATT&CK), Infrastructure, Vulnerability, Tool, Course of Action, Identity, Report y Observed Data.
 - SROs (STIX Relationship Objects): Relationship (por ejemplo "el malware X usa la infraestructura Y") y Sighting ("vimos este indicador en nuestra red").
+
+SDOs unidos por objetos Relationship (líneas continuas) y un Sighting (punteada):
+
+```mermaid
+flowchart LR
+    TA["Threat Actor"] -->|"uses"| MW["Malware"]
+    MW -->|"uses"| INF["Infrastructure"]
+    MW -->|"uses"| AP["Attack Pattern<br/>(enlazado a ATT&CK)"]
+    IND["Indicator"] -->|"indicates"| MW
+    SG["Sighting<br/>vimos esto en nuestra red"] -.->|"sighting_of_ref"| IND
+```
 
 Ejemplo de un Indicator en STIX 2.1:
 
@@ -547,6 +641,15 @@ Fuentes OSINT para defensores (todas con uso gratuito básico):
 - OSINT Framework: un directorio en forma de árbol de herramientas OSINT por categoría.
 
 Ejemplo de triaje: una alerta muestra a un equipo contactando `cdn-update-check[.]com`. El analista consulta: WHOIS dice que el dominio se registró hace 2 días; VirusTotal da 8 de 90 motores lo marcan como malicioso; urlscan muestra una página de login falsa de Microsoft 365; el DNS pasivo muestra que la IP aloja otros 15 dominios parecidos. En 10 minutos la alerta pasa de "dudosa" a "phishing confirmado", con 15 dominios extra para bloquear.
+
+```mermaid
+flowchart LR
+    AL["Alerta: un equipo contacta<br/>cdn-update-check[.]com"] --> W["WHOIS<br/>registrado hace 2 días"]
+    AL --> VT["VirusTotal<br/>8 de 90 motores"]
+    AL --> U["urlscan<br/>login falso de Microsoft 365"]
+    AL --> DNS["DNS pasivo<br/>15 dominios parecidos en la IP"]
+    W & VT & U & DNS --> R["Phishing confirmado<br/>+ 15 dominios para bloquear"]
+```
 
 ```
 $ whois cdn-update-check.com | grep -i creation
@@ -719,6 +822,16 @@ La primera fila es la diferencia de fondo: quién empuja la investigación, una 
 Analogía: el monitoreo es la alarma de la casa, que suena cuando alguien abre una ventana con sensor; el hunting es recorrer la casa revisando las ventanas que no tienen sensor.
 
 Ejemplo: en un mes, el SOC atiende 3.000 alertas y escala 12 incidentes (monitoreo). En ese mismo mes, un cazador dedica 2 semanas a una hipótesis sobre robo de claves SSH privadas (T1552.004), encuentra 1 servidor comprometido que no generó ninguna alerta, y deja 2 reglas nuevas en el SIEM; desde el mes siguiente, eso ya es monitoreo. La detección automática en sí se estudia en [`14-deteccion-y-monitoreo`](../14-deteccion-y-monitoreo/).
+
+```mermaid
+flowchart LR
+    H["Hipótesis<br/>T1552.004"] --> TH["Cacería<br/>(2 semanas)"]
+    TH --> HL["1 servidor comprometido<br/>sin alerta"]
+    HL --> IR["Respuesta a incidentes"]
+    TH --> R["2 reglas nuevas<br/>en el SIEM"]
+    R --> M["Monitoreo 24x7<br/>alertas automáticas"]
+    M -->|"libera al cazador<br/>de lo ya conocido"| H
+```
 
 ```
 Monitoreo → reactivo; parte de una alerta; detecta lo conocido.

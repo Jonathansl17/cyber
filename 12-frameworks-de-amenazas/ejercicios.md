@@ -24,6 +24,22 @@ sudo pacman -S curl python        # Arch
 - `python3` / `python` → paquete del intérprete de Python 3 (en Arch se llama `python`).
 - `# Debian/Ubuntu`, `# Arch` → comentarios de la shell: todo lo que va tras `#` se ignora; ejecuta solo la línea de tu distribución.
 
+Qué consulta tu equipo y a quién (solo metadatos, ninguna muestra se descarga ni se sube):
+
+```mermaid
+sequenceDiagram
+    participant T as Tu terminal (curl + python3)
+    participant MB as API de MalwareBazaar
+    participant VT as VirusTotal (navegador)
+    T->>MB: POST get_recent, selector=100, con Auth-Key
+    MB-->>T: recientes.json
+    T->>MB: POST get_siginfo de la familia, limit=1000
+    MB-->>T: familia.json
+    T->>T: Contar muestras por imphash
+    T->>VT: Buscar por hash
+    VT-->>T: Detecciones, nombres e imphash
+```
+
 ### Pasos
 
 1. Comprueba primero en tu máquina, con un archivo inofensivo, lo que dice la base de la pirámide: un byte distinto da un hash completamente distinto.
@@ -160,6 +176,18 @@ sudo pacman -S curl python        # Arch
 
 Un `familia.json` con las muestras de una familia, el recuento de muestras frente a imphash distintos con el imphash más compartido, las anotaciones de VirusTotal de tres muestras de la misma familia (dos con el mismo imphash) y `conclusion.txt` con la justificación en una línea.
 
+Con los números de ejemplo del paso 4:
+
+```mermaid
+flowchart LR
+    F["familia.json<br/>1000 muestras = 1000 SHA-256"] --> PE["702 ejecutables PE<br/>con imphash"]
+    F --> NP["298 sin imphash<br/>(zip, rar, js...)"]
+    PE --> I1["imphash f34d...<br/>655 muestras"]
+    PE --> I2["otros 8 imphash<br/>47 muestras"]
+    B1["Bloquear 1 hash"] -.->|"detiene"| R1["1 de 1000"]
+    B2["Detectar el imphash f34d..."] -.->|"cubre"| R2["655 de 1000"]
+```
+
 ### Comprueba que lo lograste
 
 - ¿Cuántas muestras (SHA-256 distintos) cubre tu imphash más compartido y cuántos imphash distintos hay en total? El primero debe ser muy superior a 1 y el segundo mucho menor que el número de muestras: muchos hashes, pocas huellas de compilación.
@@ -195,6 +223,19 @@ sudo pacman -S curl python        # Arch
 ```
 
 - `sudo`, `apt install`, `pacman -S`, `curl`, `python3`/`python`, `#` → (ver ejercicio 1); `tar` ya viene con el sistema base.
+
+Flujo de datos del ejercicio:
+
+```mermaid
+flowchart LR
+    MITRE["attack.mitre.org"] -->|"curl"| TT["teamtnt.json<br/>(capa a)"]
+    GH["GitHub SigmaHQ"] -->|"curl + tar"| R["sigma-master/rules/linux<br/>unas 200 reglas .yml"]
+    R -->|"capa_sigma.py"| SL["sigma-linux.json<br/>(capa b)"]
+    TT & SL --> NAV["ATT&CK Navigator<br/>(a > 0) and not (b > 0)"]
+    TT & SL --> HU["huecos.py<br/>grupo - cubiertas"]
+    NAV --> CMP{"¿Mismo número<br/>de huecos?"}
+    HU --> CMP
+```
 
 ### Pasos
 
@@ -380,6 +421,19 @@ Necesitas: un dominio tuyo o de una organización que te haya autorizado por esc
 
 Si no tienes dominio propio ni autorización: usa un dominio que esté dentro del alcance (scope) de un programa público de bug bounty, por ejemplo `hackerone.com`, que figura en el alcance del programa público de HackerOne en [hackerone.com/security](https://hackerone.com/security). Antes de empezar, lee la política del programa y confirma que el dominio sigue en el alcance. El alcance enumera hosts concretos, no todo `*.hackerone.com`: los subdominios que encuentres fuera de esa lista solo los anotas. Con un dominio ajeno trabajas en modo solo lectura: haces únicamente las consultas pasivas de los pasos 2 a 5 (bases públicas y resolución DNS normal), no te conectas a ningún host de la lista, no pruebas credenciales ni escaneas nada, y `revision.txt` queda como ejercicio privado: no publicas ni compartes lo que encuentres.
 
+Cadena de consultas, todas a bases públicas; ningún paso se conecta a los hosts de la lista:
+
+```mermaid
+flowchart LR
+    CT["Cert Spotter / crt.sh<br/>(Certificate Transparency)"] -->|"dns_names"| SUB["subdominios.txt"]
+    SUB -->|"getent ahostsv4"| DNS{"¿Resuelve?"}
+    DNS -->|"sí, IP"| IDB["InternetDB de Shodan<br/>puertos, CPE, CVE"]
+    DNS -->|"no"| NR["no resuelve"]
+    IDB --> EXP["exposicion.txt"]
+    NR --> EXP
+    EXP -->|"clasificación manual"| REV["revision.txt"]
+```
+
 ```bash
 sudo apt install curl python3     # Debian/Ubuntu
 sudo pacman -S curl python        # Arch
@@ -466,6 +520,18 @@ sudo pacman -S curl python        # Arch
 
 `subdominios.txt` con los nombres sacados de Certificate Transparency, `exposicion.txt` con IP, puertos y CVE vistos por Shodan para cada uno, y `revision.txt` con los activos que no deberían estar expuestos y la acción propuesta.
 
+Criterios del paso 6 para cada subdominio:
+
+```mermaid
+flowchart TD
+    S["Subdominio de exposicion.txt"] --> N{"¿Nombre de entorno<br/>interno o de pruebas?"}
+    S --> P{"¿Puerto de administración<br/>o base de datos abierto?"}
+    S --> V{"¿vulns no vacío, o no resuelve<br/>y conserva certificado?"}
+    N -->|"sí"| R["Línea en revision.txt<br/>con razón y acción concreta"]
+    P -->|"sí"| R
+    V -->|"sí"| R
+```
+
 ### Comprueba que lo lograste
 
 - ¿Por qué un subdominio aparece en Certificate Transparency aunque no esté enlazado en ninguna web? Porque las autoridades de certificación publican todos los certificados que emiten en registros públicos, y el nombre va dentro del certificado.
@@ -508,6 +574,25 @@ sudo systemctl start auditd cronie sshd
 ```
 
 - `systemctl start auditd cronie sshd` → arranca el demonio de auditoría, el planificador de cron y el servidor SSH; los nombres de servicio equivalentes en Debian/Ubuntu son `auditd`, `cron` y `ssh`.
+
+Montaje del laboratorio, todo en un solo equipo:
+
+```mermaid
+flowchart TD
+    subgraph H["Un solo equipo Linux"]
+        T1["Terminal 1<br/>tu usuario + sudo"]
+        T2["Terminal 2"] -->|"ssh ana@127.0.0.1"| SSHD["sshd :22 en loopback"]
+        SSHD --> SA["Sesión de ana<br/>auid = ana"]
+        SA -->|"crontab -"| CT["Crontab de ana<br/>(/var/spool/cron/...)"]
+        CRON["Demonio cron"] -->|"lee"| CT
+        CRON -->|"cada minuto"| SVC["/tmp/.svc"]
+        CT -.->|"cron_persist"| AU["auditd"]
+        SVC -.->|"exec_usuario"| AU
+        CRON -.->|"CRON / crond"| J["journal"]
+        T1 -->|"ausearch"| AU
+        T1 -->|"journalctl"| J
+    end
+```
 
 ### Pasos
 
@@ -641,6 +726,22 @@ sudo systemctl start auditd cronie sshd
 
 `hipotesis.txt` con la hipótesis escrita antes de mirar los datos, las consultas que la confirman, la correlación entre auditd y el journal (mismo segundo y mismo usuario para la instalación, y una ejecución por minuto en ambos) y una propuesta de regla de detección.
 
+La correlación que confirma la hipótesis:
+
+```mermaid
+sequenceDiagram
+    participant A as ana (sesión SSH)
+    participant C as cron
+    participant AU as auditd
+    participant J as journal
+    A->>AU: 10:15:20 renamed crontabs/ana (cron_persist)
+    A->>J: 10:15:20 crontab (ana) REPLACE (ana)
+    loop cada minuto, en el segundo 01
+        C->>J: CRON (ana) CMD (/tmp/.svc)
+        C->>AU: ana executed /tmp/.svc (exec_usuario)
+    end
+```
+
 ### Comprueba que lo lograste
 
 - ¿La consulta del paso 6 devuelve algo si no cargaste las reglas del paso 2? No: auditd sin reglas no vigila los crontabs; por eso la hipótesis debe nombrar datos que de verdad existen. El journal del paso 7 sí estaría, porque `crontab` lo escribe siempre.
@@ -648,6 +749,17 @@ sudo systemctl start auditd cronie sshd
 - Si en vez de cron usa un timer de usuario de systemd (T1053.006, `~/.config/systemd/user/`), ¿lo ven tus reglas? No: no cambia ningún crontab ni aparece `CRON`/`crond` en el journal. Haría falta vigilar esas carpetas (`-w`) y buscar los procesos lanzados por `systemd --user`. Es el mismo hueco que viste en las reglas Sigma del ejercicio 2.
 - ¿Por qué esto es threat hunting y no monitoreo? Porque partió de una hipótesis escrita por ti, no de una alerta; la regla del paso 10 es lo que lo convierte en monitoreo para la próxima vez.
 - ¿Qué técnica de ATT&CK y qué fase de la Kill Chain representa el cron? T1053.003 (Persistence) y la fase 5, Installation.
+
+Si algo no aparece:
+
+```mermaid
+flowchart TD
+    Q{"¿Qué falla?"} -->|"ausearch no devuelve nada"| L{"¿auditctl -l muestra<br/>las dos reglas?"}
+    L -->|"no"| F1["Revisar caza.rules<br/>y sudo augenrules --load"]
+    L -->|"sí"| P["Comprobar la ruta vigilada<br/>(Arch: /var/spool/cron/)"]
+    Q -->|"los eventos salen con tu usuario"| F2["Usaste su o sudo:<br/>repetir con ssh ana@127.0.0.1"]
+    Q -->|"en Arch falta 'executed /tmp/.svc'"| F3["cronie sin PAM: quedarse<br/>con la evidencia del journal"]
+```
 
 ### Limpieza
 
