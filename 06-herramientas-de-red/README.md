@@ -38,6 +38,22 @@ El orden de diagnóstico sigue las capas, de abajo hacia arriba:
 ¿Lo bloquea el firewall?            iptables / nft                capa 3-4
 ```
 
+El mismo orden como árbol de decisión, deteniéndose en la primera pregunta que falla:
+
+```mermaid
+flowchart TD
+    A{"¿Tengo IP, gateway y DNS?<br/>(ip addr, resolvectl)"} -->|no| A1["Problema local:<br/>DHCP o configuración"]
+    A -->|sí| B{"¿Llego al gateway?<br/>(ping 192.168.1.1)"}
+    B -->|no| B1["Problema en la LAN:<br/>revisar ARP (ip neigh), cable, Wi-Fi"]
+    B -->|sí| C{"¿Llego a internet por IP?<br/>(ping 1.1.1.1)"}
+    C -->|no| C1["Buscar el corte<br/>con traceroute / mtr"]
+    C -->|sí| D{"¿Resuelve el nombre?<br/>(dig)"}
+    D -->|no| D1["Problema de DNS"]
+    D -->|sí| E{"¿El servicio escucha y<br/>el puerto se ve abierto?<br/>(ss, nmap)"}
+    E -->|no| E1["Servicio caído o firewall<br/>(iptables / nft)"]
+    E -->|sí| F["Mirar el cable:<br/>tcpdump / Wireshark"]
+```
+
 Equivalencias entre comandos modernos y antiguos de Linux que se preguntan:
 
 ```
@@ -144,6 +160,26 @@ Timeout → perdido o filtrado; no prueba que el host esté caído.
 
 La ausencia de respuesta es un resultado ambiguo que aparece en varias herramientas, porque descartar un paquete en silencio (DROP) es la política por defecto de muchos firewalls, y casi todas las nubes bloquean el ICMP echo entrante por defecto.
 
+Tres situaciones vistas desde el cliente; las dos primeras son indistinguibles:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant F as Firewall
+    participant S as Servidor
+    Note over C,S: Servidor apagado
+    C->>S: sonda (echo request o SYN)
+    Note left of C: silencio: timeout
+    Note over C,S: Firewall con DROP
+    C->>F: sonda (echo request o SYN)
+    Note right of F: la descarta en silencio
+    Note left of C: silencio: timeout
+    Note over C,S: Firewall con REJECT
+    C->>F: sonda (echo request o SYN)
+    F-->>C: RST o ICMP unreachable
+    Note left of C: algo vivo contestó
+```
+
 ```
                        ping          traceroute         nmap
 Respuesta clara        echo reply    ICMP time exceeded open / closed (RST)
@@ -208,6 +244,26 @@ example.com.            3600    IN      A       203.0.113.10
 Las IP de los ejemplos de esta sección (`203.0.113.10`, `2001:db8::10`) son direcciones reservadas para documentación (RFC 5737 y RFC 3849); al ejecutarlo tú verás las IP reales de `example.com`.
 
 Cómo leerla: `status: NOERROR` es éxito; `NXDOMAIN` significa que el nombre no existe; `SERVFAIL` que el servidor no pudo resolver (a menudo DNSSEC roto o autoritativo caído); `REFUSED` que el servidor no te atiende. En `flags`, `qr` es respuesta, `rd` (recursion desired) que pediste recursión, `ra` que el servidor la ofrece, y `aa` (authoritative answer) aparece solo si contestó el servidor dueño de la zona. El `3600` es el TTL en segundos: durante una hora las cachés guardarán esa respuesta, por eso un cambio de DNS "tarda en propagarse".
+
+Qué hay detrás de una respuesta con `ra` y sin `aa` (lo que `dig +trace` recorre a mano desde la raíz):
+
+```mermaid
+sequenceDiagram
+    participant D as dig
+    participant R as Resolvedor recursivo (1.1.1.1)
+    participant Z as Servidor raíz
+    participant T as Servidor del TLD .com
+    participant A as Autoritativo de example.com
+    D->>R: example.com A? (flag rd)
+    R->>Z: example.com A?
+    Z-->>R: referencia a los NS de .com
+    R->>T: example.com A?
+    T-->>R: referencia a los NS de example.com
+    R->>A: example.com A?
+    A-->>R: 203.0.113.10, TTL 3600 (flag aa)
+    Note over R: guarda la respuesta en caché 3600 s
+    R-->>D: 203.0.113.10 (flags qr rd ra, sin aa)
+```
 
 Uso en seguridad: `dig TXT example.com` muestra SPF, `dig TXT _dmarc.example.com` la política DMARC, y un `axfr` que funciona desde fuera es una fuga de información: entrega todos los subdominios de la empresa.
 
@@ -301,6 +357,19 @@ lrwxrwxrwx 1 ana ana 0 Oct  2 10:05 /proc/3377/exe -> /tmp/.x/update
 
 Los estados que muestran ambos (`LISTEN`, `ESTABLISHED`, `TIME_WAIT`, `CLOSE_WAIT`, `SYN_SENT`) son los de TCP explicados en [`04-protocolos-y-puertos`](../04-protocolos-y-puertos/). Muchos `SYN_RECV` acumulados son la firma de un SYN flood.
 
+Investigación de una conexión sospechosa, como en el ejemplo:
+
+```mermaid
+flowchart LR
+    A["sudo ss -tunp"] --> B{"¿Conexión rara?<br/>(IP externa, puerto 4444,<br/>nombre de proceso genérico)"}
+    B -->|no| N["Tráfico esperado"]
+    B -->|sí| C["Tomar el PID<br/>(pid=3377)"]
+    C --> D["ls -l /proc/3377/exe"]
+    D --> E{"¿Binario en /tmp,<br/>directorio oculto<br/>o (deleted)?"}
+    E -->|sí| F["Casi seguro malicioso:<br/>respuesta a incidentes"]
+    E -->|no| G["Verificar el paquete<br/>que instaló el binario"]
+```
+
 ```
 netstat → conexiones, puertos y proceso dueño; obsoleto (net-tools).
 ss → reemplazo moderno; ss -tulnp el más usado.
@@ -318,6 +387,17 @@ Existe porque un equipo con dos interfaces (Wi-Fi y VPN, o dos tarjetas en un se
 Analogía: es el cartel de una rotonda: "Centro, 2a salida; Aeropuerto, 3a; cualquier otro destino, autopista". La ruta por defecto es "cualquier otro destino".
 
 Cómo decide: gana la ruta más específica (el prefijo más largo, longest prefix match). Para ir a `10.8.0.5`, una ruta a `10.8.0.0/24` gana sobre `10.0.0.0/8`, y ambas ganan sobre la ruta por defecto `0.0.0.0/0`. Si hay empate, gana la métrica más baja.
+
+```mermaid
+flowchart LR
+    D["Destino 10.8.0.5"] --> Q{"¿Qué rutas<br/>coinciden?"}
+    Q --> R1["10.8.0.0/24<br/>24 bits de prefijo"]
+    Q --> R2["10.0.0.0/8<br/>8 bits de prefijo"]
+    Q --> R3["0.0.0.0/0 (default)<br/>0 bits de prefijo"]
+    R1 -->|"la más específica: gana"| W["El paquete sale<br/>por esta ruta"]
+    R2 -.->|"pierde"| X["Descartadas"]
+    R3 -.->|"pierde"| X
+```
 
 Banderas clave:
 
@@ -377,6 +457,23 @@ $ ip neigh
 
 Lectura: `REACHABLE` es una entrada confirmada hace poco; `STALE` una vieja que se verificará en el próximo uso; `FAILED` que nadie contestó. La señal de alarma está en la primera y la tercera línea: dos IP distintas con la misma MAC. Si una de ellas es el gateway, es la firma clásica de ARP spoofing (ARP poisoning): un equipo de la red responde ARP falsos diciendo "el gateway soy yo" para que todo el tráfico pase por él, un ataque de intermediario. Se ve en [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/); las defensas son Dynamic ARP Inspection en el switch o entradas estáticas en equipos críticos.
 
+Resolución normal y envenenamiento de la caché:
+
+```mermaid
+sequenceDiagram
+    participant V as Víctima 192.168.1.10
+    participant G as Gateway 192.168.1.1
+    participant M as Atacante 192.168.1.35
+    Note over V,M: Resolución normal
+    V->>G: broadcast: ¿quién tiene 192.168.1.1? Díselo a 192.168.1.10
+    G-->>V: 192.168.1.1 está en la MAC del gateway
+    Note over V,M: ARP spoofing
+    M-->>V: respuesta falsa: 192.168.1.1 está en la MAC del atacante
+    Note left of V: la caché guarda la MAC falsa
+    V->>M: tráfico hacia internet (cree que es el gateway)
+    M->>G: lo reenvía para no levantar sospechas
+```
+
 ```
 ARP → resuelve IP a MAC dentro de la red local, por broadcast.
 arp -a / ip neigh → ver la caché ARP.
@@ -393,6 +490,25 @@ Dynamic ARP Inspection → defensa en el switch.
 TTL=1 ──▶ Router1 (TTL→0) ──✗  Router1 responde "time exceeded" → salto 1 = Router1
 TTL=2 ──▶ Router1 ──▶ Router2 (TTL→0) ──✗  → salto 2 = Router2
 TTL=3 ──▶ Router1 ──▶ Router2 ──▶ Destino  → el destino responde → fin
+```
+
+El mismo truco como intercambio de mensajes, con las sondas UDP por defecto:
+
+```mermaid
+sequenceDiagram
+    participant T as traceroute
+    participant R1 as Router 1
+    participant R2 as Router 2
+    participant D as Destino
+    T->>R1: sonda UDP, TTL=1
+    R1-->>T: ICMP time exceeded (salto 1 = Router 1)
+    T->>R1: sonda UDP, TTL=2
+    R1->>R2: TTL=1
+    R2-->>T: ICMP time exceeded (salto 2 = Router 2)
+    T->>R1: sonda UDP, TTL=3
+    R1->>R2: TTL=2
+    R2->>D: TTL=1
+    D-->>T: ICMP port unreachable (llegó: fin)
 ```
 
 Analogía: es mandar a un mensajero con la orden "camina 1 cuadra y llámame desde donde estés", luego "camina 2", luego 3, hasta que llega a la casa. Con las llamadas reconstruyes el camino.
@@ -496,6 +612,23 @@ nmap ── SYN ───────────▶ host           nmap ── 
 nmap ◀────────── SYN-ACK ── host        nmap ◀────────────── RST ── host
 nmap ── RST ───────────▶ host           → closed
 → open (nunca hubo ESTABLISHED)
+```
+
+Contra el mismo puerto abierto, `-sT` sí completa el handshake, y por eso queda en los logs de la aplicación:
+
+```mermaid
+sequenceDiagram
+    participant N as nmap
+    participant H as host (puerto 22 abierto)
+    Note over N,H: -sS (SYN, half-open)
+    N->>H: SYN
+    H-->>N: SYN-ACK
+    N->>H: RST (nunca hubo ESTABLISHED)
+    Note over N,H: -sT (connect)
+    N->>H: SYN
+    H-->>N: SYN-ACK
+    N->>H: ACK (conexión ESTABLISHED)
+    N->>H: RST (cierra la conexión)
 ```
 
 Selección de puertos, velocidad y salida:
@@ -729,6 +862,23 @@ num   pkts bytes target  prot opt in  out  source           destination
 
 Lectura: el orden importa, se evalúa de arriba abajo. La regla 2 deja pasar las respuestas a conexiones ya aceptadas (firewall con estado). Los contadores `pkts` dicen qué regla está trabajando: si un cliente no conecta al 443 y el contador de la regla 4 no sube, el paquete no está llegando al servidor (problema antes, en la red). Los 1520 paquetes de la política DROP son todo lo demás que se descartó, típicamente escaneos de internet. El diseño de firewalls se amplía en [`13-defensa-y-hardening`](../13-defensa-y-hardening/).
 
+Recorrido de un paquete entrante por la cadena INPUT del ejemplo:
+
+```mermaid
+flowchart TD
+    P["Paquete entrante"] --> R1{"Regla 1: ¿entra por lo?"}
+    R1 -->|sí| A["ACCEPT"]
+    R1 -->|no| R2{"Regla 2: ¿ESTABLISHED<br/>o RELATED?"}
+    R2 -->|sí| A
+    R2 -->|no| R3{"Regla 3: ¿TCP 22<br/>desde 192.168.1.0/24?"}
+    R3 -->|sí| A
+    R3 -->|no| R4{"Regla 4: ¿TCP 443?"}
+    R4 -->|sí| A
+    R4 -->|no| R5{"Regla 5: ¿ICMP<br/>echo-request?"}
+    R5 -->|sí| A
+    R5 -->|no| D["Política por defecto: DROP"]
+```
+
 Equivalente nftables del mismo listado: `nft list ruleset`.
 
 ```
@@ -756,6 +906,20 @@ Switch                   reenvía cada trama solo al puerto del destino → el s
 Port mirroring (SPAN)    el switch copia el tráfico de unos puertos a otro → así se monta un IDS.
 Network TAP              dispositivo físico en el cable que copia todo, sin depender del switch.
 Wi-Fi modo monitor       la tarjeta capta tramas 802.11 de todas las redes del canal.
+```
+
+Qué tráfico ajeno le llega al sniffer según cómo esté conectado:
+
+```mermaid
+flowchart LR
+    A["Tráfico entre<br/>equipo A y equipo B"] --> HUB["Hub"]
+    A --> SW["Switch"]
+    A --> SPAN["Switch con<br/>port mirroring (SPAN)"]
+    A --> TAP["Network TAP<br/>en el cable"]
+    HUB -->|"copia a todos los puertos"| S1["Sniffer: lo ve"]
+    SW -.->|"solo al puerto de B"| S2["Sniffer: no lo ve<br/>(solo broadcast y multicast)"]
+    SPAN -->|"copia al puerto espejo"| S3["Sniffer / IDS: lo ve"]
+    TAP -->|"copia física"| S4["Sniffer / IDS: lo ve"]
 ```
 
 Por eso en una red con switch un atacante necesita primero desviar el tráfico hacia sí (ARP spoofing, ver "arp") para poder espiarlo. Y por eso los protocolos cifrados (ver [`04-protocolos-y-puertos`](../04-protocolos-y-puertos/)) dejan al sniffer viendo solo metadatos: quién habla con quién, cuándo y cuánto.
@@ -855,6 +1019,14 @@ $ tshark -r captura.pcap -Y 'tls.handshake.type == 1' -T fields -e ip.src -e tls
 
 Lectura: aunque el tráfico va cifrado, el SNI del ClientHello viaja en claro (salvo ECH) y revela los nombres de los sitios. El flujo habitual es capturar con tcpdump en el servidor (`-w`) y analizar después en Wireshark en tu equipo.
 
+```mermaid
+flowchart LR
+    I["Interfaz del servidor"] -->|"filtro BPF en el kernel:<br/>lo descartado no se graba"| T["tcpdump -w captura.pcap<br/>(sniffer)"]
+    T --> F["captura.pcap"]
+    F -->|"se copia a tu equipo"| W["Wireshark / tshark<br/>(analyzer)"]
+    W -->|"display filter:<br/>solo oculta lo grabado"| R["Follow TCP Stream,<br/>Conversations, Export Objects"]
+```
+
 ```
 Protocol analyzer → decodifica, reconstruye y filtra lo capturado.
 Wireshark → analizador gráfico; tshark → su versión de consola.
@@ -871,6 +1043,15 @@ Zeek → convierte tráfico en logs para un SOC.
 > Packet sniffer, port scanner y protocol analyzer no son sinónimos: el sniffer escucha y guarda, el scanner pregunta y clasifica, el analyzer interpreta lo capturado. Una misma herramienta puede hacer dos (Wireshark captura y analiza), pero el examen pregunta por la función.
 
 Las tres categorías son roles distintos dentro del análisis de red, definidos por qué hacen con el tráfico, no por el nombre del programa.
+
+```mermaid
+flowchart LR
+    SC["Port scanner<br/>(nmap, masscan, nc)"] -->|"pregunta: genera tráfico"| OBJ["Equipo objetivo"]
+    OBJ -->|"responde"| SC
+    RED["Tráfico de la red"] -->|"escucha en silencio"| SN["Packet sniffer<br/>(tcpdump, dumpcap)"]
+    SN -->|"pcap"| AN["Protocol analyzer<br/>(Wireshark, tshark, Zeek)"]
+    AN --> SIG["Significado:<br/>campos, sesiones, archivos"]
+```
 
 ```
                      Packet sniffer       Port scanner         Protocol analyzer

@@ -20,6 +20,19 @@ Instalación:
 
 En Arch arranca el servidor SSH con `sudo systemctl start sshd` (Debian suele arrancarlo solo al instalar `openssh-server`). Python suele venir ya instalado.
 
+Montaje del laboratorio: un solo equipo, tres terminales y todo el tráfico dentro de `lo`.
+
+```mermaid
+flowchart LR
+    subgraph EQ["Tu equipo Linux"]
+        T3["Terminal 3<br/>nmap -sS / -sT"] -->|"sondas a 127.0.0.1:1-100"| LO["Interfaz lo<br/>(127.0.0.1)"]
+        LO --> SSH["sshd<br/>escucha en :22"]
+        LO --> WEB["python3 http.server<br/>escucha en 127.0.0.1:80<br/>(Terminal 1)"]
+        LO --> K["Kernel: el resto de puertos<br/>sin servicio, responde RST"]
+        LO -.->|"copia de cada paquete"| T2["Terminal 2<br/>tcpdump -i lo -w scan-sS.pcap"]
+    end
+```
+
 ### Pasos
 
 1. Terminal 1 (servicios). Arranca el servidor SSH para tener abierto el puerto 22 y comprueba que escucha.
@@ -146,6 +159,27 @@ En Arch arranca el servidor SSH con `sudo systemctl start sshd` (Debian suele ar
 
 Dos capturas (`scan-sS.pcap` y `scan-sT.pcap`) y una tabla en tus notas con la secuencia de flags por caso: `-sS` abierto `[S] [S.] [R]`; `-sS` cerrado `[S] [R.]`; `-sT` abierto `[S] [S.] [.] [R.]`; `-sT` cerrado `[S] [R.]`. Además, la línea del log de SSH que solo aparece con `-sT`.
 
+Las cuatro secuencias, tal como aparecen en las capturas (todos los paquetes van de `127.0.0.1` a `127.0.0.1`; solo cambian los puertos):
+
+```mermaid
+sequenceDiagram
+    participant N as nmap (puerto efímero)
+    participant A as sshd en :22 (abierto)
+    participant C as Kernel en :23 (cerrado)
+    Note over N,A: -sS, puerto abierto
+    N->>A: [S]
+    A-->>N: [S.]
+    N->>A: [R]
+    Note over N,C: -sS o -sT, puerto cerrado
+    N->>C: [S]
+    C-->>N: [R.]
+    Note over N,A: -sT, puerto abierto
+    N->>A: [S]
+    A-->>N: [S.]
+    N->>A: [.] (ESTABLISHED: sshd lo registra)
+    N->>A: [R.]
+```
+
 ### Comprueba que lo lograste
 
 - ¿Qué paquete hace que nmap declare un puerto `closed`? Respuesta: un RST-ACK (`[R.]`) del sistema en respuesta al SYN.
@@ -170,6 +204,20 @@ Instalación:
 - Arch: `sudo pacman -S iptables openbsd-netcat nmap python`
 
 En Arch, el comando `iptables` escribe sobre nftables por debajo (`iptables-nft` es la ruta moderna), igual que en Debian 12 y Ubuntu actuales. Si instalas netcat en Arch, `openbsd-netcat` da la variante que usan estos ejemplos (`gnu-netcat` es la otra opción).
+
+Montaje del laboratorio: la regla de iptables se interpone entre el cliente y el servicio, ambos en el mismo equipo.
+
+```mermaid
+flowchart LR
+    subgraph EQ["Tu equipo Linux"]
+        T3["Terminal 3<br/>nc -zv / nmap -sS"] -->|"SYN a 127.0.0.1:8080"| LO["Interfaz lo"]
+        LO --> IN{"Cadena INPUT<br/>regla 1: tcp dpt:8080"}
+        IN -->|"sin regla"| PY["python3 http.server<br/>LISTEN 127.0.0.1:8080<br/>(Terminal 1)"]
+        IN -->|"DROP"| X["Descartado en silencio<br/>(sube pkts)"]
+        IN -->|"REJECT tcp-reset"| R["RST de vuelta<br/>al cliente"]
+        T2["Terminal 2<br/>ss -tulnp, iptables -L"] -.->|"administra"| IN
+    end
+```
 
 ### Pasos
 
@@ -282,6 +330,25 @@ En Arch, el comando `iptables` escribe sobre nftables por debajo (`iptables-nft`
 
 Una tabla con puerto, proceso, ejecutable real y decisión; y la evidencia de tres estados del mismo puerto vistos desde la terminal cliente: `open` sin regla, `filtered` con DROP (timeout, contadores que suben) y `closed` con REJECT tcp-reset (refused inmediato), con el proceso escuchando en los tres casos.
 
+```mermaid
+sequenceDiagram
+    participant C as nc / nmap (Terminal 3)
+    participant F as iptables INPUT
+    participant P as python3 en 127.0.0.1:8080
+    Note over C,P: Sin regla
+    C->>F: SYN
+    F->>P: pasa
+    P-->>C: SYN-ACK (open, succeeded)
+    Note over C,P: Regla 1 con DROP
+    C->>F: SYN
+    Note right of F: descartado, pkts sube
+    Note left of C: 3 s de espera: timed out (filtered)
+    Note over C,P: Regla 1 con REJECT tcp-reset
+    C->>F: SYN
+    F-->>C: RST (refused al instante, closed)
+    Note over P: sigue en LISTEN en los tres casos
+```
+
 ### Comprueba que lo lograste
 
 - ¿Por qué con DROP nc tarda 3 segundos y con REJECT responde al instante? Respuesta: DROP descarta sin avisar, así que el cliente espera hasta su límite; REJECT contesta con un RST.
@@ -308,6 +375,15 @@ Nodo: [traceroute](README.md#traceroute).
 Objetivo: trazar la ruta hasta `1.1.1.1` con los tres tipos de sonda de `traceroute` de Linux (UDP por defecto, ICMP con `-I` y TCP SYN al 443 con `-T`), ver en una captura qué paquete manda cada uno, y explicar con tus propios datos por qué los asteriscos aparecen en unos saltos con un método y no con otro.
 
 Necesitas: tu equipo Linux con internet; `traceroute` y `tcpdump` (Debian/Ubuntu: `sudo apt install traceroute tcpdump`; Arch: `sudo pacman -S traceroute tcpdump`). El destino `1.1.1.1` es el DNS público de Cloudflare: solo lo sondeas con unas decenas de paquetes. Tiempo: 25 minutos.
+
+Qué sonda manda cada método y cómo reconoce que llegó al destino (los routers intermedios responden siempre con ICMP time exceeded):
+
+```mermaid
+flowchart LR
+    U["traceroute (defecto)"] -->|"UDP a 33434 en adelante"| DU["Destino responde<br/>ICMP port unreachable"]
+    I["traceroute -I"] -->|"ICMP echo request"| DI["Destino responde<br/>ICMP echo reply"]
+    T["sudo traceroute -T -p 443"] -->|"TCP SYN al 443"| DT["Destino responde<br/>SYN-ACK o RST"]
+```
 
 ### Pasos
 
@@ -375,6 +451,16 @@ Necesitas: tu equipo Linux con internet; `traceroute` y `tcpdump` (Debian/Ubuntu
    - Un salto intermedio con `* * *` en los tres métodos, seguido de saltos que sí responden: ese router reenvía pero no genera (o limita) los ICMP time exceeded. No depende de la sonda, porque la respuesta siempre es ICMP.
    - Saltos finales con `*` en UDP y respuesta en ICMP y TCP: el destino o un firewall cercano descarta UDP a puertos altos, pero deja pasar ping y el 443.
    - Un `*` suelto entre respuestas válidas en un mismo salto: pérdida o limitación de tasa puntual; repite y suele cambiar.
+
+   ```mermaid
+   flowchart TD
+       A{"¿El * es suelto, entre<br/>respuestas del mismo salto?"} -->|sí| P["Pérdida o limitación<br/>de tasa puntual"]
+       A -->|no| B{"¿Los saltos siguientes<br/>sí responden?"}
+       B -->|sí| R["Router que reenvía pero<br/>no contesta time exceeded"]
+       B -->|no| C{"¿Solo falla con UDP y<br/>ICMP / TCP llegan?"}
+       C -->|sí| F["Destino o firewall cercano<br/>descarta UDP a puertos altos"]
+       C -->|no| X["Fuera de los tres casos:<br/>posible corte real, repite"]
+   ```
 8. Cuenta los saltos hasta el destino en cada método.
    ```bash
    for f in tr-udp.txt tr-icmp.txt tr-tcp.txt; do printf '%s: ' "$f"; grep -cE '^ *[0-9]+ .*1\.1\.1\.1 ' "$f"; done
@@ -410,6 +496,18 @@ Nodo: [Protocol Analyzers](README.md#protocol-analyzers) y [Packet Sniffers](REA
 Objetivo: capturar unos segundos de tu propio tráfico, encontrar en él lo que te interesa con filtros de visualización (DNS, HTTP, SYN iniciales, una IP concreta), reconstruir una petición HTTP completa con Follow TCP Stream y resumir la captura con las estadísticas de conversaciones y de jerarquía de protocolos. Cada paso en Wireshark tiene su equivalente en `tshark`, para que puedas hacerlo también por SSH o en un script.
 
 Necesitas: tu equipo Linux con escritorio, internet, `curl` y `python3`. Wireshark: en Arch `sudo pacman -S wireshark-qt` (trae `tshark`); en Debian/Ubuntu `sudo apt install wireshark tshark` y responde "Sí" cuando pregunte si los usuarios sin privilegios pueden capturar. Solo capturas tráfico de tu propio equipo. Tiempo: 40 minutos.
+
+Qué tráfico se genera, por dónde pasa y cómo se analiza:
+
+```mermaid
+flowchart LR
+    subgraph EQ["Tu equipo Linux"]
+        CU1["curl http://127.0.0.1:8000"] -->|"interfaz lo"| PY["python3 http.server<br/>127.0.0.1:8000"]
+        CU2["curl https://example.com<br/>getent ahostsv4"] -->|"interfaz de salida"| NET["Internet<br/>(DNS y HTTPS)"]
+        CAP["tshark -i any<br/>(dumpcap, grupo wireshark)"] -.->|"captura lo y la salida"| F["propio.pcapng"]
+        F --> W["Wireshark / tshark -r:<br/>filtros, Follow TCP Stream,<br/>Conversations, Protocol Hierarchy"]
+    end
+```
 
 ### Pasos
 
@@ -593,6 +691,18 @@ Necesitas: un Linux con internet y `nmap` (`sudo apt install nmap` o `sudo pacma
    - `</dev/null` → no envía nada; solo escucha lo que el servidor dice primero.
 
    Debe imprimir una línea como `SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13` y, a los 5 segundos, terminar (algunas versiones de `nc` no cierran solas al recibir el fin de la entrada, de ahí el `timeout`): el servidor SSH anuncia su versión antes de cualquier autenticación, y eso es lo que leyó `-sV`.
+
+   ```mermaid
+   sequenceDiagram
+       participant N as nmap -sV (o nc)
+       participant S as scanme.nmap.org:22
+       N->>S: SYN
+       S-->>N: SYN-ACK (open)
+       N->>S: ACK (connect completo, sin sudo)
+       S-->>N: banner SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13
+       Note over N: compara el banner con nmap-service-probes
+       N->>S: cierra la conexión
+   ```
 5. Valora lo encontrado como lo haría un auditor: busca en tus notas qué antigüedad tienen OpenSSH 6.6 y Apache 2.4.7 (ambos de 2014) y anota que, en un sistema real, un banner así sería un hallazgo (software sin parchear y fuga de información de versión). En `scanme` es deliberado: es un equipo de prueba.
 
 ### Resultado esperado
