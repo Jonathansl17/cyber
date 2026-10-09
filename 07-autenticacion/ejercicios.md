@@ -12,6 +12,21 @@ Objetivo: reproducir con `oathtool` el vector de prueba `94287082` de RFC 6238, 
 
 Necesitas: un Linux con `oathtool` y `qrencode` (Debian/Ubuntu: `sudo apt install oathtool qrencode`; Arch: `sudo pacman -S oath-toolkit qrencode`), `python3`, y un teléfono con una app TOTP (Aegis, 2FAS, Google Authenticator o la de tu gestor de contraseñas). El reloj del equipo debe estar sincronizado (`timedatectl` debe decir `System clock synchronized: yes`). Tiempo: 20 minutos.
 
+Qué vas a comprobar: el mismo secreto y la misma hora dan el mismo código por tres caminos, sin red de por medio.
+
+```mermaid
+flowchart LR
+    S["Secreto"] --> O["oathtool<br/>(terminal)"]
+    S --> PY["Python: HMAC-SHA1<br/>+ truncado"]
+    S -->|"QR otpauth"| APP["App del teléfono"]
+    CLK["Hora actual<br/>T = segundos / 30"] --> O
+    CLK --> PY
+    CLK --> APP
+    O --> CMP{"¿Mismo código?"}
+    PY --> CMP
+    APP --> CMP
+```
+
 ### Pasos
 
 1. Pasa el secreto del RFC a hexadecimal. El vector usa como secreto el texto ASCII `12345678901234567890`, y `oathtool` espera la clave en hex por defecto.
@@ -174,6 +189,17 @@ Todo ocurre dentro de tu equipo, en varias terminales: el servidor escucha en `1
 
 Nota de rutas y nombres (cambian entre distros): el directorio de configuración es `/etc/raddb` en Arch y `/etc/freeradius/3.0` en Debian/Ubuntu; el binario del servidor es `radiusd` en Arch y `freeradius` en Debian/Ubuntu. Los pasos usan los nombres de Arch; sustitúyelos si vas por Debian.
 
+Montaje del laboratorio, todo en tu equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo"]
+        T2["Terminal 2: radtest<br/>(hace de NAS)"] -->|"UDP a 127.0.0.1:1812<br/>por la interfaz lo"| T1["Terminal 1: radiusd -X"]
+        T1 -->|"lee"| F["mods-config/files/authorize<br/>(ana, Secreto123)"]
+        T3["Terminal 3: tcpdump -i lo"] -.->|"copia lo que pasa por lo"| P["radius.pcap"]
+    end
+```
+
 ### Pasos
 
 1. **Terminal 1 (servidor).** Añade una usuaria `ana` al archivo de usuarios de FreeRADIUS. La instalación ya trae un cliente `localhost` con el shared secret `testing123`, así que no hace falta tocar `clients.conf`. La segunda línea, indentada con espacios, es un atributo que el servidor devolverá en el Accept.
@@ -279,6 +305,20 @@ Nota de rutas y nombres (cambian entre distros): el directorio de configuración
    - `'User-Password'` → texto a buscar.
    Junto al valor cifrado aparece la contraseña descifrada: `Secreto123` en el primer intento y `otraCosa` en el segundo. Quien conozca el secreto y capture el tráfico obtiene las contraseñas.
 
+Lo que viaja en cada intento y qué se lee en la captura:
+
+```mermaid
+sequenceDiagram
+    participant C as radtest (Terminal 2)
+    participant S as radiusd (Terminal 1)
+    C->>S: Access-Request: User-Name ana en claro, User-Password ofuscado
+    S->>S: pap compara con Cleartext-Password
+    S-->>C: Access-Accept + Reply-Message en claro
+    C->>S: Access-Request con otraCosa
+    S-->>C: Access-Reject (tras ~1 s de espera)
+    Note over C,S: con el shared secret testing123, tshark descifra User-Password
+```
+
 ### Resultado esperado
 
 Un `Access-Accept` con su `Reply-Message` y un `Access-Reject`, la salida de depuración del servidor explicando cada decisión, y una captura `radius.pcap` en la que has comprobado tres cosas: el usuario y los atributos viajan en claro, la contraseña va ofuscada, y con el shared secret se descifra.
@@ -313,6 +353,17 @@ Instalación:
 - Arch: `sudo pacman -S openldap tcpdump wireshark-cli`
 
 En Arch el paquete `openldap` trae tanto el servidor `slapd` como los clientes y `slappasswd`; en Debian/Ubuntu el servidor es `slapd` y los clientes van en `ldap-utils`. Todo ocurre en tu equipo, en varias terminales: el servidor escucha en `127.0.0.1` y el cliente lo consulta desde otra terminal. En un entorno real el servidor y el cliente estarían en máquinas distintas; aquí comparten la interfaz de loopback, pero el paquete del bind y la contraseña en claro que vas a observar son idénticos. Trabaja solo contra este servidor que tú mismo levantas en `127.0.0.1`. Para capturar con `tshark` sin ser root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`, luego reinicia sesión; en Debian/Ubuntu además `sudo dpkg-reconfigure wireshark-common`). En este laboratorio `slapd` se arranca en primer plano desde una configuración propia, así que no toca el servicio del sistema ni necesita `systemctl`. Referencia: [OpenLDAP Administrator's Guide](https://www.openldap.org/doc/admin26/). Tiempo: 45 minutos.
+
+Montaje del laboratorio, todo en tu equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo"]
+        T2["Terminal 2: ldapadd / ldapsearch"] -->|"TCP a 127.0.0.1:389<br/>por la interfaz lo, sin TLS"| T1["Terminal 1: slapd -d 256"]
+        T1 -->|"guarda en"| D["~/lab/ldap/data (LMDB)"]
+        T3["Terminal 3: tshark -i lo"] -.->|"copia lo que pasa por lo"| P["ldap.pcapng"]
+    end
+```
 
 ### Pasos
 
@@ -498,6 +549,21 @@ En Arch el paquete `openldap` trae tanto el servidor `slapd` como los clientes y
     - `-e ldap.resultCode` → código de resultado del bind.
     El primero sale `0` (success) y el segundo `49` (invalidCredentials). Un IDS o un SIEM que vea muchos 49 seguidos del mismo origen está viendo fuerza bruta.
 
+Lo que muestran los pasos 8 a 11 en la captura:
+
+```mermaid
+sequenceDiagram
+    participant C as ldapsearch (Terminal 2)
+    participant S as slapd (Terminal 1)
+    C->>S: bindRequest: DN de ana + Ana.Lab.2026 en claro
+    S->>S: compara con el hash {SSHA} guardado
+    S-->>C: bindResponse resultCode 0 (success)
+    C->>S: searchRequest (objectClass=inetOrgPerson)
+    S-->>C: tres entradas con cn y uid
+    C->>S: bindRequest: DN de ana + contraseña errónea en claro
+    S-->>C: bindResponse resultCode 49 (invalidCredentials)
+```
+
 ### Resultado esperado
 
 Un directorio `dc=lab,dc=local` con `ou=Contabilidad` (ana, luis) y `ou=TI` (marta), y una captura `ldap.pcapng` donde se leen el DN y la contraseña de dos binds simples, uno con `success (0)` y otro con `invalidCredentials (49)`.
@@ -525,6 +591,28 @@ Nodo: [Certificates](README.md#certificates) y [mTLS](README.md#mtls).
 Objetivo: crear con `openssl` una CA propia, emitir con ella un certificado de servidor y uno de cliente, configurar nginx con `ssl_verify_client on` y demostrar con `curl` tres casos: sin certificado de cliente se rechaza, con el certificado de tu CA se acepta y nginx lee tu identidad, y con un certificado de otra CA se rechaza.
 
 Necesitas: un Linux con `openssl` y `curl` (vienen en casi todas las distribuciones) y Docker para nginx (Debian/Ubuntu: `sudo apt install docker.io`; Arch: `sudo pacman -S docker`; después `sudo systemctl start docker`). Todo en tu equipo, en `localhost`. Tiempo: 30 minutos.
+
+Montaje del laboratorio: nginx corre en un contenedor de tu propio equipo, publicado solo en `127.0.0.1`.
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo"]
+        CU["curl"] -->|"https://localhost:8443"| PUB["127.0.0.1:8443"]
+        PUB -->|"docker -p"| NG["Contenedor nginx-mtls<br/>escucha en :443"]
+        CF["~/lab/mtls/default.conf"] -.->|"montado :ro"| NG
+        CE["~/lab/mtls/certs"] -.->|"montado :ro"| NG
+    end
+```
+
+Quién firma qué y en qué confía nginx:
+
+```mermaid
+flowchart LR
+    CA["CA Lab"] -->|"firma"| SRV["servidor.crt<br/>(CN=localhost)"]
+    CA -->|"firma"| CLI["cliente.crt<br/>(CN=cliente-ana)"]
+    OCA["Otra CA"] -->|"firma"| INT["intruso.crt<br/>(CN=intruso)"]
+    NG["nginx: ssl_client_certificate = ca.crt"] -->|"confía solo en"| CA
+```
 
 ### Pasos
 
@@ -719,6 +807,17 @@ Necesitas: un Linux con `openssl` y `curl` (vienen en casi todas las distribucio
     - `2>&1` → manda la salida de errores (donde escribe `-v`) a la salida normal para poder filtrarla.
     - `grep -E 'TLS|SSL connection'` → deja solo las líneas que contienen `TLS` o `SSL connection`.
     Busca tres líneas: `(IN), TLS handshake, Request CERT (13)` es el `CertificateRequest` del servidor; `(OUT), TLS handshake, Certificate (11)` es tu certificado (con OpenSSL reciente puede salir como `Unknown (25)`, que es el mismo certificado comprimido); y `(OUT), TLS handshake, CERT verify (15)` es la firma con tu clave privada. Son los mensajes de mTLS que describe el README. Los `(IN) Certificate` y `(IN) CERT verify` anteriores son los del servidor.
+
+Los tres casos en una sola decisión de nginx:
+
+```mermaid
+flowchart TD
+    Q["curl conecta a localhost:8443"] --> C1{"¿Envía certificado<br/>de cliente?"}
+    C1 -->|"no (caso 1)"| E1["400: No required SSL<br/>certificate was sent"]
+    C1 -->|sí| C2{"¿Cadena llega a CA Lab<br/>y firma CertificateVerify válida?"}
+    C2 -->|"no: intruso.crt (caso 3)"| E3["400: The SSL certificate error"]
+    C2 -->|"sí: cliente.crt (caso 2)"| OK["200: hola CN=cliente-ana<br/>(verificado: SUCCESS)"]
+```
 
 ### Resultado esperado
 

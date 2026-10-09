@@ -48,6 +48,17 @@ $ curl -i -H "Authorization: Bearer eyJhbGciOi..." https://api.ejemplo.test/fact
 HTTP/1.1 403 Forbidden             <- sé que eres ana, pero esa factura no es tuya
 ```
 
+Los dos filtros por los que pasa cada petición:
+
+```mermaid
+flowchart LR
+    P["Petición a /facturas/106"] --> T{"¿Token auténtico<br/>y no vencido?"}
+    T -->|no| E401["401 Unauthorized<br/>(no autenticado)"]
+    T -->|"sí: es ana"| Z{"¿ana tiene permiso<br/>sobre la factura 106?"}
+    Z -->|no| E403["403 Forbidden<br/>(no autorizado)"]
+    Z -->|sí| OK["200 OK"]
+```
+
 ### AAA
 
 AAA (Authentication, Authorization, Accounting) es un marco de control de acceso que agrupa en un solo servicio las tres funciones: comprobar identidad, decidir permisos y registrar lo que se hizo.
@@ -91,6 +102,26 @@ Un factor de autenticación es una categoría de prueba de identidad que se dist
 
 La regla de oro es que cuentan las **categorías**, no la cantidad. Contraseña + pregunta secreta son dos cosas que sabes: sigue siendo un solo factor, porque el mismo phishing roba las dos.
 
+```mermaid
+mindmap
+  root((Factores de autenticación))
+    Algo que sabes
+      Contraseña
+      PIN
+      Pregunta secreta
+    Algo que tienes
+      App autenticadora
+      Llave USB/NFC
+      Tarjeta inteligente
+    Algo que eres
+      Huella
+      Rostro
+      Voz
+    Contextuales
+      Dónde estás
+      Algo que haces
+```
+
 ### TOTP
 
 TOTP (Time-based One-Time Password, RFC 6238) es un algoritmo de contraseña de un solo uso que genera un código de 6 dígitos a partir de un secreto compartido y la hora actual.
@@ -106,6 +137,24 @@ código = truncar(HMAC) mod 10^6                  # 6 dígitos
 - `T` es el contador de ventanas de 30 segundos; por eso el código cambia cada medio minuto.
 - HMAC es una función que mezcla una llave con un mensaje y produce una huella; sin el secreto no se puede predecir.
 - El servidor suele aceptar también la ventana anterior y la siguiente (±30 s) por si el reloj del teléfono está desfasado.
+
+Ambos lados calculan el código por separado; solo comparan el resultado:
+
+```mermaid
+flowchart LR
+    subgraph APP["App del teléfono"]
+        S1["Secreto (del QR)"] --> H1["HMAC-SHA1"]
+        R1["Reloj: T = segundos / 30"] --> H1
+        H1 --> C1["Código de 6 dígitos"]
+    end
+    subgraph SRV["Servidor"]
+        S2["Mismo secreto"] --> H2["HMAC-SHA1"]
+        R2["Reloj: T-1, T, T+1"] --> H2
+        H2 --> C2["Códigos aceptados"]
+    end
+    C1 -->|"el usuario lo teclea"| CMP{"¿Coincide?"}
+    C2 --> CMP
+```
 
 Funciona sin internet en el teléfono, porque solo necesita el secreto y el reloj. HOTP (RFC 4226) es su antecesor: usa un contador que avanza con cada uso en vez de la hora.
 
@@ -149,6 +198,20 @@ Una passkey es una credencial FIDO2 "descubrible" que además se puede sincroniz
 La fatiga MFA (MFA fatigue, MFA bombing o push spamming) es un ataque de ingeniería social que consiste en disparar notificaciones push de aprobación una y otra vez hasta que la víctima acepta una por cansancio o confusión.
 
 Requisito: el atacante ya tiene la contraseña (de una filtración o phishing). Entonces inicia sesión 20, 50, 100 veces seguidas; cada intento manda un "¿Eres tú? Aprobar / Rechazar" al teléfono. A las 2 de la madrugada, o con un mensaje de WhatsApp que dice "soy de TI, acepta para que pare", la víctima toca Aprobar. Es la técnica T1621 (Multi-Factor Authentication Request Generation) de MITRE ATT&CK, y fue la puerta de entrada en el ataque de Lapsus$ a Uber en 2022.
+
+```mermaid
+sequenceDiagram
+    participant A as Atacante (ya tiene la contraseña)
+    participant I as Servicio de login
+    participant T as Teléfono de la víctima
+    A->>I: login con la contraseña robada
+    I->>T: push: ¿Eres tú? Aprobar / Rechazar
+    T-->>I: Rechazar
+    Note over A,T: se repite 20, 50, 100 veces
+    A->>T: mensaje: soy de TI, acepta para que pare
+    T-->>I: Aprobar
+    I-->>A: sesión iniciada
+```
 
 Defensas, en orden de eficacia:
 
@@ -198,6 +261,25 @@ Resiste proxy AiTM    no     no     no     no            sí
 
 La penúltima fila es la idea entera: mientras el dominio lo compruebe una persona mirando la barra de direcciones, el phishing gana.
 
+El mismo proxy AiTM frente a TOTP y frente a FIDO2:
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario (navegador + autenticador)
+    participant P as Proxy AiTM (banco-com.login.xyz)
+    participant B as banco.com
+    Note over U,B: Con contraseña + TOTP
+    U->>P: contraseña + código TOTP
+    P->>B: reenvía ambos en menos de 30 s
+    B-->>P: cookie de sesión
+    Note over P: el atacante se queda la sesión
+    Note over U,B: Con FIDO2
+    B-->>P: challenge
+    P-->>U: challenge (en banco-com.login.xyz)
+    Note over U: el origen firmado sería banco-com.login.xyz: no hay llave para ese dominio o la firma no valida en banco.com
+    U--xP: nada reutilizable que reenviar
+```
+
 Límite: FIDO2 no protege contra un equipo ya infectado que roba la cookie de sesión después del login, ni contra el proceso de recuperación de cuenta ("perdí mi llave, mándame un SMS"), que se vuelve el eslabón débil si no se protege igual.
 
 ```
@@ -244,6 +326,23 @@ El flujo completo:
  6    |<-- AP-REP (opcional, autenticación mutua) ---------------------------------|
 ```
 
+El mismo flujo como diagrama de secuencia:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente (ana)
+    participant AS as KDC: AS
+    participant TGS as KDC: TGS
+    participant W as Servicio (web01)
+    C->>AS: AS-REQ: soy ana + hora cifrada con llave de ana
+    AS-->>C: AS-REP: TGT (llave de krbtgt) + llave de sesión 1
+    C->>TGS: TGS-REQ: TGT + autenticador + quiero HTTP/web01
+    TGS-->>C: TGS-REP: ticket de servicio (llave de web01) + llave de sesión 2
+    C->>W: AP-REQ: ticket de servicio + autenticador
+    W-->>C: AP-REP (opcional, autenticación mutua)
+    Note over W: web01 descifra con su propia llave y no consulta al KDC
+```
+
 Paso por paso:
 
 1. AS-REQ: el cliente pide un TGT y manda la hora actual cifrada con una llave derivada de su contraseña. Eso es la pre-autenticación: prueba que conoce la contraseña sin enviarla.
@@ -278,6 +377,17 @@ Ataques conocidos, a nivel conceptual (aplican a cualquier realm, incluidos MIT 
 - Golden Ticket: con la llave de `krbtgt` se fabrican TGT de cualquier usuario. Defensa: proteger el KDC y rotar la llave de `krbtgt` (`kadmin: cpw -randkey krbtgt/EMPRESA.LOCAL`) tras un compromiso.
 - Silver Ticket: con la llave de un servicio se fabrican tickets solo para ese servicio.
 - Pass-the-Ticket: copiar un ticket de la caché de un equipo (en Linux, `/tmp/krb5cc_<uid>` o el keyring del kernel) y reutilizarlo desde otro.
+
+Qué llave o ticket roba cada ataque y qué consigue con ella:
+
+```mermaid
+flowchart LR
+    K["Llave de krbtgt"] -->|"Golden Ticket"| G["TGT de cualquier usuario"]
+    S["Llave de un servicio"] -->|"Silver Ticket"| SV["Tickets solo para ese servicio"]
+    ST["Ticket de servicio pedido<br/>por cualquier usuario"] -->|"Kerberoasting"| PS["Contraseña de la cuenta<br/>de servicio (offline)"]
+    AR["AS-REP de cuenta<br/>sin pre-autenticación"] -->|"AS-REP Roasting"| PU["Contraseña del usuario<br/>(offline)"]
+    CC["Caché /tmp/krb5cc_uid"] -->|"Pass-the-Ticket"| RU["Reutilizar el ticket<br/>desde otro equipo"]
+```
 
 > [!NOTE]
 > Kerberos autentica; no decide permisos. El ticket puede llevar datos de autorización como los grupos del usuario, pero es el servicio quien decide qué permite con ellos.
@@ -376,6 +486,20 @@ La autenticación en LDAP es el Bind. Hay tres tipos:
 
 El patrón típico de una aplicación es "search + bind": se conecta con una cuenta de servicio, busca el DN del usuario por su `uid`, e intenta un Bind con ese DN y la contraseña que tecleó el usuario. Si el Bind funciona, la contraseña es correcta.
 
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant A as Aplicación
+    participant L as Directorio LDAP
+    U->>A: uid ana + contraseña
+    A->>L: Bind con la cuenta de servicio (svc-app)
+    A->>L: Search (uid=ana)
+    L-->>A: DN cn=Ana Rojas,ou=Usuarios,dc=empresa,dc=local
+    A->>L: Bind con ese DN + contraseña tecleada
+    L-->>A: éxito o error de credenciales
+    A-->>U: sesión iniciada solo si el Bind funcionó
+```
+
 Puertos: 389 (LDAP, con o sin StartTLS), 636 (LDAPS, TLS desde el inicio). LDAPS se ve en [`09-criptografia`](../09-criptografia/).
 
 Ejemplo:
@@ -437,6 +561,22 @@ Flujo típico iniciado por el SP:
     |<-- cookie de sesión de la app -|                                      |
 ```
 
+```mermaid
+sequenceDiagram
+    participant N as Navegador
+    participant SP as SP (app.empresa.com)
+    participant IdP as IdP (login.empresa.com)
+    N->>SP: GET /dashboard
+    SP-->>N: 302 redirect + AuthnRequest
+    N->>IdP: AuthnRequest
+    IdP-->>N: página de login
+    N->>IdP: contraseña + MFA
+    IdP-->>N: auto-POST con SAMLResponse (aserción firmada)
+    N->>SP: POST /acs con SAMLResponse
+    SP->>SP: valida firma, audiencia y tiempo
+    SP-->>N: cookie de sesión de la app
+```
+
 - El navegador hace de mensajero: SP e IdP no hablan directamente.
 - La aserción contiene el `NameID` (quién es), atributos (correo, grupos), validez (`NotBefore`, `NotOnOrAfter`, normalmente pocos minutos) y la audiencia (para qué SP vale).
 - El SP debe validar la firma, la audiencia y el tiempo. Los ataques clásicos (XML Signature Wrapping) explotan SPs que validan la firma de un nodo pero leen los datos de otro.
@@ -465,6 +605,23 @@ Flujo Authorization Code con PKCE, el recomendado hoy para web y móvil:
    |-- POST /token: code=abc + code_verifier ---------------------------->|              |
    |<-- access_token (+ refresh_token) (+ id_token si es OIDC) -----------|              |
    |-- GET /photos  Authorization: Bearer access_token ---------------------------------->|
+```
+
+```mermaid
+sequenceDiagram
+    participant App as App (client)
+    participant N as Navegador / usuario
+    participant AS as Authorization Server
+    participant API as API (Resource Server)
+    App->>App: code_verifier aleatorio, code_challenge = SHA256(verifier)
+    App->>N: redirect a /authorize con scope y code_challenge
+    N->>AS: login + ¿permitir leer fotos?
+    AS-->>N: redirect a la app con code=abc
+    N-->>App: code=abc
+    App->>AS: POST /token: code + code_verifier
+    AS->>AS: SHA256(verifier) coincide con el challenge
+    AS-->>App: access_token (+ refresh_token, + id_token si es OIDC)
+    App->>API: GET /photos con Bearer access_token
 ```
 
 - El `code` es de un solo uso y de corta vida; el intercambio por el token ocurre por un canal directo.
@@ -529,6 +686,21 @@ mTLS (mutual TLS) es una variante del protocolo TLS en la que, además de que el
 
 En TLS normal solo el servidor se identifica (por eso tu navegador sabe que habla con tu banco, pero el banco no sabe quién eres hasta que te logueas). En mTLS el servidor envía un `CertificateRequest` durante el handshake y el cliente responde con su certificado y una firma (`CertificateVerify`). Se usa en APIs entre empresas, en microservicios (las service mesh como Istio lo activan entre todos los pods) y en dispositivos IoT.
 
+Lo que el handshake de mTLS añade al de TLS normal:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor
+    C->>S: ClientHello
+    S-->>C: ServerHello + certificado del servidor
+    S-->>C: CertificateRequest (solo en mTLS)
+    C->>S: certificado del cliente
+    C->>S: CertificateVerify (firma con su llave privada)
+    S->>S: valida la cadena contra su CA y la firma
+    Note over C,S: ambos lados autenticados, canal cifrado
+```
+
 Ejemplo contra una API de laboratorio que exige certificado de cliente:
 
 ```
@@ -564,6 +736,17 @@ En Linux:
 
 - `/etc/passwd` guarda las cuentas (legible por todos) y `/etc/shadow` los hashes (legible solo por root).
 - PAM (Pluggable Authentication Modules) es la capa que decide cómo se autentica cada servicio (`login`, `sshd`, `sudo`); con PAM se puede añadir TOTP o conectar a LDAP sin tocar el programa.
+
+```mermaid
+flowchart LR
+    SV["login / sshd / sudo"] --> PAM["PAM"]
+    PAM --> M1["Módulo local:<br/>/etc/passwd + /etc/shadow"]
+    PAM --> M2["Módulo TOTP"]
+    PAM --> M3["Módulo LDAP / SSSD"]
+    M1 --> V{"¿hash(contraseña + sal)<br/>igual al guardado?"}
+    V -->|sí| OK["Acceso"]
+    V -->|no| NO["Rechazo"]
+```
 - El hash lleva el algoritmo y la sal en el propio campo:
 
 ```
