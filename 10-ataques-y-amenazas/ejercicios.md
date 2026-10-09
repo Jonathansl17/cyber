@@ -30,6 +30,18 @@ Instalación del servidor SSH:
 En Arch arranca el servicio con `sudo systemctl start sshd` (Debian suele arrancarlo solo al
 instalar).
 
+Montaje: atacante, servidor y analista son la misma máquina:
+
+```mermaid
+flowchart LR
+    subgraph HOST["Tu equipo Linux"]
+        L["Bucles de ssh -4<br/>(pasos 1 y 2)"] -->|"TCP 22 en 127.0.0.1"| S["sshd"]
+        S -->|"Failed password for ..."| J[("journal de systemd<br/>unidad ssh o sshd")]
+        J -->|"journalctl | sed (paso 3)"| F["~/fallos.txt<br/>usuario IP"]
+        F -->|"awk | sort | uniq (pasos 4 y 5)"| R["Recuentos"]
+    end
+```
+
 ### Pasos
 
 1. Genera unos pocos fallos de autenticación contra tu propia máquina, para tener datos
@@ -52,6 +64,21 @@ instalar).
 
    (La cuenta `ana` puede no existir o puedes usar una tuya; lo que importa es que falle y quede
    registrado.)
+
+   Lo que ocurre en cada vuelta del bucle:
+
+   ```mermaid
+   sequenceDiagram
+       participant C as ssh -4 (cliente)
+       participant S as sshd en 127.0.0.1:22
+       participant J as journal
+       C->>S: conexión TCP y negociación SSH
+       S-->>C: pide contraseña (único método permitido)
+       C->>S: contraseña incorrecta
+       S->>J: Failed password for [invalid user] ana from 127.0.0.1
+       S-->>C: Permission denied
+       Note over C: NumberOfPasswordPrompts=1: se rinde y termina la vuelta
+   ```
 
 2. Simula ahora un patrón de spray: un intento fallido contra varias cuentas distintas.
    ```bash
@@ -123,6 +150,30 @@ instalar).
 
    Esperado del paso 2: `127.0.0.1` (o tu IP) con 5 cuentas distintas.
 
+   Los dos recuentos salen del mismo archivo, agrupado de dos formas:
+
+   ```mermaid
+   flowchart LR
+       F["fallos.txt<br/>ana 127.0.0.1<br/>ana 127.0.0.1<br/>bruno 127.0.0.1 ..."] --> A1["agrupar por usuario<br/>(paso 4)"]
+       F --> A2["pares IP-usuario únicos,<br/>agrupar por IP (paso 5)"]
+       A1 --> R1["fallos por cuenta<br/>ana: 5 o más"]
+       A2 --> R2["cuentas distintas por IP<br/>127.0.0.1: 5"]
+   ```
+
+   Cómo leer los números, y qué revisar si salen vacíos:
+
+   ```mermaid
+   flowchart TD
+       W{"¿wc -l fallos.txt da 0?"} -->|sí| T1["¿Usaste -4? Con ::1 el origen<br/>es IPv6"]
+       W -->|sí| T2["¿Pediste la unidad correcta?<br/>ssh en Debian, sshd en Arch"]
+       W -->|sí| T3["¿Se cortaron los intentos?<br/>PerSourcePenalties (OpenSSH 9.8+)"]
+       W -->|no| Q1{"¿Una cuenta con muchos fallos?"}
+       Q1 -->|sí| BF["Patrón de fuerza bruta"]
+       Q1 -->|no| Q2{"¿Una IP con muchas cuentas<br/>distintas, 1 fallo cada una?"}
+       Q2 -->|sí| SP["Patrón de password spray"]
+       Q2 -->|no| N["Sin patrón claro"]
+   ```
+
 ### Resultado esperado
 
 Dos recuentos sacados de tus propios logs: uno que muestra una cuenta con muchos fallos (fuerza
@@ -165,6 +216,23 @@ reservados por RFC 2606 (`.example`, `.invalid`), así que no apunta a nadie rea
 
 - Debian/Ubuntu: `sudo apt install dnsutils`
 - Arch: `sudo pacman -S bind`
+
+Todo el análisis ocurre en tu equipo sobre un archivo; la única salida a la red son las consultas `dig` del paso 5:
+
+```mermaid
+flowchart LR
+    subgraph HOST["Tu equipo Linux (~/phish-lab)"]
+        E["muestra.eml"] --> G["grep: Received, From,<br/>Return-Path, Reply-To,<br/>Authentication-Results"]
+        E --> U["grep + sed: URL defangeada"]
+        A["verificacion.html"] --> H["sha256sum"]
+        D["dig +short TXT"]
+        G --> INF["Informe y veredicto"]
+        U --> INF
+        H --> INF
+        D --> INF
+    end
+    D <-->|"solo consultas DNS"| RES["Resolver DNS"]
+```
 
 ### Pasos
 
@@ -215,6 +283,20 @@ reservados por RFC 2606 (`.example`, `.invalid`), así que no apunta a nadie rea
    ```
    - `grep -i '^Received:'` → muestra las líneas de recepción; `-i` ignora mayúsculas y `^` ancla al inicio de línea. Aquí el correo llegó desde `mail.account-verify.invalid` (IP `203.0.113.77`), no desde la infraestructura del banco.
 
+   La historia que cuentan las cabeceras de la muestra (servidores inventados, no los tocas):
+
+   ```mermaid
+   sequenceDiagram
+       participant O as mail.account-verify.invalid (203.0.113.77)
+       participant MX as mx.example.com (Postfix)
+       participant B as Buzón de cliente@example.com
+       O->>MX: entrega por ESMTP, From dice bancoejemplo.example
+       Note over MX: añade Received con la IP real del emisor
+       MX->>MX: comprueba SPF, DKIM y DMARC
+       Note over MX: escribe Authentication-Results:<br/>spf=fail, dkim=none, dmarc=fail (p=reject)
+       MX->>B: lo entrega igualmente (filtro evadido o mal configurado)
+   ```
+
 3. Compara las tres direcciones que deberían ser coherentes en un correo legítimo:
    `Return-Path` (a dónde van los rebotes), `From` (quién dice ser) y `Reply-To` (a dónde va tu
    respuesta).
@@ -253,11 +335,32 @@ reservados por RFC 2606 (`.example`, `.invalid`), así que no apunta a nadie rea
    - `sed -E 's#^http#hxxp#; s#\.#[.]#g'` → "defang": cambia `http` por `hxxp` y cada `.` por `[.]`, para que la URL no sea clicable ni resoluble por accidente. Resultado: `hxxp://bancoejemplo[.]example[.]account-verify[.]invalid/login?id=8812`. El dominio real es el que va justo antes del primer `/`: el dueño es `account-verify.invalid`, y `bancoejemplo.example` es solo un subdominio suyo para engañar.
    - `sha256sum verificacion.html` → huella del adjunto; es lo que se busca en VirusTotal o en el EDR sin tener que abrirlo. Nunca abras el adjunto: solo lo identificas por su hash.
 
+   Cómo se lee el host de la URL (el dueño es lo que va justo antes del primer `/`):
+
+   ```mermaid
+   flowchart LR
+       URL["bancoejemplo.example.account-verify.invalid"] --> SUB["bancoejemplo.example.<br/>subdominio puesto de cebo"]
+       URL --> REG["account-verify.invalid<br/>dominio registrado: el dueño real"]
+       REG --> ATK["Lo controla el atacante"]
+   ```
+
 ### Resultado esperado
 
 Un análisis escrito del correo con: la IP de origen de la cadena `Received`, la discordancia
 entre `From`, `Return-Path` y `Reply-To`, el triple fallo SPF/DKIM/DMARC, la URL defangeada con
 su dominio real identificado, y el hash del adjunto. Con todo eso, un veredicto: es phishing.
+
+```mermaid
+flowchart TD
+    S1{"¿From coincide con<br/>Return-Path y Reply-To?"} -->|"no"| X1["Señal 1"]
+    S2{"¿SPF, DKIM y DMARC pasan?"} -->|"fail / none / fail"| X2["Señal 2"]
+    S3{"¿El dominio real de la URL<br/>es el del remitente?"} -->|"no: account-verify.invalid"| X3["Señal 3"]
+    S4{"¿Urgencia y amenaza en el texto?"} -->|"sí: 24 h o suspensión"| X4["Señal 4"]
+    X1 --> V["Veredicto: PHISHING<br/>bloquear dominio e IP, borrar de los buzones,<br/>avisar al usuario, hash del adjunto a inteligencia"]
+    X2 --> V
+    X3 --> V
+    X4 --> V
+```
 
 Plantilla de informe (rellénala con tus hallazgos):
 

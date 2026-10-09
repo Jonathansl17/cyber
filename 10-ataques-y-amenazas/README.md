@@ -70,6 +70,25 @@ Analogía: una enfermedad se describe por cómo se contagia (aire, agua, contact
 
 Límite de la idea: algunas etiquetas (fileless, rootkit) describen una técnica de ocultación más que una propagación o una carga; se suman como un tercer adjetivo.
 
+Una muestra real recibe un adjetivo de cada eje (WannaCry: gusano + ransomware):
+
+```mermaid
+mindmap
+  root((Muestra de malware))
+    Propagación
+      Virus
+      Gusano
+      Troyano
+    Carga
+      Ransomware
+      Spyware
+      Keylogger
+      Botnet
+    Técnica de ocultación
+      Rootkit
+      Fileless
+```
+
 ```
 Eje propagación → virus, gusano, troyano: cómo entra y se reproduce.
 Eje carga → ransomware, spyware, keylogger, botnet: qué hace dentro.
@@ -97,6 +116,15 @@ Un **gusano** es un malware que se replica a sí mismo y se propaga por la red d
 Analogía: un virus necesita que le des la mano a alguien; un gusano entra por la ventilación de todo el edificio.
 
 Cómo funciona: escanea rangos de IP buscando un puerto con un servicio vulnerable, envía el exploit, copia su cuerpo al nuevo equipo y repite desde ahí. El crecimiento es exponencial: si cada equipo infecta 2 por minuto, en 10 minutos se pasa de 1 a más de 1000.
+
+```mermaid
+flowchart LR
+    A["Equipo infectado"] --> B["Escanea rangos de IP<br/>buscando el puerto vulnerable"]
+    B --> C["Envía el exploit<br/>(p. ej. EternalBlue a TCP 445)"]
+    C --> D["Copia su cuerpo<br/>al nuevo equipo"]
+    D --> E["Nuevo equipo infectado"]
+    E -->|"repite desde ahí,<br/>sin usuario ni archivo huésped"| B
+```
 
 Ejemplo real: WannaCry (mayo de 2017) combinaba gusano y ransomware. Se propagaba por SMBv1 (puerto TCP 445) usando el exploit EternalBlue (boletín MS17-010) e infectó más de 200 000 equipos en unos 150 países en pocos días; Microsoft había publicado el parche dos meses antes.
 
@@ -137,6 +165,19 @@ Analogía: alguien entra a tu casa, pone candado a todos los cajones y te deja u
 
 Cómo funciona: tras entrar (phishing, SSH con contraseña débil expuesto, VPN sin parchear), el operador suele pasar días moviéndose por la red, roba datos, borra los snapshots (LVM, Btrfs, ZFS) y desactiva copias de seguridad; luego cifra todo de golpe con criptografía híbrida: cada archivo con una clave simétrica (AES) y esas claves con la clave pública del atacante (RSA), así que sin su clave privada no se recupera. La doble extorsión añade la amenaza de publicar los datos robados aunque restaures tus copias. Hoy funciona como negocio (RaaS, Ransomware as a Service): un grupo desarrolla el malware y "afiliados" lo despliegan a cambio de un porcentaje.
 
+El cifrado híbrido del ransomware, por qué sin la clave privada no hay vuelta atrás:
+
+```mermaid
+flowchart LR
+    F["Archivo de la víctima"] --> E1["Cifrado AES"]
+    KA["Clave AES aleatoria<br/>propia del archivo"] --> E1
+    E1 --> FC["Archivo cifrado<br/>informe.xlsx.locked"]
+    KA --> E2["Cifrado RSA"]
+    PUB["Clave PÚBLICA RSA<br/>del atacante"] --> E2
+    E2 --> KC["Clave AES cifrada"]
+    PRIV["Clave PRIVADA RSA<br/>(solo la tiene el atacante)"] -.->|"única forma de abrir"| KC
+```
+
 Ejemplo: un viernes a las 23:00 un servidor de archivos de 2 TB empieza a renombrar `informe.xlsx` a `informe.xlsx.locked` a razón de 500 archivos por minuto, y en cada carpeta aparece `LEEME_RECUPERAR.txt` pidiendo 5 BTC.
 
 Señales: renombrado masivo de archivos con una extensión nueva, uso de `lvremove`, `btrfs subvolume delete` o `zfs destroy` sobre snapshots, picos de escritura en disco, notas de rescate. En ATT&CK la técnica es T1486 (Data Encrypted for Impact).
@@ -159,6 +200,19 @@ Firmware/UEFI        vive en el chip de la placa; sobrevive a formatear el disco
 ```
 
 Ejemplo: en Linux, `ps aux` no muestra el proceso `kworkerd` que consume el 90 % de CPU, pero el monitor del hipervisor sí ve el consumo. El rootkit filtró la salida de `ps`.
+
+Por qué funciona la detección cross-view:
+
+```mermaid
+flowchart TD
+    PS["ps aux"] --> SO["Consulta al sistema operativo"]
+    SO --> RK["Rootkit intercepta<br/>y filtra la respuesta"]
+    RK --> OUT1["Salida sin kworkerd:<br/>todo parece normal"]
+    HV["Monitor del hipervisor<br/>(vista desde fuera)"] --> OUT2["Ve 90 % de CPU<br/>en esa máquina"]
+    OUT1 --> CMP{"¿Las dos vistas coinciden?"}
+    OUT2 --> CMP
+    CMP -->|no| ALERTA["Indicio de rootkit"]
+```
 
 Señales: discrepancias entre vistas (lo que dice el sistema vs. lo que se ve desde fuera, técnica llamada cross-view), drivers sin firmar, Secure Boot desactivado sin motivo, herramientas como `rkhunter` o `chkrootkit` con hallazgos.
 
@@ -205,6 +259,22 @@ Analogía: un titiritero con miles de marionetas; cada una es débil, pero junta
 
 Cómo funciona: cada bot "llama a casa" periódicamente (beaconing) para pedir órdenes. El C2 puede ser centralizado (un servidor HTTP o IRC, fácil de tumbar), peer-to-peer (los bots se pasan órdenes entre ellos, sin un punto único) o usar DGA (Domain Generation Algorithm: cada día el malware calcula cientos de dominios posibles y el atacante registra solo uno, así que bloquear dominios uno a uno no sirve). Usos: DDoS (ver [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/)), spam, relleno de credenciales, minería, alquiler a otros criminales.
 
+```mermaid
+flowchart LR
+    subgraph CEN["C2 centralizado: un punto único"]
+        BM1["Botmaster"] --> C2["Servidor C2<br/>HTTP o IRC"]
+        B1["bot"] -->|"beaconing:<br/>pide órdenes"| C2
+        B2["bot"] --> C2
+        B3["bot"] --> C2
+    end
+    subgraph P2P["C2 peer-to-peer: sin punto único"]
+        BM2["Botmaster"] --> P1["bot"]
+        P1 <--> P2["bot"]
+        P2 <--> P3["bot"]
+        P3 <--> P1
+    end
+```
+
 Ejemplo real: Mirai (2016) entró en cámaras IP y routers probando unas 60 combinaciones de usuario y contraseña por defecto por Telnet, y usó cientos de miles de ellos para tumbar el proveedor DNS Dyn, dejando sin servicio a sitios grandes durante horas.
 
 Señales: conexiones salientes a intervalos muy regulares (cada 300 s exactos), consultas DNS a dominios aleatorios tipo `xk3j9qz.top`, tráfico saliente inusual desde dispositivos IoT.
@@ -220,6 +290,17 @@ Analogía: un ladrón que no trae herramientas, usa las del propio taller; nadie
 Cómo funciona: un exploit o un enlace lanza `bash` con un comando codificado en Base64 que descarga un binario y lo ejecuta directamente en memoria con `memfd_create` (un archivo anónimo que solo existe en RAM). La persistencia se esconde en una línea de `.bashrc`, en un crontab o en un timer de systemd. Como no hay un ejecutable nuevo en disco, el antivirus basado en archivos no tiene nada que escanear.
 
 Ejemplo: auditd registra a `nginx` como proceso padre de `/bin/sh -c 'echo ... | base64 -d | bash'`, y `ls -l /proc/<pid>/exe` del proceso hijo apunta a `/memfd: (deleted)`; un servidor web no tiene ningún motivo legítimo para lanzar una shell.
+
+Árbol de procesos que delata el ataque:
+
+```mermaid
+flowchart TD
+    N["nginx<br/>(servidor web)"] -->|"padre anómalo"| SH["/bin/sh -c 'echo ... | base64 -d | bash'"]
+    SH --> B["bash decodifica el comando"]
+    B -->|"curl descarga el binario"| MF["memfd_create:<br/>archivo anónimo en RAM"]
+    MF --> P["Proceso hijo<br/>/proc/PID/exe → /memfd: (deleted)"]
+    B -.->|"persistencia"| CR[".bashrc, crontab<br/>o timer de systemd"]
+```
 
 Señales: relaciones padre-hijo anómalas (servidor web → shell), comandos codificados en Base64, procesos cuyo `/proc/<pid>/exe` apunta a `memfd:` o a un archivo `(deleted)`, crontabs o timers de systemd nuevos.
 
@@ -303,6 +384,23 @@ Analogía: una carta con el membrete del banco copiado a la perfección, pero co
 
 Cómo funciona: el atacante registra un dominio parecido, clona la página de login del servicio real y envía correos que llevan ahí. Las credenciales que introduces van a su servidor; los kits modernos (adversary-in-the-middle) incluso reenvían en tiempo real tu código MFA al sitio real y roban la cookie de sesión.
 
+Phishing adversary-in-the-middle contra un MFA por código:
+
+```mermaid
+sequenceDiagram
+    participant V as Víctima
+    participant F as Sitio falso (proxy del atacante)
+    participant R as Sitio real
+    V->>F: abre el enlace e introduce usuario y contraseña
+    F->>R: reenvía usuario y contraseña
+    R-->>F: pide el código MFA
+    F-->>V: muestra la misma petición de MFA
+    V->>F: introduce el código MFA
+    F->>R: reenvía el código en tiempo real
+    R-->>F: login correcto + cookie de sesión
+    Note over F: guarda la cookie y entra como la víctima
+```
+
 Ejemplo realista, un correo inventado de "tu cuenta será suspendida" (dominios de ejemplo según RFC 2606):
 
 ```
@@ -352,6 +450,24 @@ Defensas: regla de colgar y devolver la llamada a un número oficial conocido (c
 > una llamada de vishing ("soy de IT, acepte la notificación para que dejen de llegar"). Se frena
 > con MFA que exige número coincidente (number matching), passkeys/FIDO2 (que no se pueden
 > aprobar a ciegas), límite de intentos y alerta cuando se acumulan push denegados.
+
+Fatiga de MFA combinada con vishing:
+
+```mermaid
+sequenceDiagram
+    participant A as Atacante (ya tiene la contraseña)
+    participant S as Servicio con MFA push
+    participant V as Móvil de la víctima
+    loop decenas de veces, de día y de noche
+        A->>S: login con la contraseña robada
+        S->>V: ¿Aprobar inicio de sesión?
+        V-->>S: Denegar
+    end
+    A->>V: llamada: "soy de IT, acepte para que dejen de llegar"
+    S->>V: ¿Aprobar inicio de sesión?
+    V-->>S: Aprobar
+    S-->>A: sesión iniciada
+```
 
 ### Whaling
 
@@ -491,6 +607,14 @@ Se divide según si el atacante toca o no los sistemas del objetivo:
 - Pasivo: no envía nada al objetivo; consulta fuentes públicas y de terceros (OSINT). Whois, DNS públicos, registros de certificados (crt.sh), LinkedIn, ofertas de empleo ("buscamos experto en Fortinet"), Shodan, buscadores. El objetivo no puede detectarlo en sus propios logs.
 - Activo: interactúa directamente con los sistemas del objetivo: escaneo de puertos, enumeración de servicios, banner grabbing, llamar a recepción. Da información más precisa, pero deja rastro en firewalls e IDS.
 
+```mermaid
+flowchart LR
+    A["Atacante"] -->|"pasivo"| PUB["Fuentes públicas y de terceros<br/>whois, DNS, crt.sh, LinkedIn, Shodan"]
+    A -->|"activo"| OBJ["Sistemas del objetivo<br/>escaneo, enumeración, banner grabbing"]
+    PUB -.->|"no toca al objetivo"| L1["Sin rastro en sus logs"]
+    OBJ --> L2["Rastro en firewall e IDS"]
+```
+
 Ejemplo pasivo y activo contra un dominio de laboratorio propio (`lab.example`, un dominio reservado por RFC 2606 que nunca es de nadie):
 
 ```bash
@@ -549,6 +673,15 @@ Analogía: el depredador que no persigue a la gacela por la sabana, sino que esp
 Por qué existe: las organizaciones bien defendidas filtran el correo y entrenan a su gente contra el phishing, así que el atacante busca un camino que la víctima considere seguro. Un sitio que el personal visita a diario (el portal de un proveedor, un foro del sector, la web de la asociación profesional) no despierta sospechas, y a menudo está menos protegido que el objetivo real.
 
 Cómo se ve desde el defensor: el sitio comprometido sigue funcionando normal, pero sirve un script añadido que solo actúa con ciertos visitantes (por ejemplo, los que llegan desde el rango de IP de la empresa objetivo) y que intenta aprovechar una vulnerabilidad del navegador o empujar una descarga. Por eso se combina con frecuencia con el [Drive by Attack](#drive-by-attack) de la sección siguiente.
+
+```mermaid
+flowchart LR
+    A["Atacante"] -->|"compromete"| S["Sitio legítimo<br/>que el grupo visita"]
+    S --> Q{"¿El visitante llega desde<br/>el rango de IP objetivo?"}
+    Q -->|no| N["Página normal:<br/>nadie nota nada"]
+    Q -->|sí| X["Script extra: exploit del navegador<br/>o descarga forzada"]
+    X --> I["Equipo de la víctima<br/>infectado"]
+```
 
 Ejemplo: 40 ingenieros de una empresa de energía consultan cada semana el foro de un fabricante de turbinas. El foro tiene un CMS sin parchear. Un día, solo los visitantes que llegan desde la red de esa empresa reciben un script extra; tres equipos con el navegador desactualizado terminan con malware, y el resto de visitantes del mundo no nota nada.
 
@@ -609,6 +742,19 @@ Analogía: la fuerza bruta es probar mil llaves en una sola puerta; el spray es 
 
 Por qué existe el spray: casi todos los sistemas bloquean una cuenta tras unos pocos fallos seguidos (por ejemplo, 5). La fuerza bruta contra una cuenta choca con ese límite enseguida. El spray lo esquiva: un solo intento por cuenta cada cierto tiempo nunca llega al umbral, y en una organización de 2.000 personas basta con que unas pocas usen "Verano2026!" para entrar.
 
+```mermaid
+flowchart LR
+    subgraph FB["Fuerza bruta"]
+        A1["Atacante"] -->|"contraseña 1, 2, 3 ... 500"| U1["cuenta ana<br/>se bloquea tras 5 fallos"]
+    end
+    subgraph PS["Password spray"]
+        A2["Atacante"] -->|"Verano2026!"| V1["ana"]
+        A2 -->|"Verano2026!"| V2["bruno"]
+        A2 -->|"Verano2026!"| V3["carla"]
+        A2 -->|"Verano2026!"| V4["... 800 cuentas<br/>1 fallo por cuenta"]
+    end
+```
+
 La diferencia se ve en los logs, y es la forma de reconocer cada uno:
 
 ```
@@ -659,6 +805,15 @@ Cómo se detecta cada una:
 - Desconocida: análisis de comportamiento y anomalías, EDR, sandboxing, threat hunting. Atrapa lo nuevo, pero genera más falsos positivos y exige más trabajo humano.
 
 Ejemplo: un malware conocido llega con el mismo hash que ya figura en VirusTotal, y el antivirus lo borra al instante. Ese mismo malware recompilado con un cambio mínimo tiene otro hash, la firma ya no coincide, y solo lo delata su comportamiento, como cifrar 500 archivos por minuto.
+
+```mermaid
+flowchart TD
+    F["Archivo o proceso nuevo"] --> Q1{"¿Su hash o indicador está<br/>en la base de firmas?"}
+    Q1 -->|sí| K["Amenaza conocida:<br/>el antivirus la bloquea al instante"]
+    Q1 -->|no| Q2{"¿Se comporta de forma anómala?<br/>(cifra 500 archivos/min, web lanza shell)"}
+    Q2 -->|sí| U["Amenaza desconocida detectada<br/>por EDR o análisis de comportamiento"]
+    Q2 -->|no| P["Pasa sin alerta<br/>(threat hunting puede encontrarla)"]
+```
 
 ```
 Amenaza conocida    → ya documentada; se detecta por firma o indicador.
