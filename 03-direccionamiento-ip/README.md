@@ -129,6 +129,16 @@ MAC destino de la trama  la de 192.168.1.50       la del gateway 192.168.1.1
 
 La última fila es la que cambia: la IP destino del paquete es siempre la final, pero la MAC destino es la del vecino directo o la del gateway.
 
+```mermaid
+flowchart TD
+    A["Paquete listo para enviar"] --> B["Mi IP AND mi máscara = mi red"]
+    B --> C{"¿IP destino AND mi máscara<br/>= mi red?"}
+    C -->|"sí (192.168.1.50)"| D["ARP por la IP destino"]
+    D --> E["Trama directa al destino"]
+    C -->|"no (8.8.8.8)"| F["ARP por la IP del gateway"]
+    F --> G["Trama al gateway 192.168.1.1<br/>(la IP destino no cambia)"]
+```
+
 Ejemplo de fallo: un PC con IP `192.168.1.20` y máscara `/25` (por error en vez de `/24`) cree que `192.168.1.200` está en otra red (la `.128`) y manda ese tráfico al gateway, que lo devuelve a la misma LAN; funciona lento o no funciona según el router. Con `/16`, en cambio, creería que `192.168.50.5` es vecino y nunca lo enviaría al gateway.
 
 ```
@@ -177,6 +187,18 @@ LISTEN  0       128           0.0.0.0:22         0.0.0.0:*
 ```
 
 Aquí PostgreSQL (5432) solo acepta conexiones locales y SSH (22) acepta de cualquier red. Muchos ataques SSRF (Server-Side Request Forgery, hacer que el servidor haga peticiones por ti) buscan justamente llegar a servicios de `localhost` que se creían a salvo; ver [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/).
+
+```mermaid
+flowchart LR
+    subgraph SRV["Servidor"]
+        APP["Programa local"]
+        PG["PostgreSQL<br/>escucha en 127.0.0.1:5432"]
+        SSH["SSH<br/>escucha en 0.0.0.0:22"]
+    end
+    APP -->|"127.0.0.1:5432 por lo"| PG
+    R["Equipo de la red"] -->|"IP de la interfaz, puerto 22"| SSH
+    R -. "IP de la interfaz, puerto 5432:<br/>conexión rechazada" .-> PG
+```
 
 > [!WARNING]
 > localhost y loopback no son lo mismo: loopback es la interfaz y su bloque de direcciones; localhost es solo un nombre que apunta a ella, y como cualquier nombre puede manipularse editando el archivo hosts.
@@ -244,6 +266,8 @@ Hosts      254          126          62           30
 ```
 
 La fila "Bits red + Bits host" suma 32 en todas las columnas: ahí está la idea entera. Lo que gana una parte lo pierde la otra.
+
+![Los 32 bits de 192.168.10.77/26: 24 de red original, 2 prestados para subred y 6 de host](img/reparto-bits-subred.svg)
 
 Excepciones del −2: un `/31` (2 direcciones) se usa en enlaces punto a punto entre dos routers sin dirección de red ni broadcast (RFC 3021), y un `/32` identifica a un único host, por ejemplo en una ruta o una regla de firewall.
 
@@ -355,6 +379,18 @@ Ejemplo 7, VLSM. **VLSM** (Variable Length Subnet Mask, máscara de longitud var
 Libre: 192.168.1.228 – 192.168.1.255 para crecer
 ```
 
+```mermaid
+flowchart TD
+    N["192.168.1.0/24"] --> A["192.168.1.0/25<br/>100 hosts (caben 126)"]
+    N --> B["192.168.1.128/25"]
+    B --> C["192.168.1.128/26<br/>50 hosts (caben 62)"]
+    B --> D["192.168.1.192/26"]
+    D --> E["192.168.1.192/27<br/>20 hosts (caben 30)"]
+    D --> F["192.168.1.224/27"]
+    F --> G["192.168.1.224/30<br/>enlace de 2 hosts"]
+    F --> L["192.168.1.228 – .255<br/>libre"]
+```
+
 Ejemplo 8, ¿están en la misma subred `192.168.1.100` y `192.168.1.200` con `/25`? Bloque 128: la primera cae en `192.168.1.0/25` y la segunda en `192.168.1.128/25`. No, necesitan un router entre ellas.
 
 Para comprobar resultados sin herramientas extra, Python trae el módulo `ipaddress`:
@@ -461,6 +497,20 @@ Las tres últimas filas son las que importan: NAT solo cubre una, y además por 
 
 Ejemplo: un PC con `192.168.1.30` abre un adjunto con malware que conecta hacia afuera a un servidor del atacante; NAT deja pasar la respuesta porque la conexión la inició el PC. Desde ahí el atacante alcanza cualquier `192.168.1.x`. La protección real es firewall con reglas, segmentación y monitoreo; ver [`13-defensa-y-hardening`](../13-defensa-y-hardening/).
 
+```mermaid
+sequenceDiagram
+    participant C as Servidor del atacante
+    participant N as Router NAT
+    participant PC as PC 192.168.1.30 (malware)
+    participant O as Otro equipo 192.168.1.x
+    C-xN: conexión entrante no pedida: sin entrada en la tabla, se descarta
+    PC->>N: el malware abre una conexión saliente
+    N->>C: sale con la IP pública
+    C-->>N: respuesta con órdenes
+    N-->>PC: entregada: la conexión la inició el PC
+    PC->>O: dentro de la LAN, NAT no interviene
+```
+
 ```
 IP privada → RFC 1918; reutilizable; no enrutable en Internet; necesita NAT para salir.
 IP pública → única en el mundo; asignada vía IANA/RIR; alcanzable desde Internet.
@@ -504,6 +554,16 @@ IPv6 → 128 bits, hexadecimal, sin necesidad de NAT.
 Un **switch** es un dispositivo de capa 2 que conecta equipos dentro de una misma LAN y reenvía cada trama solo por el puerto donde está la MAC destino, gracias a una tabla de direcciones MAC (CAM table) que aprende sola.
 
 Existe para reemplazar al hub, que repetía todo por todos los puertos. Aprende así: cuando entra una trama por el puerto 3 con MAC origen `aa:aa`, anota "aa:aa está en el puerto 3". Si la MAC destino no está en la tabla, la envía por todos los puertos (flooding) una vez, y aprende de la respuesta. Los broadcasts sí van a todos.
+
+```mermaid
+flowchart TD
+    A["Entra una trama por un puerto"] --> B["Anota en la tabla CAM:<br/>MAC origen → ese puerto"]
+    B --> C{"¿Destino broadcast?"}
+    C -->|sí| F["Envía por todos los puertos<br/>menos el de entrada"]
+    C -->|no| D{"¿MAC destino<br/>en la tabla?"}
+    D -->|sí| E["Envía solo por su puerto"]
+    D -->|"no (flooding)"| F
+```
 
 Analogía: un conserje que va memorizando en qué oficina se sienta cada persona y, desde entonces, lleva cada sobre solo a la puerta correcta.
 
@@ -562,6 +622,18 @@ Trunk → enlace que lleva varias VLAN etiquetadas.
 **ARP** (Address Resolution Protocol, RFC 826) es el protocolo que, dentro de una LAN, averigua qué dirección MAC corresponde a una dirección IP, mediante una pregunta en broadcast y una respuesta en unicast.
 
 Existe porque IP decide a qué IP enviar, pero la trama Ethernet necesita una MAC destino. El host pregunta a todos "¿quién tiene 192.168.1.1? que me lo diga 192.168.1.20", solo el dueño responde "192.168.1.1 está en 11:22:33:44:55:66", y la respuesta se guarda en la caché ARP unos minutos.
+
+```mermaid
+sequenceDiagram
+    participant PC as PC 192.168.1.20
+    participant O as Otros equipos de la LAN
+    participant GW as Router 192.168.1.1
+    PC->>O: broadcast: ¿quién tiene 192.168.1.1?
+    PC->>GW: broadcast: ¿quién tiene 192.168.1.1?
+    Note over O: no es su IP: ignoran
+    GW-->>PC: unicast: 192.168.1.1 está en 11:22:33:44:55:66
+    Note over PC: guarda la respuesta en la caché ARP
+```
 
 Analogía: gritar en una sala "¿quién es Ana?" y que Ana levante la mano; desde entonces sabes dónde se sienta.
 
@@ -672,7 +744,41 @@ From 192.168.1.1 icmp_seq=1 Time to live exceeded          # tipo 11 del gateway
 
 `traceroute` funciona justo así: manda paquetes con TTL 1, 2, 3... y cada router del camino se delata al devolver un tipo 11.
 
+```mermaid
+sequenceDiagram
+    participant PC
+    participant R1 as Router 1 (gateway)
+    participant R2 as Router 2
+    participant D as Destino
+    PC->>R1: TTL=1
+    R1-->>PC: ICMP tipo 11 (Time Exceeded)
+    PC->>R1: TTL=2
+    R1->>R2: TTL=1
+    R2-->>PC: ICMP tipo 11 (Time Exceeded)
+    PC->>R1: TTL=3
+    R1->>R2: TTL=2
+    R2->>D: TTL=1
+    D-->>PC: respuesta del destino: fin de la traza
+```
+
 PMTUD (Path MTU Discovery) y por qué no se debe bloquear todo ICMP: los paquetes TCP salen con la marca DF (Don't Fragment). Si en algún punto del camino hay un enlace con MTU menor (un túnel VPN, PPPoE con 1492), el router no puede fragmentar y devuelve un ICMP tipo 3 código 4 "Fragmentation needed, MTU = 1400"; el emisor baja el tamaño y reintenta. Si un firewall descarta todo ICMP, ese aviso nunca llega: la conexión se abre (los paquetes pequeños del handshake pasan) pero se cuelga en cuanto se envía algo grande, como una página web o un `scp`. Es el clásico "agujero negro de PMTU", muy difícil de diagnosticar. En IPv6 es peor: los routers nunca fragmentan, y el aviso equivalente (ICMPv6 Packet Too Big, tipo 2), igual que todo NDP, es imprescindible para que la red funcione.
+
+El agujero negro de PMTU, paso a paso:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant F as Firewall que descarta todo ICMP
+    participant R as Router (túnel, MTU 1400)
+    participant S as Servidor
+    Note over C,S: el handshake pasa: sus paquetes son pequeños
+    C->>F: paquete de 1500 bytes con DF
+    F->>R: paquete de 1500 bytes con DF
+    Note over R: no cabe y no puede fragmentar
+    R--xF: ICMP tipo 3 código 4: MTU = 1400
+    Note over F: descarta el ICMP
+    Note over C: nunca recibe el aviso:<br/>reintenta 1500 y la conexión se cuelga
+```
 
 ```
 $ ping -c 1 -M do -s 1472 1.1.1.1         # 1472 + 8 ICMP + 20 IP = 1500: cabe
@@ -707,6 +813,21 @@ Tabla PAT del router (IP pública 203.0.113.5)
 Interna              Pública               Destino
 192.168.1.20:51000   203.0.113.5:40001     198.51.100.7:443
 192.168.1.21:51000   203.0.113.5:40002     198.51.100.7:443
+```
+
+Cómo se usa esa tabla en una conexión:
+
+```mermaid
+sequenceDiagram
+    participant PC as PC 192.168.1.20
+    participant R as Router NAT 203.0.113.5
+    participant S as Servidor 198.51.100.7
+    PC->>R: origen 192.168.1.20:51000 → 198.51.100.7:443
+    Note over R: anota 51000 ↔ 40001 en la tabla PAT
+    R->>S: origen 203.0.113.5:40001 → 198.51.100.7:443
+    S-->>R: destino 203.0.113.5:40001
+    Note over R: busca 40001 en la tabla
+    R-->>PC: destino 192.168.1.20:51000
 ```
 
 Variantes: NAT estático (una privada fija a una pública fija, para publicar un servidor), NAT dinámico (un grupo de públicas) y port forwarding (abrir un puerto público hacia un equipo interno; publicar el 3389 de escritorio remoto así es una causa clásica de intrusiones).
@@ -765,6 +886,13 @@ Reglas:
 ```
 
 Ejemplo: un atacante explota el servidor web en `10.0.99.10`; intenta conectar a `10.0.10.20` (contabilidad) y el firewall lo bloquea porque DMZ → LAN está denegado. Ojo: lo que los routers domésticos llaman "DMZ host" es otra cosa, reenviar todos los puertos a un equipo interno, y expone ese equipo por completo.
+
+```mermaid
+flowchart LR
+    I["Internet"] -->|"443 y 25: permitido"| W["DMZ: servidor web<br/>10.0.99.10"]
+    ADM["LAN: admin<br/>10.0.10.5"] -->|"SSH: permitido"| W
+    W -. "DMZ → LAN: denegado" .-> CON["LAN: contabilidad<br/>10.0.10.20"]
+```
 
 ### VPN
 
@@ -933,6 +1061,19 @@ Desfase (offset)      = ((T2 − T1) + (T3 − T4)) / 2
 ```
 
 T1 y T4 los mide el reloj del cliente y T2 y T3 el del servidor; el cálculo asume que ida y vuelta tardan lo mismo. El cliente corrige poco a poco (acelera o frena el reloj) en lugar de saltar, para no romper programas que miden tiempos.
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor NTP
+    Note over C: T1: envía (reloj del cliente)
+    C->>S: petición
+    Note over S: T2: recibe (reloj del servidor)
+    Note over S: T3: responde (reloj del servidor)
+    S-->>C: respuesta con T1, T2 y T3
+    Note over C: T4: recibe (reloj del cliente)
+    Note over C: delay = (T4 − T1) − (T3 − T2)<br/>offset = ((T2 − T1) + (T3 − T4)) / 2
+```
 
 Analogía: ajustar tu reloj de pulsera con el reloj de la plaza, descontando el tiempo que tardas en mirar y volver la vista.
 

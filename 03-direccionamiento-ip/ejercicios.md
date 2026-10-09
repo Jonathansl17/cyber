@@ -46,6 +46,16 @@ DMZ (sin VLAN)      10.0.99.0/24   gateway 10.0.99.1 (R1 Gi0/1)      Srv-Web est
 El servidor web lleva IP fija `10.0.99.10`, máscara `255.255.255.0`, gateway `10.0.99.1`
 (se pone en `Desktop` → `IP Configuration` → Static). Los dos PC se dejan en `DHCP`.
 
+La topología con su plan (todo simulado dentro de Packet Tracer):
+
+```mermaid
+flowchart LR
+    PV["PC-Ventas<br/>DHCP, VLAN 10"] -->|"Fa0/1 access"| SW["SW1"]
+    PI["PC-Invitados<br/>DHCP, VLAN 20"] -->|"Fa0/2 access"| SW
+    SW ==>|"Gi0/1 trunk 802.1Q<br/>VLAN 10 y 20"| R1["R1 Gi0/0<br/>.10 = 10.0.10.1<br/>.20 = 10.0.20.1"]
+    R1 ---|"Gi0/1 = 10.0.99.1"| WEB["Srv-Web (DMZ)<br/>10.0.99.10 fija"]
+```
+
 ### Parte C: configuración del switch
 
 Abre SW1, pestaña `CLI`, y pega:
@@ -142,6 +152,21 @@ exit
 - `exit` → sale del ámbito.
 - El segundo bloque (`INVITADOS`) es igual con las direcciones de la VLAN 20.
 
+Cómo llega un Discover de ventas a su pool a través del trunk:
+
+```mermaid
+sequenceDiagram
+    participant PC as PC-Ventas (Fa0/1, VLAN 10)
+    participant SW as SW1
+    participant R as R1 Gi0/0.10
+    PC->>SW: DISCOVER en broadcast, trama sin etiqueta
+    SW->>R: por el trunk con etiqueta 802.1Q VLAN 10
+    Note over R: la subinterfaz .10 responde con el pool VENTAS
+    R-->>SW: OFFER 10.0.10.10, gateway 10.0.10.1 (etiqueta VLAN 10)
+    SW-->>PC: OFFER sin etiqueta
+    Note over PC,R: REQUEST y ACK siguen el mismo camino
+```
+
 Por último las ACL que imponen la política de la DMZ y la separación entre VLAN. La
 ACL de la DMZ permite que la DMZ responda a lo que la LAN inicia (echo-reply y conexiones
 establecidas) pero le prohíbe iniciar conexiones hacia la LAN; la de invitados les
@@ -206,6 +231,17 @@ write memory
    ```
 
    El comando en cada caso es `ping <destino>` (envía ecos ICMP al destino indicado).
+
+   La misma matriz como mapa (líneas continuas llegan, punteadas se bloquean):
+
+   ```mermaid
+   flowchart LR
+       PV["PC-Ventas<br/>VLAN 10"] -->|"llega"| WEB["Srv-Web<br/>DMZ"]
+       PI["PC-Invitados<br/>VLAN 20"] -->|"llega"| WEB
+       PI -. "INVITADOS-IN: deny 20 → 10" .-> PV
+       WEB -. "DMZ-IN: la DMZ no inicia" .-> PV
+       PV -. "el eco llega, la respuesta<br/>20 → 10 se descarta" .-> PI
+   ```
 
 4. Prueba el servidor web desde la LAN: en PC-Ventas, `Desktop` → `Web Browser`, escribe
    `http://10.0.99.10`. Debe cargar la página por defecto del servidor. Eso demuestra que
@@ -327,6 +363,22 @@ Tiempo estimado: 20 minutos. Capturas tu propio tráfico DHCP.
    arriba o conéctate a una red distinta (por ejemplo, otra red Wi-Fi), donde el cliente
    no tiene concesión previa.
 
+   Qué comando usar y qué esperar en la captura:
+
+   ```mermaid
+   flowchart TD
+       A["systemctl is-active NetworkManager systemd-networkd"] --> B{"¿Qué servicio está active?"}
+       B -->|NetworkManager| C["nmcli device disconnect y connect"]
+       B -->|systemd-networkd| D["networkctl reconfigure"]
+       B -->|"ninguno: dhclient gestiona la interfaz"| E["dhclient -r y dhclient"]
+       C --> F{"¿El cliente recordaba<br/>su concesión anterior?"}
+       D --> F
+       E --> F
+       F -->|no| G["DORA completo: 4 mensajes"]
+       F -->|sí| H["Solo Request y ACK"]
+       H --> I["Para el DORA completo: otra opción<br/>de arriba u otra red Wi-Fi"]
+   ```
+
 4. Vuelve a la captura. Busca los cuatro mensajes en orden. Con `-v`, `tcpdump` etiqueta
    cada uno (`Discover`, `Offer`, `Request`, `ACK`):
    ```
@@ -400,6 +452,21 @@ minutos. Usa un dominio tuyo o uno muy conocido como `wikipedia.org`.
    Lee la salida de arriba hacia abajo: primero los servidores raíz que te mandan al
    TLD, luego los de `.org` que te mandan al autoritativo, y por último el autoritativo
    que da la IP. Son los pasos 2, 3 y 4 de la resolución.
+
+   ```mermaid
+   sequenceDiagram
+       participant D as dig (tu equipo)
+       participant R as Servidor raíz
+       participant O as Servidores de .org
+       participant A as Autoritativo de wikipedia.org
+       Note over D: primero pide a tu resolver la lista de servidores raíz
+       D->>R: ¿wikipedia.org?
+       R-->>D: no lo sé: pregunta a los de .org (NS)
+       D->>O: ¿wikipedia.org?
+       O-->>D: no lo sé: pregunta al autoritativo (NS)
+       D->>A: ¿wikipedia.org A?
+       A-->>D: registro A con la IP y su TTL
+   ```
 
 3. Consulta el servidor de correo (registro MX), que incluye una prioridad.
    ```bash
@@ -533,6 +600,19 @@ instalado. Tiempo estimado: 15 minutos.
    Esos son los que un atacante de la red no puede tocar directamente (aunque sí podría
    intentarlo con técnicas como SSRF desde dentro del propio equipo).
 
+   Lo que acabas de leer, en un solo mapa de tu equipo:
+
+   ```mermaid
+   flowchart LR
+       subgraph H["Tu equipo"]
+           S1["Servicio en 127.0.0.1:puerto<br/>(solo local)"] --- LO["lo<br/>127.0.0.1"]
+           S2["Servicio en 0.0.0.0:puerto<br/>(todas las interfaces)"] --- LO
+           S2 --- ETH["Interfaz activa<br/>IP de tu red"]
+       end
+       ETH -->|"ip route: default via"| GW["Gateway<br/>su MAC sale en ip neigh"]
+       GW --> I["Internet: sus equipos no<br/>aparecen en la caché ARP"]
+   ```
+
 ### Resultado esperado
 
 Tres datos anotados de tu máquina: la IP de tu gateway, su MAC según la caché ARP, y la
@@ -621,6 +701,19 @@ Linux. Tiempo estimado: 30 minutos.
 5. Compara cada línea con tus cálculos a mano. Donde no cuadren, vuelve al número mágico
    de esa dirección: casi siempre el error está en elegir mal el octeto interesante o el
    múltiplo del bloque.
+
+   ```mermaid
+   flowchart TD
+       A["Dirección con prefijo"] --> B["A mano: octeto interesante,<br/>bloque = 256 − máscara"]
+       B --> C["Red, broadcast y 2^(32−prefijo) − 2 hosts"]
+       C --> D["python3 ipaddress"]
+       D --> E{"¿Coinciden?"}
+       E -->|sí| F["Siguiente dirección"]
+       E -->|no| G{"¿Elegiste bien<br/>el octeto interesante?"}
+       G -->|no| B
+       G -->|sí| H["Revisa el múltiplo del bloque<br/>que no supera la IP"]
+       H --> C
+   ```
 
 ### Resultado esperado
 
@@ -750,6 +843,23 @@ ajena es un barrido de hosts.
    ```
    Asigna a cada línea su tipo: echo request = 8, echo reply = 0, time exceeded = 11,
    udp port unreachable = 3 (código 3). Detén la captura con `Ctrl+C`.
+
+   De dónde sale cada tipo ICMP del paso 6:
+
+   ```mermaid
+   sequenceDiagram
+       participant T as Tu equipo
+       participant G as Gateway
+       participant C as 1.1.1.1
+       participant L as lo, puerto UDP 9 (sin programa)
+       T->>C: ping: tipo 8 echo request
+       C-->>T: tipo 0 echo reply
+       T->>G: ping -t 1: tipo 8 con TTL 1
+       Note over G: el TTL llega a 0 aquí
+       G-->>T: tipo 11 time exceeded
+       T->>L: datagrama UDP a 127.0.0.1:9
+       L-->>T: tipo 3 código 3: port unreachable
+   ```
 
 8. Comprueba el límite de tamaño que vigila PMTUD, con la marca DF puesta.
    ```bash
