@@ -59,6 +59,20 @@ La **edición 2021 del OWASP Top 10** es la versión publicada en septiembre de 
 9. **A09:2021 Security Logging and Monitoring Failures.** No se registran los eventos importantes (logins fallidos, cambios de permisos) o nadie los mira. Sin registros, un intruso puede estar meses dentro sin que nadie lo note. Mitigación: registrar eventos de seguridad con hora y usuario, enviarlos a un SIEM, alertas con responsable (ver [`14-deteccion-y-monitoreo`](../14-deteccion-y-monitoreo/)).
 10. **A10:2021 Server-Side Request Forgery (SSRF).** La aplicación descarga una URL que le da el usuario (por ejemplo, "importar imagen desde URL") y el atacante le da una URL interna. Como la petición sale del servidor, llega a sitios que desde Internet no se ven: el servicio de metadatos de la nube en `169.254.169.254`, que entrega credenciales temporales, o paneles de administración internos. Entró por la encuesta, no por los datos. Mitigación: lista blanca de destinos, bloquear rangos privados y de enlace local tras resolver el DNS, IMDSv2 en AWS (ver [`17-cloud`](../17-cloud/)).
 
+SSRF, el servidor como trampolín hacia lo que no se ve desde Internet:
+
+```mermaid
+sequenceDiagram
+    participant A as Atacante (Internet)
+    participant APP as Aplicación ("importar desde URL")
+    participant MD as Metadatos de la nube (169.254.169.254)
+    A->>APP: URL a importar = http://169.254.169.254/...
+    APP->>MD: GET desde dentro de la red
+    MD-->>APP: credenciales temporales
+    APP-->>A: devuelve el contenido "importado"
+    Note over A,MD: desde Internet el atacante nunca podría llegar a MD directamente
+```
+
 Analogía de toda la lista: A01 es un portero que deja pasar a cualquiera con pulsera sin mirar de qué fiesta es; A03 es un empleado que lee en voz alta, como orden, todo lo que pone en una nota que le pasó un cliente; A05 es un edificio bueno con la puerta trasera abierta; A06 es una cerradura de un modelo que todos saben abrir.
 
 > [!TIP]
@@ -91,6 +105,15 @@ La **edición 2025 del OWASP Top 10** es la octava entrega de la lista, construi
 8. **A08:2025 Software or Data Integrity Failures.** Mismo puesto. Ahora se centra en la verificación de integridad a nivel de artefactos y datos concretos, mientras que A03 cubre la cadena entera.
 9. **A09:2025 Security Logging and Alerting Failures.** Mismo puesto; cambia "Monitoring" por "Alerting" para insistir en que un buen log sin alerta casi no sirve.
 10. **A10:2025 Mishandling of Exceptional Conditions.** Categoría nueva, con 24 CWE: errores mal manejados, fallos lógicos y, sobre todo, sistemas que fallan abiertos. Ejemplo: si el servicio que valida permisos no responde y el código atrapa la excepción y continúa como si la respuesta fuera "permitido", cualquier caída se convierte en acceso libre. Mitigación: fail closed (ante la duda, denegar), manejar cada excepción de forma explícita, no mostrar trazas al usuario.
+
+```mermaid
+flowchart TD
+    R["Petición a un recurso"] --> C["Consultar al servicio de permisos"]
+    C --> Q{"¿Respondió?"}
+    Q -->|"sí"| D["Aplicar su respuesta:<br/>permitir o denegar"]
+    Q -->|"no: excepción"| FO["Fail open: tratar como permitido<br/>(cualquier caída = acceso libre)"]
+    Q -->|"no: excepción"| FC["Fail closed: registrar la causa<br/>y denegar"]
+```
 
 Analogía: es la misma lista de causas de incendio publicada cuatro años después. Algunas causas bajan porque la gente aprendió (los detectores de humo se hicieron obligatorios), otras suben porque aparecieron aparatos nuevos en las casas.
 
@@ -142,6 +165,23 @@ Cómo funciona, por la capa que agota:
 - Volumétrico (capa 3/4): llena el enlace. Se mide en Gbps. Si tu conexión es de 10 Gbps y llegan 100 Gbps de basura, el tráfico bueno no cabe, da igual lo potente que sea el servidor. Variante clave: la **amplificación**, donde el atacante manda consultas pequeñas a servidores públicos (DNS, NTP, memcached) con la IP de origen falsificada como la de la víctima; las respuestas, mucho más grandes, llegan todas a la víctima. CISA documenta factores de hasta 28-54 veces en DNS, 556 en NTP y más de 10 000 en memcached.
 - De protocolo (capa 4): agota tablas de estado. Se mide en paquetes por segundo. El SYN flood manda miles de `SYN` y nunca completa el handshake; el servidor guarda cada conexión medio abierta en la cola hasta que se llena (ver el handshake en [`04-protocolos-y-puertos`](../04-protocolos-y-puertos/)).
 - De aplicación (capa 7): peticiones HTTP que parecen normales pero son caras, como búsquedas complejas o generación de PDF. Se mide en peticiones por segundo. Con 5000 rps a una búsqueda que tarda 200 ms en la base de datos, el servidor queda saturado aunque el ancho de banda esté casi vacío.
+
+Cómo se llena la cola en un SYN flood:
+
+```mermaid
+sequenceDiagram
+    participant A as Atacante
+    participant S as Servidor
+    participant C as Cliente legítimo
+    A->>S: SYN
+    S-->>A: SYN-ACK (guarda la conexión en SYN-RECV)
+    A->>S: SYN
+    S-->>A: SYN-ACK (otra entrada en la cola)
+    Note over A,S: el ACK final nunca llega, miles de veces
+    Note over S: cola de conexiones medio abiertas llena
+    C->>S: SYN
+    Note over S,C: no cabe en la cola, el cliente no puede conectar
+```
 
 ```
 DoS                          DDoS (con amplificación)
@@ -226,6 +266,19 @@ El **CSRF** (Cross-Site Request Forgery) es un ataque que hace que el navegador 
 
 Por qué funciona: el servidor reconoce al usuario por la cookie de sesión, y el navegador la manda en toda petición a ese dominio, venga de donde venga el clic o el formulario. Si la acción "transferir dinero" solo exige la cookie, cualquier página que el usuario visite puede disparar esa petición. El atacante no ve la respuesta (la same-origin policy lo impide); solo necesita que la acción ocurra.
 
+```mermaid
+sequenceDiagram
+    participant U as Navegador del usuario
+    participant B as banco.com
+    participant F as foro-malicioso.com
+    U->>B: login
+    B-->>U: Set-Cookie: session=... (sin SameSite)
+    U->>F: visita el foro
+    F-->>U: página con formulario oculto hacia banco.com/transfer
+    U->>B: POST /transfer + cookie de sesión (adjunta sola)
+    B-->>U: transferencia hecha (el foro no puede leer esta respuesta)
+```
+
 ```
 1. Usuario inicia sesión en banco.com        → navegador guarda cookie de sesión
 2. Usuario visita foro-malicioso.com         → la página contiene un formulario oculto
@@ -294,6 +347,22 @@ Tipos que pide el examen:
 - ARP spoofing (ARP poisoning): se envían respuestas ARP no pedidas que asocian la IP de otro (normalmente el gateway) con la MAC del atacante. Es la base del MITM en LAN.
 - Email spoofing: se falsifica el remitente. Se combate con SPF (qué servidores pueden enviar por el dominio), DKIM (firma criptográfica del mensaje) y DMARC (política de qué hacer si fallan).
 - Caller ID spoofing: se falsifica el número que aparece en una llamada (vishing, ver [`10-ataques-y-amenazas`](../10-ataques-y-amenazas/)).
+
+Cómo el ARP spoofing pone al atacante en medio (base del MITM en LAN):
+
+```mermaid
+sequenceDiagram
+    participant V as Víctima
+    participant A as Atacante (192.168.1.50)
+    participant G as Gateway (192.168.1.1)
+    A->>V: respuesta ARP no pedida: 192.168.1.1 tiene la MAC del atacante
+    A->>G: respuesta ARP no pedida: la IP de la víctima tiene la MAC del atacante
+    Note over V,G: ambas tablas ARP quedan envenenadas
+    V->>A: tráfico hacia Internet
+    A->>G: lo reenvía tras leerlo o cambiarlo
+    G->>A: respuestas
+    A->>V: las reenvía
+```
 
 Analogía: es escribir en el sobre la dirección del remitente que te dé la gana; Correos lo entrega igual, porque nadie comprueba que viva ahí.
 
@@ -377,6 +446,20 @@ def login(db, username, password_hash):
 
 En la versión corregida el motor compila la sentencia primero y recibe los valores después, como datos. Aunque el usuario escriba comillas, el motor busca literalmente un usuario con ese nombre raro y no lo encuentra.
 
+```mermaid
+flowchart LR
+    subgraph VUL["Concatenación (vulnerable)"]
+        P1["SQL del programador"] --> T1["Un único texto:<br/>código + datos mezclados"]
+        U1["Entrada del usuario<br/>con una comilla"] --> T1
+        T1 --> M1["El motor analiza todo junto:<br/>la comilla cierra la cadena<br/>y el resto se lee como SQL"]
+    end
+    subgraph FIX["Consulta parametrizada"]
+        P2["SQL fijo con %s"] --> M2["1. El motor compila<br/>la sentencia"]
+        U2["Entrada del usuario"] -->|"viaja aparte"| V2["2. Recibe los valores<br/>solo como datos"]
+        M2 --> V2
+    end
+```
+
 Señal en los logs de una SQLi en curso: muchos errores de sintaxis SQL seguidos desde una misma IP.
 
 ```
@@ -413,6 +496,21 @@ Los tres tipos, según dónde vive el dato malicioso:
 Reflected:  atacante ──enlace──► víctima ──petición con dato──► servidor ──lo devuelve──► navegador lo ejecuta
 Stored:     atacante ──comentario──► servidor (BD)    víctima ──visita──► servidor ──página con dato──► ejecuta
 DOM:        víctima abre URL#dato ──► JS del sitio lee location.hash ──► innerHTML ──► ejecuta (servidor no ve nada)
+```
+
+El caso más peligroso, stored XSS, paso a paso:
+
+```mermaid
+sequenceDiagram
+    participant A as Atacante
+    participant S as Servidor (BD)
+    participant V as Navegador de la víctima
+    A->>S: publica un comentario con un script
+    S->>S: lo guarda sin codificar
+    V->>S: visita la página de comentarios
+    S-->>V: página con el script dentro
+    Note over V: lo ejecuta con los permisos del sitio
+    V->>A: envía la cookie (si no es HttpOnly) o datos de la página
 ```
 
 Analogía: es como un tablón de anuncios de un edificio donde el portero pega todo lo que le dan sin leerlo. Si alguien entrega un papel que dice "a todos los vecinos: dejen las llaves en portería", los vecinos lo obedecen porque está en el tablón oficial.
@@ -581,6 +679,22 @@ El **DNS Poisoning** (DNS cache poisoning o DNS spoofing) es un ataque que mete 
 
 Por qué funciona: DNS clásico viaja por UDP 53 sin cifrar ni firmar. Un resolver que hace una pregunta acepta la primera respuesta que coincida en tres cosas: la pregunta, el puerto UDP de origen que usó y un identificador de transacción (TXID) de 16 bits. Si el atacante logra enviar una respuesta falsa que coincida antes de que llegue la verdadera, la caché queda envenenada.
 
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant R as Resolver
+    participant AU as Servidor autoritativo
+    participant X as Atacante
+    C->>R: ¿IP de banco.com?
+    R->>AU: consulta (TXID y puerto de origen)
+    X->>R: inunda de respuestas falsas probando TXID y puerto
+    Note over R: una acierta pregunta, puerto y TXID
+    R->>R: caché: banco.com → 198.51.100.66
+    AU-->>R: respuesta real (llega tarde, se descarta)
+    R-->>C: 198.51.100.66
+    Note over C,R: todos los clientes reciben la IP falsa durante el TTL
+```
+
 Cómo se ataca la caché:
 
 - Antes de 2008 el puerto de origen era fijo, así que bastaba con acertar el TXID: 65 536 valores posibles, y el atacante podía mandar miles de respuestas por segundo. Dan Kaminsky mostró en 2008 cómo repetir el intento sin esperar a que caduque el TTL, preguntando por subdominios aleatorios inexistentes.
@@ -632,6 +746,22 @@ Para qué se usa:
 - Denegación de servicio: repetir deauths sin parar deja a los clientes sin red.
 - Forzar la reconexión para capturar el handshake de 4 vías de WPA2-Personal, que luego se ataca offline con diccionario si la contraseña es débil.
 - Empujar a los clientes hacia un Evil Twin.
+
+```mermaid
+sequenceDiagram
+    participant AP as AP real (BSSID aa:aa)
+    participant C as Cliente
+    participant X as Atacante
+    participant ET as Evil Twin (mismo SSID)
+    X->>C: trama deauth falsa con origen aa:aa (sin firma)
+    Note over C: no puede comprobarla y se desconecta
+    alt reconecta al AP real
+        C->>AP: handshake de 4 vías WPA2
+        X-->>X: lo captura para atacarlo offline
+    else reconecta al gemelo con más señal
+        C->>ET: se asocia al Evil Twin
+    end
+```
 
 ```
 AP (BSSID aa:aa)  ◄──── conectado ────  cliente
@@ -746,6 +876,19 @@ Defensa principal    802.1X/NAC + WIPS                WPA-Enterprise con validac
 ```
 
 La fila "Dirección" es la que decide la respuesta.
+
+```mermaid
+flowchart LR
+    subgraph ORG["Red de la organización"]
+        FW["Firewall"] --- SW["Switch corporativo"]
+        SW --- PC["PCs"]
+        SW --- AP["AP legítimo<br/>Corp_WiFi"]
+        SW --- R["Rogue AP<br/>(puerto sin 802.1X)"]
+    end
+    EXT["Intruso en el aparcamiento"] -->|"Rogue AP: de fuera hacia dentro"| R
+    U["Usuario de la empresa"] -->|"Evil Twin: el usuario<br/>hacia el atacante"| ET["Evil Twin<br/>copia Corp_WiFi"]
+    ET --> ATK["Red del atacante"]
+```
 
 Analogía: el Rogue AP es una ventana del sótano abierta en tu casa; el Evil Twin es una casa falsa con tu dirección pintada en la puerta para que tus invitados entren ahí.
 
@@ -906,6 +1049,15 @@ Por qué funciona: el nombre viene del protocolo NTLM, donde el cliente responde
 4. Repite en cada servidor donde esa cuenta sea admin  ──► movimiento lateral hasta el servidor FreeIPA
 ```
 
+```mermaid
+flowchart LR
+    W["Servidor web<br/>10.0.20.57<br/>(RCE + root)"] --> T["Lee /tmp/krb5cc_1105<br/>y el socket del ssh-agent<br/>de un admin conectado"]
+    T -->|"ticket o agente robado,<br/>sin conocer la contraseña"| DB["db01"]
+    T --> FS["files01"]
+    T --> MAS["... 40 servidores"]
+    MAS --> IPA["Servidor FreeIPA"]
+```
+
 Analogía: es como si la cerradura de un hotel no leyera la tarjeta sino una fotocopia del código magnético; quien fotocopie la banda de cualquier tarjeta abre las mismas puertas que su dueño, sin saber nunca el número de habitación.
 
 Ejemplo de detección en los logs de Linux reunidos en el servidor central (rsyslog): la misma cuenta privilegiada entra por SSH con Kerberos o con llave desde un servidor donde nunca trabaja, hacia muchos servidores en minutos.
@@ -958,6 +1110,15 @@ def read_report(filename):
 ```
 
 La corrección no busca `../` en el texto (hay codificaciones como `%2e%2e%2f` o `..\` que esquivan esos filtros): resuelve la ruta final y comprueba que sigue dentro de la carpeta. Mejor todavía, no aceptar nombres de archivo: aceptar un ID y buscarlo en una tabla (`report_id=42` → `informe-q3.pdf`).
+
+```mermaid
+flowchart TD
+    I["filename del usuario<br/>../../../etc/passwd"] --> J["BASE_DIR / filename"]
+    J --> R["resolve(): ruta final real<br/>/etc/passwd"]
+    R --> Q{"¿Sigue dentro de<br/>/srv/app/reports?"}
+    Q -->|sí| OK["Leer el archivo"]
+    Q -->|no| NO["PermissionError<br/>(403)"]
+```
 
 Señal en el log del servidor web:
 

@@ -25,6 +25,18 @@ arreglar el bug, no explotarlo. 40 minutos.
 - Debian/Ubuntu: `sudo apt install gcc` (ASan viene con el compilador)
 - Arch: `sudo pacman -S gcc`
 
+El mismo ciclo se repite cuatro veces en tu equipo, una por cada fuente:
+
+```mermaid
+flowchart LR
+    SRC["*_vuln.c / *_fixed.c"] --> GCC["gcc -fsanitize=address -g"]
+    GCC --> BIN["Binario instrumentado<br/>(ASan + LeakSanitizer)"]
+    BIN --> RUN["Ejecutar con la entrada<br/>larga o inválida"]
+    RUN --> Q{"¿ASan informa?"}
+    Q -->|"sí (versiones _vuln)"| REP["Informe con archivo:línea<br/>de la operación culpable"]
+    Q -->|"no (versiones _fixed)"| OK["Salida limpia y código<br/>de salida controlado"]
+```
+
 ### Pasos (desbordamiento de pila: greet)
 
 1. Guarda la versión vulnerable de la nota dentro de un programa completo que puedas ejecutar.
@@ -82,6 +94,18 @@ arreglar el bug, no explotarlo. 40 minutos.
        #2 ... in main greet_vuln.c:13
    ```
    La línea 7 (`strcpy`) es la culpable: escribió 201 bytes en un búfer de 64.
+
+   Qué pasa con la entrada en cada versión:
+
+   ```mermaid
+   flowchart TD
+       IN["argv[1]: 200 A + el \0 final = 201 bytes"] --> V["greet_vuln: strcpy(buf, name)"]
+       IN --> F["greet_fixed: snprintf(buf, sizeof buf, ...)"]
+       V --> B1["buf[64] se llena y la copia<br/>sigue 137 bytes más allá"]
+       B1 --> A1["ASan ve la escritura fuera del búfer:<br/>stack-buffer-overflow en greet_vuln.c:7"]
+       F --> B2["Escribe como máximo 64 bytes;<br/>n = 200 ≥ sizeof buf"]
+       B2 --> A2["return -1: rechazado,<br/>código de salida 1"]
+   ```
 
 3. Guarda la versión corregida de la nota en `greet_fixed.c` (copia acotada y rechazo si no cabe)
    y comprueba que con la misma entrada larga ya no desborda, sino que rechaza.
@@ -201,6 +225,17 @@ arreglar el bug, no explotarlo. 40 minutos.
    100 peticiones de 8192 bytes cada una = 819200 bytes perdidos, señalando el `malloc` de la
    línea 12 en la ruta de error.
 
+   Las rutas de salida de `handle` con `len = 8192`, antes y después de corregir:
+
+   ```mermaid
+   flowchart TD
+       M["malloc(8192)"] --> N{"¿body == NULL?"}
+       N -->|sí| E0["return -1<br/>(nada que liberar)"]
+       N -->|no| V{"¿is_valid_size(8192)?<br/>8192 > 4096: no"}
+       V -->|"handle_vuln"| LEAK["return -1 sin free:<br/>8192 bytes perdidos por llamada"]
+       V -->|"handle_fixed"| FREE["rc sigue en -1, free(body),<br/>return rc: sin fuga"]
+   ```
+
 6. Guarda la versión corregida de la nota en `handle_fixed.c` (un único punto de salida que
    siempre libera) y comprueba que sale sin fugas.
    ```c
@@ -299,6 +334,19 @@ nota.
    SW1 y SW2 entre sí por `GigabitEthernet0/1` con un cable de cobre cruzado, y cada PC a un
    `FastEthernet` de su switch con cable directo.
 
+   Topología simulada en Packet Tracer, ya con la configuración final del paso 4:
+
+   ```mermaid
+   flowchart LR
+       PC1["PC1<br/>VLAN 10"] ---|"Fa0/x acceso"| SW1["SW1 (2960)"]
+       PC2["PC2"] ---|"Fa0/x acceso"| SW1
+       SW1 ---|"Gi0/1 ↔ Gi0/1: trunk estático 802.1Q<br/>native 999, permitidas 10,20"| SW2["SW2 (2960)"]
+       SW2 ---|"Fa0/x acceso"| PC3["PC3<br/>VLAN 10"]
+       SW2 ---|"Fa0/x acceso"| PC4["PC4"]
+   ```
+
+   (El rango `Fa0/1 - 24` del paso 4 deja todos los puertos de PC en la VLAN 10; si quieres PCs en la VLAN 20, cambia después su `switchport access vlan`.)
+
 2. Crea las VLAN 10 y 20 en ambos switches. Abre la CLI de SW1 (pestaña CLI del switch) y escribe:
    ```
    enable
@@ -396,6 +444,18 @@ nota.
    En cada `FastEthernet` de PC debe verse `Administrative Mode: static access` y
    `Negotiation of Trunking: Off`. Ningún puerto de acceso debe salir en `show interfaces trunk`.
 
+   Por qué cambia el resultado entre el paso 3 y el paso 4:
+
+   ```mermaid
+   flowchart TD
+       P["Puerto del switch"] --> M{"¿Modo configurado?"}
+       M -->|"dynamic desirable o auto<br/>(paso 3)"| D{"¿El otro extremo habla DTP<br/>y acepta trunk?"}
+       D -->|sí| T["Se forma un trunk:<br/>un equipo atacante recibiría todas las VLAN"]
+       D -->|no| A1["Queda en acceso"]
+       M -->|"access + nonegotiate<br/>(paso 4)"| A2["Acceso fijo, no envía DTP:<br/>el switch spoofing falla"]
+       M -->|"trunk + nonegotiate<br/>(paso 4, Gi0/1)"| T2["Trunk estático, Mode on<br/>native 999"]
+   ```
+
 ### Resultado esperado
 
 Una topología de dos switches con VLAN 10 y 20, un único trunk estático en Gi0/1 con native VLAN
@@ -432,6 +492,25 @@ ataca nada. 20 minutos.
 
 - Debian/Ubuntu: `sudo apt install dnsutils`
 - Arch: `sudo pacman -S bind` (trae `dig`)
+
+Quién habla con quién: `dig` corre en tu equipo y solo pregunta al resolver público, que es quien valida:
+
+```mermaid
+sequenceDiagram
+    participant D as dig (tu equipo)
+    participant R as Resolver validador 1.1.1.1
+    participant AU as Servidores autoritativos
+    D->>R: consulta A con bit DO (+dnssec)
+    R->>AU: registros + RRSIG + DNSKEY de la cadena
+    AU-->>R: respuestas firmadas
+    alt firmas válidas (cloudflare.com)
+        R-->>D: NOERROR, flag ad, A + RRSIG
+    else firmas inválidas (dnssec-failed.org)
+        R-->>D: SERVFAIL, sin IP
+    else consulta con +cd (sin validar)
+        R-->>D: NOERROR con la IP aunque las firmas fallen
+    end
+```
 
 ### Pasos
 
@@ -495,6 +574,18 @@ Dos respuestas que se comparan directas: `cloudflare.com` con bandera `ad` y su 
 `dnssec-failed.org` con `SERVFAIL` y sin IP. La conclusión: un resolver validador convierte una
 firma que no cuadra en un `SERVFAIL`, cortando el envenenamiento de caché en lugar de servir la
 dirección falsa.
+
+Cómo leer cada salida de `dig`:
+
+```mermaid
+flowchart TD
+    S{"¿status en la cabecera?"} -->|SERVFAIL| F["Firmas inválidas y el resolver valida:<br/>no entrega la IP (paso 3)"]
+    S -->|NOERROR| Q{"¿flags incluye ad?"}
+    Q -->|sí| OK["Respuesta validada con DNSSEC (pasos 1 y 2)"]
+    Q -->|no| C{"¿Usaste +cd?"}
+    C -->|sí| NV["Validación desactivada a petición:<br/>la IP llega aunque sea falsa (paso 4)"]
+    C -->|no| NS["Dominio sin firmar o resolver<br/>que no valida: sin garantía"]
+```
 
 ### Comprueba que lo lograste
 
