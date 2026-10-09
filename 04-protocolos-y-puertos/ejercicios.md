@@ -18,6 +18,19 @@ Instalación:
 
 Para capturar y abrir la captura como usuario normal (sin root) debes estar en el grupo `wireshark`: `sudo usermod -aG wireshark $USER` y luego vuelve a iniciar sesión. En Debian/Ubuntu, además, `sudo dpkg-reconfigure wireshark-common` habilita la captura sin root. Si solo usas `tcpdump` con `sudo` para capturar y Wireshark/`tshark` para leer el archivo, basta con cambiar el dueño del `.pcap` (paso 5).
 
+Montaje del ejercicio: todo pasa en tu equipo salvo el servidor de `example.com`:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo"]
+        T2["Terminal 2:<br/>curl --resolve<br/>1ª: TLS 1.3<br/>2ª: --tls-max 1.2"] --> IF["Interfaz de salida ($IF)"]
+        T1["Terminal 1:<br/>tcpdump -w hs.pcap<br/>tcp port 443 and host $IP"] -. "copia los paquetes" .- IF
+        T1 --> PC[("hs.pcap")]
+        PC --> WS["Wireshark / tshark -r"]
+    end
+    IF ---|"dos conexiones TCP al 443"| EX["example.com ($IP)"]
+```
+
 ### Pasos
 
 1. Averigua por qué interfaz sale tu tráfico a internet y guárdala en una variable.
@@ -133,6 +146,16 @@ Para capturar y abrir la captura como usuario normal (sin root) debes estar en e
     - `tls.handshake.type == 11` → mensajes de handshake de tipo 11, Certificate (ver paso 8).
 
     Solo debe aparecer un paquete, el de la conexión 1 (TLS 1.2): ábrelo y verás la cadena de certificados con el nombre del sitio. En la conexión 0 (TLS 1.3) el mensaje Certificate existe pero va dentro de registros cifrados (`Application Data`), así que Wireshark no puede mostrarlo.
+
+    Cómo distinguir las dos conexiones:
+
+    ```mermaid
+    flowchart TD
+        A["ServerHello de cada conexión"] --> B{"¿Extensión supported_versions<br/>= 0x0304?"}
+        B -->|"sí (stream 0)"| C["TLS 1.3: Certificate cifrado,<br/>no sale con tls.handshake.type == 11"]
+        B -->|"no, solo Version 0x0303 (stream 1)"| D["TLS 1.2: Certificate en claro,<br/>sale con tls.handshake.type == 11"]
+    ```
+
 11. Mide el RTT del handshake TCP.
     ```bash
     tshark -r hs.pcap -2 -Y 'tcp.analysis.initial_rtt' -T fields -e tcp.stream -e tcp.analysis.initial_rtt | sort -u
@@ -145,6 +168,13 @@ Para capturar y abrir la captura como usuario normal (sin root) debes estar en e
     - `sort -u` → ordena las líneas y elimina las repetidas, porque cada paquete de la conexión repite el mismo valor.
 
     Es el tiempo entre tu SYN y el ACK final, en segundos (por ejemplo `0.098`). Multiplícalo por los RTT que cuesta cada versión (1 de TCP + 2 de TLS 1.2, o 1 + 1 de TLS 1.3) para estimar cuánto esperas antes del primer byte útil.
+
+    ```mermaid
+    flowchart LR
+        R["iRTT medido<br/>ej. 0.098 s"] --> A["TLS 1.3: 1 + 1 = 2 RTT<br/>≈ 0.196 s"]
+        R --> B["TLS 1.2: 1 + 2 = 3 RTT<br/>≈ 0.294 s"]
+    ```
+
 12. Revisa el cierre. Filtro en Wireshark:
     ```
     tcp.flags.fin == 1 || tcp.flags.reset == 1
@@ -154,6 +184,25 @@ Para capturar y abrir la captura como usuario normal (sin root) debes estar en e
     - `tcp.flags.reset == 1` → segmentos con el bit RST activo.
 
     Lo normal es ver un `[FIN, ACK]` de cada lado, cada uno confirmado por un `[ACK]` del otro: esos son los cuatro segmentos. Antes del FIN suele aparecer un registro TLS `Alert (close_notify)`, que es el cierre de TLS dentro del de TCP. Si en vez del segundo FIN ves un `[RST]`, uno de los dos lados cortó en seco sin esperar (es común en servidores con mucho tráfico); anótalo como diferencia frente al diagrama del README.
+
+    Lo que contiene `hs.pcap`, resumido:
+
+    ```mermaid
+    sequenceDiagram
+        participant C as Tu equipo (puerto efímero)
+        participant S as example.com:443
+        Note over C,S: tcp.stream 0: TLS 1.3
+        C->>S: SYN
+        S-->>C: SYN-ACK
+        C->>S: ACK
+        C->>S: ClientHello, SNI example.com
+        S-->>C: ServerHello (supported_versions 0x0304), lo demás cifrado
+        Note over C,S: close_notify y luego FIN y ACK de cada lado
+        Note over C,S: tcp.stream 1: TLS 1.2, mismo handshake TCP
+        C->>S: ClientHello, SNI example.com
+        S-->>C: ServerHello (Version 0x0303) y Certificate en claro
+        Note over C,S: close_notify y luego FIN y ACK de cada lado (o un RST)
+    ```
 
 ### Resultado esperado
 
@@ -236,6 +285,22 @@ Necesitas: tu equipo Linux (cualquier distribución trae `ss` en el paquete `ipr
 
    La última columna dice, por ejemplo, `users:(("cupsd",pid=812,fd=7))`. Anota el programa de cada puerto.
 5. Compara nombre y proceso. Si `/etc/services` dice `ipp` y el proceso es `cupsd` (el servidor de impresión), coinciden. Si un puerto con nombre conocido lo abre un programa que no esperas, márcalo: recuerda que el número de puerto es una convención, no una garantía.
+
+   ```mermaid
+   flowchart TD
+       A["Una línea de ss -tuln"] --> B{"¿Dirección de escucha?"}
+       B -->|"127.0.0.1 o [::1]"| L["Solo tu equipo"]
+       B -->|"0.0.0.0, [::] o *"| T["Cualquier red conectada"]
+       B -->|"IP concreta de tu LAN"| I["Solo esa interfaz"]
+       L --> N["Nombre en /etc/services"]
+       T --> N
+       I --> N
+       N --> P["Proceso en sudo ss -tulnp"]
+       P --> Q{"¿Nombre y proceso<br/>coinciden?"}
+       Q -->|sí| OK["Anotar en la tabla"]
+       Q -->|no| X["Marcar e investigar"]
+   ```
+
 6. Mira el rango de puertos efímeros de tu sistema, para saber qué números son "del lado cliente".
    ```bash
    cat /proc/sys/net/ipv4/ip_local_port_range
@@ -253,6 +318,19 @@ Necesitas: tu equipo Linux (cualquier distribución trae `ss` en el paquete `ipr
    - `state time-wait` → filtro de estado: solo sockets TCP en TIME_WAIT. Con este filtro desaparece la columna State.
 
    Cada línea es `Local Address:Port` y `Peer Address:Port`. El puerto local cae en el rango efímero del paso 6 y el remoto suele ser 443: tu equipo cerró primero la conexión y espera 60 s antes de liberar ese par de puertos.
+
+   ```mermaid
+   sequenceDiagram
+       participant E as Tu equipo (puerto efímero)
+       participant S as Servidor :443
+       E->>S: FIN (tu equipo cierra primero)
+       S-->>E: ACK
+       S-->>E: FIN
+       E->>S: ACK
+       Note over E: TIME_WAIT: aparece en ss -tan state time-wait
+       Note over E: a los 60 s se libera el par de puertos
+   ```
+
 8. Cuenta cuántas hay por destino, y repite al cabo de un minuto para ver que desaparecen solas.
    ```bash
    ss -Htan state time-wait | awk '{print $4}' | sort | uniq -c | sort -rn | head
@@ -342,6 +420,15 @@ Necesitas: un Linux con internet y `openssl` (viene instalado en casi todas las 
    Verify return code: 0 (ok)
    ```
    El 0 es la hoja (leaf). Comprueba que el `i:` de cada certificado es el `s:` del siguiente: así se sube la cadena. La raíz final la pone tu sistema (está en `/etc/ssl/certs`), no hace falta que el servidor la mande.
+
+   ```mermaid
+   flowchart TD
+       L["0 s: CN=example.com (hoja)<br/>i: Cloudflare TLS Issuing ECC CA 3"] -->|"su i: es el s: del siguiente"| M["1 s: Cloudflare TLS Issuing ECC CA 3<br/>i: SSL.com TLS Transit ECC CA R2"]
+       M --> N["Resto de la cadena"]
+       N --> R["Raíz de confianza:<br/>la pone tu sistema (/etc/ssl/certs)"]
+       R --> V["Verify return code: 0 (ok)"]
+   ```
+
 4. Extrae los campos clave del certificado hoja.
    ```bash
    openssl s_client -connect example.com:443 -servername example.com </dev/null 2>/dev/null \
@@ -407,6 +494,20 @@ Necesitas: un Linux con internet y `openssl` (viene instalado en casi todas las 
    - `-verify_hostname wrong.host.badssl.com` → además de la cadena, comprueba que ese nombre esté en el SAN; sin esta opción `s_client` no valida el nombre.
 
    Debe decir `Verification error: hostname mismatch`: el certificado es `*.badssl.com`, que cubre un solo nivel y no `wrong.host.badssl.com`.
+
+   Los tres errores de los pasos 6 a 8 y quién corta la conexión:
+
+   ```mermaid
+   flowchart LR
+       A["expired.badssl.com"] --> E1["certificate has expired"]
+       B["self-signed.badssl.com"] --> E2["self-signed certificate<br/>(subject = issuer)"]
+       C["wrong.host.badssl.com<br/>con -verify_hostname"] --> E3["hostname mismatch<br/>(*.badssl.com cubre un nivel)"]
+       E1 --> S{"¿Quién conecta?"}
+       E2 --> S
+       E3 --> S
+       S -->|"openssl s_client"| K["Informa el error y sigue"]
+       S -->|"navegador o curl"| X["Corta la conexión"]
+   ```
 
 ### Resultado esperado
 

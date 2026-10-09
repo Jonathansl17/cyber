@@ -73,6 +73,23 @@ VPN y voz:
 
 Ejemplo: abres el correo en el celular a las 8:00. El teléfono pide IP por DHCP, pregunta por DNS la IP de `mail.empresa.com`, sincroniza la hora por NTP, se conecta por IMAPS al puerto 993 para leer y por SMTP con STARTTLS al 587 para enviar. Seis protocolos en dos segundos, todos encima de TCP o UDP.
 
+```mermaid
+sequenceDiagram
+    participant T as Teléfono
+    participant D as Servidor DHCP
+    participant N as Servidor DNS
+    participant H as Servidor NTP
+    participant M as Servidor de correo
+    T->>D: DHCP, DORA (UDP 67/68)
+    D-->>T: IP, máscara, gateway y DNS
+    T->>N: DNS (UDP 53): ¿IP de mail.empresa.com?
+    N-->>T: IP del servidor de correo
+    T->>H: NTP (UDP 123): ¿qué hora es?
+    H-->>T: hora exacta
+    T->>M: IMAPS (TCP 993): leer
+    T->>M: SMTP + STARTTLS (TCP 587): enviar
+```
+
 ```
 Telnet → terminal remota en claro.
 SSH → terminal remota cifrada.
@@ -132,6 +149,16 @@ Los rangos los define IANA (la autoridad que registra números en internet):
 ```
 
 Una conexión siempre tiene dos puertos: el del servidor es fijo y conocido, el del cliente es efímero. Tu navegador conecta desde `192.168.1.10:51234` hacia `93.184.216.34:443`. Linux usa por defecto el rango efímero 32768-60999 (se ve en `/proc/sys/net/ipv4/ip_local_port_range`).
+
+```mermaid
+flowchart LR
+    C["Navegador<br/>192.168.1.10:51234<br/>(puerto efímero)"] -->|TCP| P443
+    subgraph SRV["Servidor 93.184.216.34"]
+        P22["22 → sshd"]
+        P80["80 → servidor web"]
+        P443["443 → servidor web (HTTPS)"]
+    end
+```
 
 Lista completa que piden Security+ y Network+, agrupada por función. Formato: `puerto/transporte  protocolo → uso`.
 
@@ -265,6 +292,14 @@ Servidor C       443/tcp → HTTPS          shell inverso de malware   no coinci
 
 La última columna es la que importa: por eso nmap tiene `-sV` (pregunta al servicio quién es) y los firewalls modernos inspeccionan el contenido (DPI, deep packet inspection) en vez de fiarse del número.
 
+```mermaid
+flowchart LR
+    M["Shell inversa de malware<br/>sale por 443/tcp"] --> F1{"Firewall por número:<br/>¿443 permitido?"}
+    F1 -->|sí| P["Pasa: el número parece HTTPS"]
+    M --> F2{"Firewall con DPI:<br/>¿el contenido es TLS real?"}
+    F2 -->|no| B["Bloqueado"]
+```
+
 Analogía: el número de apartamento dice dónde vive alguien, no quién abre la puerta. Mover SSH al 2222 reduce ruido de bots, pero no es seguridad: es solo cambiar el número del timbre.
 
 ```
@@ -392,6 +427,19 @@ Certificado hoja (leaf) de www.ejemplo.com  ← lo manda el servidor junto con l
 
 Cómo valida el cliente: comprueba cada firma subiendo hasta una raíz de su almacén de confianza, que la fecha actual esté dentro de la validez, que el nombre pedido esté en el SAN y que no esté revocado. Si algo falla, el navegador muestra la pantalla roja.
 
+```mermaid
+flowchart TD
+    A["Recibe certificado hoja + intermedia"] --> B{"¿Cada firma sube hasta una<br/>raíz del almacén de confianza?"}
+    B -->|no| X["Pantalla roja"]
+    B -->|sí| C{"¿Fecha actual dentro<br/>de la validez?"}
+    C -->|no| X
+    C -->|sí| D{"¿El nombre pedido<br/>está en el SAN?"}
+    D -->|no| X
+    D -->|sí| E{"¿Revocado?"}
+    E -->|sí| X
+    E -->|no| OK["Conexión de confianza"]
+```
+
 Revocación hoy: los dos mecanismos clásicos son la CRL (lista de certificados revocados que publica la CA) y OCSP (consulta en línea "¿sigue válido este certificado?"). OCSP está en retirada: filtra a la CA qué sitios visitas, añade latencia y los navegadores lo ignoraban si fallaba (soft-fail). Let's Encrypt dejó de operar OCSP en 2025 y volvió a publicar solo CRL. Los navegadores no consultan a la CA en cada conexión: Firefox usa CRLite (un resumen comprimido de todas las CRL que descarga periódicamente) y Chrome usa CRLSets (una lista curada de revocaciones importantes). La otra respuesta del sector es acortar la vida de los certificados (200 días en 2026, 47 en 2029, y Let's Encrypt ya ofrece certificados de unos 6 días), para que un certificado comprometido deje de servir pronto aunque nadie lo revoque.
 
 Tipos según cuánto se verificó y cuánto cubre:
@@ -448,6 +496,23 @@ Cómo funciona por dentro (RFC 4251-4254), en tres capas:
 
 TOFU (trust on first use): la primera vez que conectas, el cliente muestra la huella de la host key y pregunta si confías. Si la aceptas, queda en `~/.ssh/known_hosts`; si un día cambia, SSH grita "REMOTE HOST IDENTIFICATION HAS CHANGED", que puede ser una reinstalación o un ataque de intermediario.
 
+Las tres capas en una conexión:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente ssh
+    participant S as Servidor sshd (22/tcp)
+    C->>S: versión SSH-2.0
+    S-->>C: versión SSH-2.0-OpenSSH_9.8
+    C->>S: algoritmos y parte pública DH
+    S-->>C: parte pública DH + host key
+    Note over C: compara la host key con known_hosts (TOFU)
+    Note over C,S: 1. Transport: desde aquí todo va cifrado
+    C->>S: 2. User auth: firma un reto con la clave privada
+    S-->>C: firma válida según authorized_keys
+    C->>S: 3. Connection: canales de shell, SFTP o túnel
+```
+
 Ejemplo: generar una clave y conectar.
 
 ```
@@ -468,6 +533,15 @@ Túneles (port forwarding), un uso que también abusan los atacantes para saltar
 ssh -L 8080:127.0.0.1:80 admin@srv     local: tu localhost:8080 llega al puerto 80 de srv
 ssh -R 9000:127.0.0.1:22 admin@vps     remoto: el puerto 9000 del vps llega a tu 22
 ssh -D 1080 admin@srv                  dinámico: proxy SOCKS que sale por srv
+```
+
+El túnel local `-L`, por dentro:
+
+```mermaid
+flowchart LR
+    B["Navegador en tu equipo<br/>localhost:8080"] --> C["Cliente ssh<br/>(escucha en 8080)"]
+    C ==>|"túnel cifrado, 22/tcp"| S["sshd en srv"]
+    S --> W["127.0.0.1:80 de srv<br/>(servidor web)"]
 ```
 
 Hardening básico en `/etc/ssh/sshd_config`: `PasswordAuthentication no`, `PermitRootLogin no`, solo claves ed25519 o RSA de 3072 bits o más, y `fail2ban` contra fuerza bruta. Se amplía en [`13-defensa-y-hardening`](../13-defensa-y-hardening/).
@@ -527,6 +601,21 @@ Pasivo:  cliente ──(21)──▶ servidor     "PASV" → "227 Entering Passi
 
 En `PORT 192,168,1,10,195,80` el puerto se calcula 195 × 256 + 80 = 50000.
 
+```mermaid
+sequenceDiagram
+    participant C as Cliente 192.168.1.10
+    participant N as Firewall/NAT del cliente
+    participant S as Servidor FTP
+    Note over C,S: Modo activo
+    C->>S: control 21: PORT 192,168,1,10,195,80
+    S->>N: datos desde el 20 hacia el 50000 del cliente
+    Note over N: conexión entrante no pedida: bloqueada
+    Note over C,S: Modo pasivo
+    C->>S: control 21: PASV
+    S-->>C: 227 Entering Passive Mode (...,197,20)
+    C->>S: el cliente abre los datos hacia el 50452
+```
+
 Ejemplo: lo que ve un sniffer en la misma red cuando alguien entra por FTP.
 
 ```
@@ -580,6 +669,17 @@ FTP → archivos en claro, 20/21.
 ### HTTP / HTTPS
 
 **HTTP** (HyperText Transfer Protocol) es un protocolo de petición-respuesta sin estado, sobre TCP 80, con el que un cliente pide recursos a un servidor web; **HTTPS** es exactamente el mismo HTTP viajando dentro de un túnel TLS, en el puerto 443. "Sin estado" significa que cada petición es independiente: el servidor no recuerda la anterior, y por eso existen las cookies, que el navegador devuelve en cada petición para que el servidor lo reconozca.
+
+```mermaid
+sequenceDiagram
+    participant N as Navegador
+    participant S as Servidor web
+    N->>S: POST /login (usuario y contraseña)
+    S-->>N: 200 OK + Set-Cookie: session=4f9a2c
+    Note over S: no recuerda la petición anterior
+    N->>S: GET /perfil + Cookie: session=4f9a2c
+    S-->>N: 200 OK: lo reconoce por la cookie
+```
 
 Analogía: HTTP es pedir en una ventanilla con un formulario: método (qué quieres hacer), ruta (sobre qué), encabezados (datos extra) y opcionalmente un cuerpo. La ventanilla responde con un código y el contenido, y olvida quién eras.
 
@@ -651,6 +751,22 @@ Dos formas de activarlo:
 
 - TLS implícito: el puerto ya es TLS desde el primer byte (443, 465, 636, 993, 995).
 - TLS explícito o STARTTLS: la conexión empieza en claro en el puerto normal (25, 587, 143, 389) y el cliente pide subir a TLS con un comando. Riesgo: un atacante en medio puede borrar la oferta de STARTTLS (ataque de downgrade/STRIPTLS) y el cliente sigue en claro si no exige cifrado.
+
+Ataque de downgrade sobre STARTTLS:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant A as Atacante en medio
+    participant S as Servidor SMTP (587)
+    C->>A: EHLO (en claro)
+    A->>S: EHLO
+    S-->>A: capacidades, incluida STARTTLS
+    A-->>C: capacidades sin STARTTLS
+    Note over C: no ve la oferta y, si no exige cifrado,<br/>sigue en claro
+    C->>A: AUTH y correo en claro
+    A->>S: los reenvía después de leerlos
+```
 
 Herramientas para auditar la configuración TLS de un servidor propio: `nmap --script ssl-enum-ciphers -p 443 host`, `testssl.sh` y SSL Labs (en "Recursos").
 
@@ -732,6 +848,25 @@ CLOSED
 
 TIME_WAIT: quien cierra primero espera dos veces el MSL (maximum segment lifetime, la vida máxima estimada de un paquete en la red; Linux usa un TIME_WAIT fijo de 60 segundos) para que un paquete rezagado de esta conexión no se confunda con una nueva que reutilice los mismos puertos. Muchas conexiones en TIME_WAIT en `ss` son normales en un servidor web con mucho tráfico; muchas en CLOSE_WAIT indican una aplicación que no está cerrando sus sockets.
 
+Todos los estados de apertura y cierre en un solo mapa (cliente por la izquierda, servidor por la derecha):
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLOSED
+    CLOSED --> SYN_SENT: cliente envía SYN
+    CLOSED --> LISTEN: servidor abre el puerto
+    LISTEN --> SYN_RECEIVED: recibe SYN, envía SYN-ACK
+    SYN_SENT --> ESTABLISHED: recibe SYN-ACK, envía ACK
+    SYN_RECEIVED --> ESTABLISHED: recibe ACK
+    ESTABLISHED --> FIN_WAIT_1: cierra primero, envía FIN
+    ESTABLISHED --> CLOSE_WAIT: recibe FIN, envía ACK
+    FIN_WAIT_1 --> FIN_WAIT_2: recibe ACK
+    FIN_WAIT_2 --> TIME_WAIT: recibe FIN, envía ACK
+    CLOSE_WAIT --> LAST_ACK: la aplicación cierra, envía FIN
+    LAST_ACK --> CLOSED: recibe ACK
+    TIME_WAIT --> CLOSED: pasan 2×MSL
+```
+
 Analogía: "ya no tengo más que decir" / "entendido" ... "yo tampoco" / "entendido, adiós". Un RST, en cambio, es colgar el teléfono a mitad de frase: no hay cuatro pasos ni TIME_WAIT. Los firewalls y los IPS usan RST para matar conexiones.
 
 ```
@@ -764,6 +899,23 @@ Total HTTPS      —                    1 + 2 = 3 RTT        1 + 1 = 2 RTT
 
 La fila "Total HTTPS" es la idea: con un servidor a 50 ms (RTT de 100 ms), HTTPS sobre TLS 1.2 tarda 300 ms antes del primer byte útil y con TLS 1.3 tarda 200 ms. HTTP/3 sobre QUIC funde ambos en uno solo: 1 RTT total (0 si se reconecta).
 
+Apertura de HTTPS con TLS 1.3, los dos handshakes seguidos:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as Servidor 443/tcp
+    Note over C,S: RTT 1: handshake TCP
+    C->>S: SYN
+    S-->>C: SYN-ACK
+    C->>S: ACK
+    Note over C,S: RTT 2: handshake TLS 1.3
+    C->>S: ClientHello + key_share
+    S-->>C: ServerHello + key_share, {Certificate, CertificateVerify, Finished}
+    C->>S: {Finished} + GET / cifrado
+    S-->>C: respuesta HTTP cifrada
+```
+
 Analogía: primero se marca y alguien contesta el teléfono (TCP); después los dos acuerdan hablar en clave (TLS). Ninguno de los dos pasos sustituye al otro.
 
 Límite: un firewall que solo mira TCP ve un handshake normal hacia el 443 aunque dentro no haya TLS (ver "Un puerto identifica un servicio, no lo garantiza").
@@ -791,6 +943,17 @@ AP (autenticador)                              Cliente (suplicante)
 Analogía: dos personas que comparten una contraseña se prueban mutuamente que la saben diciendo cada una un número al azar y mostrando el resultado de combinarlo con la contraseña, sin decir nunca la contraseña.
 
 Relevancia: en WPA2-Personal quien capture los mensajes 1 y 2 puede probar contraseñas offline contra el MIC (diccionario), por eso una clave Wi-Fi corta es débil aunque el cifrado sea AES. WPA3 reemplaza la derivación por SAE (Dragonfly), que resiste ese ataque. KRACK (2017) abusaba de reinstalar la clave en el mensaje 3. El ataque PMKID (2018) ni siquiera necesita esperar a un cliente: muchos AP incluyen en el primer mensaje EAPOL un identificador `PMKID = HMAC-SHA1(PMK, "PMK Name" | MAC_AP | MAC_cliente)`; basta con asociarse una vez al AP para obtenerlo y luego probar contraseñas offline igual que con el handshake (hashcat modo 22000). WPA2/WPA3, SAE y el hardening Wi-Fi se ven en [`13-defensa-y-hardening`](../13-defensa-y-hardening/).
+
+Ataque de diccionario offline contra el handshake capturado:
+
+```mermaid
+flowchart TD
+    A["Captura los mensajes 1 y 2<br/>(ANonce, SNonce, MIC)"] --> B["Toma una contraseña del diccionario"]
+    B --> C["Calcula PMK → PTK → MIC"]
+    C --> D{"¿MIC calculado<br/>= MIC capturado?"}
+    D -->|no| B
+    D -->|sí| E["Contraseña encontrada,<br/>sin volver a tocar la red"]
+```
 
 ```
 PMK → secreto maestro (de la contraseña Wi-Fi o de 802.1X).
