@@ -34,6 +34,14 @@ Cómo se hace, en orden:
 7. Kernel y arranque: Secure Boot, cifrado de disco completo (LUKS), parámetros `sysctl` restrictivos.
 8. Registro: dejar los logs encendidos y enviados a un servidor central (ver [`14-deteccion-y-monitoreo`](../14-deteccion-y-monitoreo/)).
 
+```mermaid
+flowchart LR
+    I["Inventariar<br/>ss -tlnp, systemctl"] --> B["Línea base<br/>CIS / STIG"]
+    B --> AP["Aplicar: reducir, cuentas, red,<br/>parches, MAC, kernel, registro"]
+    AP --> L["Medir con Lynis<br/>(antes y después)"]
+    L -->|"sugerencias pendientes"| AP
+```
+
 Ejemplo en un servidor Linux de laboratorio: primero se mira qué escucha, luego se apaga lo que sobra y se endurece SSH.
 
 ```bash
@@ -116,6 +124,18 @@ Last Source Address:Vlan   : 3c52.8211.0042:10
 
 Ejemplo: en una oficina, el puerto 5 tiene un teléfono IP y una PC (2 MAC). Alguien conecta un switch casero con 3 equipos más; aparece una tercera MAC, el puerto se apaga y el contador de violaciones sube a 1.
 
+```mermaid
+flowchart TD
+    T["Trama entra por fa0/5"] --> K{"¿MAC ya<br/>aprendida?"}
+    K -->|"sí"| OK["Reenvía"]
+    K -->|"no"| N{"¿Hay menos de 2<br/>(maximum)?"}
+    N -->|"sí"| S["Aprende la MAC (sticky)<br/>y reenvía"]
+    N -->|"no"| V{"Violación:<br/>¿modo?"}
+    V -->|"protect"| P1["Descarta en silencio"]
+    V -->|"restrict"| P2["Descarta y registra"]
+    V -->|"shutdown"| P3["Apaga el puerto<br/>(err-disabled)"]
+```
+
 > [!WARNING]
 > La MAC viaja en claro en cada trama y se cambia con un comando (`ip link set dev wlan0 address 3c:52:82:aa:10:5f`). El filtrado MAC frena errores y curiosos, no a un atacante: nunca es la única barrera.
 
@@ -149,6 +169,16 @@ Cómo funciona por dentro, con 802.1X:
 Hasta que llega el Access-Accept, el puerto solo deja pasar tramas EAPOL; no hay IP ni tráfico normal. Los productos conocidos son Cisco ISE, Aruba ClearPass y PacketFence (libre). Puede ser con agente (un programa en el equipo informa la postura) o sin agente (el NAC escanea el equipo desde fuera, útil para impresoras e IoT, que a veces caen en MAC Authentication Bypass, es decir, se autorizan por MAC porque no saben hablar 802.1X).
 
 Ejemplo: una laptop con el antivirus apagado hace 802.1X con credenciales válidas. El NAC acepta la identidad pero la postura falla, así que la manda a la VLAN 99, donde solo ve el servidor de actualizaciones. Al reactivar el antivirus, el NAC la reautentica y la pasa a la VLAN 30.
+
+```mermaid
+flowchart TD
+    C["Equipo conectado<br/>(solo pasa EAPOL)"] --> ID{"¿Identidad válida?<br/>802.1X"}
+    ID -->|"no"| R["Sin acceso<br/>o VLAN de invitados"]
+    ID -->|"sí"| PO{"¿Postura OK?<br/>antivirus, parches, cifrado"}
+    PO -->|"sí"| V30["VLAN 30 corporativa"]
+    PO -->|"no"| V99["VLAN 99 cuarentena<br/>solo servidor de parches"]
+    V99 -->|"corrige y se reautentica"| ID
+```
 
 ```
 MAC-based → decide por la dirección MAC, falsificable.
@@ -252,6 +282,14 @@ web02  : ok=2    changed=0    unreachable=0    failed=0    skipped=0
 
 `web01` tenía la configuración distinta y se corrigió; `web02` ya cumplía y no se tocó. Otros controles típicos: longitud mínima de contraseña con `pam_pwquality`, bloqueo de cuenta tras 10 fallos con `pam_faillock`, deshabilitar servicios innecesarios y registrar con auditd cada programa ejecutado (llamada `execve`, ver [`14-deteccion-y-monitoreo`](../14-deteccion-y-monitoreo/)).
 
+```mermaid
+flowchart TD
+    P["ansible-playbook se conecta por SSH<br/>a cada equipo del inventario"] --> Q{"¿El archivo ya tiene<br/>PermitRootLogin no?"}
+    Q -->|"sí (web02)"| OK["ok: no toca nada"]
+    Q -->|"no (web01)"| CH["changed: escribe la línea"]
+    CH --> H["notify: handler<br/>reiniciar ssh"]
+```
+
 > [!NOTE]
 > La herramienta solo alcanza a los equipos que están en el inventario y a los que llega por SSH. Un servidor que nadie dio de alta queda fuera, por eso el inventario es el primer control.
 
@@ -340,6 +378,21 @@ Extended IP access list INVITADOS
     40 permit tcp 192.168.50.0 0.0.0.255 any eq 443 (1210 matches)
 ```
 
+Recorrido de un paquete por la ACL `INVITADOS`:
+
+```mermaid
+flowchart TD
+    P["Paquete entra por g0/1<br/>desde 192.168.50.0/24"] --> R10{"10: ¿destino<br/>10.0.10.0/24?"}
+    R10 -->|"sí"| D1["deny"]
+    R10 -->|"no"| R20{"20: ¿UDP 53?"}
+    R20 -->|"sí"| A1["permit"]
+    R20 -->|"no"| R30{"30: ¿TCP 80?"}
+    R30 -->|"sí"| A2["permit"]
+    R30 -->|"no"| R40{"40: ¿TCP 443?"}
+    R40 -->|"sí"| A3["permit"]
+    R40 -->|"no"| IMP["deny implícito"]
+```
+
 Si la regla 10 estuviera después de una `permit ip any any`, nunca se evaluaría. Ejemplo de ACL de archivo en Linux: dar lectura a un auditor sin cambiar el grupo del archivo.
 
 ```bash
@@ -380,6 +433,17 @@ El ciclo, tal como lo describe NIST SP 800-40:
 4. Desplegar por anillos: piloto → 10 % → resto.
 5. Verificar que se instaló y reiniciar si hace falta; un parche del kernel no protege hasta el reinicio.
 6. Si no se puede parchear: mitigación temporal (deshabilitar la función, aislar el equipo, regla en el firewall) y documentar la excepción.
+
+```mermaid
+flowchart LR
+    INV["Inventario"] --> PRI["Priorizar<br/>CVSS, exposición, KEV"]
+    PRI --> Q{"¿Se puede<br/>parchear?"}
+    Q -->|"no"| MIT["Mitigación temporal<br/>+ excepción documentada"]
+    Q -->|"sí"| PIL["Anillo piloto"]
+    PIL --> R10["10 %"] --> REST["Resto"]
+    REST --> VER["Verificar<br/>y reiniciar"]
+    VER --> INV
+```
 
 Debian y Ubuntu publican sus parches de seguridad a medida que salen, con un aviso por cada uno (DSA en Debian, USN en Ubuntu), y el paquete `unattended-upgrades` puede instalarlos solo. A mano se revisa así:
 
@@ -492,6 +556,18 @@ La última fila es igual en las tres columnas: ahí está la idea entera. Ningú
 
 Ejemplo: un atacante sube una webshell a un servidor web por un plugin vulnerable. El perfil de AppArmor impide al proceso web escribir fuera de su directorio; si lo logra, el antivirus reconoce la webshell; si es nueva, el EDR ve al proceso de PHP lanzando una shell; si llega a llamar a su C2, el sinkhole lo corta y delata al equipo. Cuatro oportunidades en lugar de una.
 
+```mermaid
+flowchart LR
+    A["Webshell subida<br/>por plugin vulnerable"] --> L1{"AppArmor<br/>¿escribe fuera?"}
+    L1 -->|"impedido"| X1["Frenado"]
+    L1 -->|"lo logra"| L2{"Antivirus<br/>¿la reconoce?"}
+    L2 -->|"sí"| X2["Frenado"]
+    L2 -->|"es nueva"| L3{"EDR<br/>¿PHP lanza shell?"}
+    L3 -->|"lo ve"| X3["Frenado"]
+    L3 -->|"pasa"| L4["Sinkhole<br/>llamada al C2"]
+    L4 --> X4["Cortado y<br/>equipo delatado"]
+```
+
 El límite: apilar controles sin vigilarlos solo suma ruido y costos. Cada capa tiene que generar alertas que alguien mire (ver [`14-deteccion-y-monitoreo`](../14-deteccion-y-monitoreo/)).
 
 ```
@@ -574,6 +650,15 @@ Cómo funciona por dentro:
 2. Envía la telemetría a la consola central (normalmente en la nube).
 3. Reglas de comportamiento y modelos detectan cadenas sospechosas, a menudo mapeadas a técnicas de MITRE ATT&CK (ver [`12-frameworks-de-amenazas`](../12-frameworks-de-amenazas/)).
 4. Respuesta: matar el proceso, poner el archivo en cuarentena, aislar el equipo de la red (solo puede hablar con la consola), abrir una consola remota, recoger evidencias.
+
+```mermaid
+flowchart LR
+    AG["Agente en el endpoint<br/>procesos, red, archivos, módulos"] -->|"telemetría"| CON["Consola central<br/>(nube)"]
+    CON --> DET["Reglas de comportamiento<br/>y modelos (ATT&CK)"]
+    DET -->|"alerta"| AN["Analista"]
+    AN --> RESP["Respuesta: matar proceso, cuarentena,<br/>aislar, consola remota"]
+    RESP -->|"orden al agente"| AG
+```
 
 Ejemplo de lo que vería un analista:
 
@@ -667,6 +752,21 @@ Cómo evolucionaron:
 ```
 
 La tabla de estado es la diferencia clave entre 1 y 2: si la PC `10.0.0.5:51000` abrió una conexión a `93.184.216.34:443`, el firewall anota esa pareja y deja pasar las respuestas que coinciden, sin necesitar una regla de entrada.
+
+```mermaid
+sequenceDiagram
+    participant PC as PC 10.0.0.5
+    participant FW as Firewall stateful
+    participant S as 93.184.216.34
+    participant X as Origen externo
+    PC->>FW: SYN 51000 → 443
+    FW->>FW: Anota la pareja en la tabla de estado
+    FW->>S: SYN reenviado
+    S->>FW: SYN-ACK 443 → 51000
+    FW->>PC: Coincide con la tabla, pasa
+    X->>FW: Paquete que nadie pidió
+    Note over FW: Sin entrada en la tabla ni regla, descartado
+```
 
 Ejemplo de regla NGFW: "El grupo Ventas puede usar `salesforce-base`, pero no `salesforce-upload` fuera del horario laboral; nadie puede usar `bittorrent` en ningún puerto". Un firewall clásico no puede expresar esa regla porque solo ve IP y puertos. Un firewall de aplicaciones web (WAF) es otra cosa: protege una aplicación web concreta de inyecciones y XSS (ver [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/)).
 
@@ -853,6 +953,16 @@ Por qué el PIN es débil, con números:
 - El último dígito es una suma de verificación de los otros 7: quedan 10^7.
 - El router valida el PIN en dos mitades y responde por separado si la primera mitad (4 dígitos) es correcta: 10^4 = 10.000 intentos para la primera y 10^3 = 1.000 para la segunda.
 - Total: 11.000 intentos como máximo. A unos pocos segundos por intento, horas.
+
+```mermaid
+flowchart TD
+    PIN["PIN WPS de 8 dígitos"] --> H1["Dígitos 1-4<br/>el router confirma esta mitad<br/>10^4 = 10.000 intentos"]
+    PIN --> H2["Dígitos 5-7<br/>10^3 = 1.000 intentos"]
+    PIN --> CK["Dígito 8<br/>suma de verificación"]
+    H1 & H2 --> T["Máximo 11.000 intentos"]
+    T --> K["El router entrega<br/>la contraseña WPA2"]
+```
+
 - Además, en 2014 se publicó el ataque Pixie Dust: en muchos chipsets los números aleatorios del protocolo eran predecibles y el PIN se calcula sin conexión en segundos.
 
 Una vez que el atacante tiene el PIN, el router le entrega la contraseña WPA2 de la red. El método de botón (push button) es menos grave porque exige presencia física y abre una ventana de 2 minutos.
@@ -880,6 +990,17 @@ Las cuatro generaciones, en orden:
 - WPA (2003): solución de emergencia para el hardware de WEP. Sigue usando RC4, pero con TKIP, que cambia la clave por paquete. Mejoró mucho a WEP, pero TKIP también tiene debilidades conocidas y está obsoleto.
 - WPA2 (2004): cifrado AES con CCMP, el estándar durante casi veinte años. Es sólido si la contraseña es larga. Su punto débil en modo Personal es que la contraseña se puede probar sin conexión (offline) a partir de un handshake capturado, así que una contraseña corta o de diccionario cae. En 2017 KRACK mostró un fallo de implementación del handshake, corregido con parches.
 - WPA3 (2018): sustituye la clave compartida por SAE (Simultaneous Authentication of Equals, el intercambio "Dragonfly"). Con SAE capturar el intercambio no sirve para probar contraseñas offline: cada intento exige hablar con el punto de acceso. Añade secreto hacia adelante (si mañana se filtra la contraseña, el tráfico grabado hoy sigue protegido), cifrado de 192 bits en modo Enterprise y obliga a proteger las tramas de gestión (PMF), lo que corta los ataques de desautenticación.
+
+```mermaid
+timeline
+    title Generaciones de seguridad Wi-Fi
+    1999 : WEP (RC4, IV de 24 bits)
+    2003 : WPA (RC4 + TKIP)
+    2004 : WPA2 (AES-CCMP)
+    2017 : KRACK contra el handshake de WPA2
+    2018 : WPA3 (SAE)
+    2019 : Dragonblood contra WPA3
+```
 
 Cada generación tiene dos modos:
 
@@ -946,6 +1067,15 @@ La misma idea a otras escalas, todas parte de la "deception" o engaño defensivo
 - Honeytoken: un dato falso (una cuenta de usuario que nadie usa, una clave de API cebo) cuyo uso delata un acceso indebido.
 
 Ejemplo: en la red interna se crea un servidor llamado `FS-BACKUP-02` que no usa nadie. Un martes a las 3:00 recibe un intento de inicio de sesión desde el portátil de contabilidad. Nadie de contabilidad tiene motivo para buscar ese servidor: o es un error, o alguien está explorando la red desde ese portátil, y hay que investigar ya.
+
+```mermaid
+flowchart LR
+    U["Usuarios legítimos"] -.-|"no tienen motivo para usarlo"| HP["FS-BACKUP-02<br/>(honeypot)"]
+    AT["Portátil de contabilidad<br/>login a las 3:00"] --> HP
+    HP --> AL["Alerta con muy<br/>pocos falsos positivos"]
+    AL --> INV["Investigar ya"]
+    HP --x|"segmento separado,<br/>salida bloqueada"| RED["Red real"]
+```
 
 > [!WARNING]
 > Un honeypot mal aislado es un regalo para el atacante: si lo compromete, puede usarlo para saltar a la red real. Va en un segmento separado y con el tráfico saliente bloqueado.

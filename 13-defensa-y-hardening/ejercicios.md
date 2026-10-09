@@ -39,6 +39,19 @@ Necesitas:
 > [!WARNING]
 > Hazlo solo en un equipo que puedas restaurar (contenedor, equipo de laboratorio o instalación aparte), nunca en tu equipo de trabajo. Algunos controles (firewall, SSH) pueden dejarte sin acceso remoto o romper servicios si te equivocas; si administras el equipo por SSH, ten siempre a mano una consola local además de la sesión remota. El firewall de este ejercicio se limita a la dirección simulada `10.0.0.1` justo para no cortar tu sesión real.
 
+Montaje del laboratorio en un solo equipo: el escáner apunta a `10.0.0.1` y solo alcanza lo que escucha en todas las interfaces.
+
+```mermaid
+flowchart LR
+    subgraph H["Un solo equipo Linux"]
+        T2["Terminal 2 (escáner)<br/>nmap -sT -p- 10.0.0.1"] -->|"tráfico local por lo"| A["10.0.0.1<br/>(dirección de dummy0)"]
+        A -->|"alcanza"| S1["vsftpd<br/>0.0.0.0:21"]
+        A -->|"alcanza"| S2["rpcbind<br/>0.0.0.0:111"]
+        A -.-x|"no alcanza"| S3["cupsd<br/>127.0.0.1:631"]
+        T1["Terminal 1 (equipo endurecido)<br/>ss, lynis, nft, sysctl"]
+    end
+```
+
 ### Pasos
 
 1. Simula un sistema "de fábrica" con servicios de sobra. Instala los que un escritorio o una plantilla vieja suelen traer encendidos:
@@ -293,6 +306,18 @@ Necesitas:
    - `-j ACCEPT` / `-j DROP` → acepta o descarta; la regla de ACCEPT va primero por el mismo motivo de orden.
 
    En Arch, para que el firewall se cargue en cada arranque, habilita el servicio con `sudo systemctl enable nftables` (Debian suele dejar la carga lista al instalar). Para este laboratorio basta con haberlo cargado a mano con `nft -f`.
+
+   Cómo decide la cadena `input` de `cis_lab`:
+
+   ```mermaid
+   flowchart TD
+       P["Paquete entrante"] --> D{"¿Destino<br/>10.0.0.1?"}
+       D -->|"no"| ACC["policy accept<br/>(el resto del sistema no cambia)"]
+       D -->|"sí"| S{"¿TCP puerto 22?"}
+       S -->|"sí"| OK["accept"]
+       S -->|"no"| DR["log 'cis-lab drop: '<br/>y drop sin respuesta"]
+   ```
+
 10. Control "configuración del servidor SSH" (sección SSH Server). En Ubuntu 24.04, Debian 12 y Arch con OpenSSH reciente, `sshd_config` incluye `sshd_config.d/*.conf`, y en sshd gana el primer valor leído, así que un archivo ahí manda sobre el resto. Archivo completo:
     ```bash
     sudo tee /etc/ssh/sshd_config.d/10-cis.conf <<'EOF'
@@ -341,6 +366,17 @@ Necesitas:
     - `grep -E '^(permitrootlogin|maxauthtries|disableforwarding|loglevel) '` → deja solo las líneas que empiezan (`^`) por una de esas directivas seguida de espacio; `-E` permite usar el grupo `( | )` de alternativas.
 
     Antes de cerrar tu sesión actual, si administras el equipo por SSH abre una segunda con `ssh usuario@127.0.0.1` (o `ssh usuario@10.0.0.1`, que el firewall del paso 9 permite) para confirmar que sigues entrando.
+
+    ```mermaid
+    flowchart TD
+        W["Escribir 10-cis.conf"] --> T{"sudo sshd -t<br/>¿sin errores?"}
+        T -->|"no"| F["Corregir el archivo"]
+        F --> T
+        T -->|"sí"| R["systemctl reload<br/>(ssh o sshd)"]
+        R --> V["sshd -T muestra<br/>la configuración efectiva"]
+        V --> C["Segunda sesión ssh a 127.0.0.1<br/>antes de cerrar la actual"]
+    ```
+
 11. Control "permisos de archivos de cuentas" (sección System File Permissions). Comprueba y, si hiciera falta, corrige:
     ```bash
     stat -c '%a %U:%G %n' /etc/passwd /etc/group /etc/shadow /etc/gshadow
@@ -395,6 +431,23 @@ Necesitas:
     - `-oN ~/hardening/despues-nmap.txt` → (ver paso 3), ahora con el archivo "después".
 
     En el equipo deberían quedar solo el 22 (si tienes SSH) y los 53 de `systemd-resolved` en loopback. Desde `10.0.0.1`, nmap ya no debe mostrar el 21 ni el 111; si pruebas un puerto concreto que antes estaba abierto (`nmap -sT -p 21,111 10.0.0.1`, donde `-p 21,111` limita el escaneo a esos dos puertos) aparecerá `filtered`, porque la regla `drop` de nftables descarta sin responder.
+
+    Lo que ve `nmap` en el escaneo final, con la tabla `cis_lab` cargada:
+
+    ```mermaid
+    sequenceDiagram
+        participant N as nmap (Terminal 2)
+        participant K as Kernel (nftables, cis_lab)
+        participant S as sshd :22
+        N->>K: SYN a 10.0.0.1:22
+        K->>S: accept (primera regla)
+        S-->>N: SYN-ACK
+        Note over N: 22/tcp open
+        N->>K: SYN a 10.0.0.1:21
+        Note over K: log "cis-lab drop" y drop
+        Note over N: Sin respuesta, 21/tcp filtered
+    ```
+
 14. Mide otra vez con Lynis y compara:
     ```bash
     sudo lynis audit system --quick | tee ~/hardening/lynis-despues.txt
@@ -408,6 +461,14 @@ Necesitas:
 ### Resultado esperado
 
 Una carpeta `~/hardening/` con `antes-*.txt`, `despues-*.txt`, `lynis-antes.txt`, `lynis-despues.txt` y `cambios.txt` con una entrada por control (siete grupos). En cifras, algo como: varios sockets TCP en escucha menos (desaparecen 21, 111 y 631, en sus versiones IPv4 e IPv6), de 2 puertos abiertos desde `10.0.0.1` (21 y 111) a ninguno (salvo el 22 si usas SSH), y un índice de Lynis varios puntos más alto (el README pone como ejemplo de 58 a 77).
+
+```mermaid
+flowchart LR
+    A["Foto inicial<br/>ss, nmap, Lynis"] --> C["7 grupos de controles<br/>+ entrada en cambios.txt"]
+    C --> D["Foto final<br/>ss, nmap, Lynis"]
+    D --> CMP["diff de puertos y<br/>hardening_index antes/después"]
+    CMP --> P["Sugerencias de Lynis<br/>como pendientes"]
+```
 
 ### Comprueba que lo lograste
 
@@ -444,6 +505,20 @@ Necesitas:
   - Debian/Ubuntu: `sudo apt install iw`
   - Arch: `sudo pacman -S iw`
 - Tiempo estimado: 30 minutos.
+
+Qué mide cada herramienta: el portátil lee lo que el router anuncia por el aire y el navegador cambia su configuración.
+
+```mermaid
+flowchart LR
+    subgraph R["Tu router"]
+        R24["Radio 2,4 GHz<br/>(un BSSID)"]
+        R5["Radio 5 GHz<br/>(otro BSSID)"]
+        PAN["Panel web<br/>http://192.168.1.1"]
+    end
+    R24 -->|"balizas: RSN, WPA, WPS"| L["Portátil Linux<br/>nmcli, iw scan"]
+    R5 -->|"balizas: RSN, WPA, WPS"| L
+    L -->|"navegador"| PAN
+```
 
 ### Pasos
 
@@ -541,6 +616,21 @@ Necesitas:
    - `diff` → (ver ejercicio 1).
    - `antes-wifi.txt despues-wifi.txt` → la captura del paso 3 y la del paso 5.
    Debe verse desaparecer el bloque `WPS:` y `TKIP`, y aparecer `SAE` en `Authentication suites` si activaste WPA3.
+
+   Criterio para cada fila de tu SSID, antes y después del cambio:
+
+   ```mermaid
+   flowchart TD
+       S["Fila de tu SSID<br/>(cada BSSID)"] --> W{"¿WEP o WPA1<br/>en SECURITY?"}
+       W -->|"sí"| FIX["Corregir en el panel"]
+       W -->|"no"| T{"¿tkip en WPA-FLAGS<br/>o RSN-FLAGS?"}
+       T -->|"sí"| FIX
+       T -->|"no"| P{"¿Bloque WPS:<br/>en iw scan?"}
+       P -->|"sí"| FIX
+       P -->|"no"| OK["Cumple: solo AES-CCMP<br/>con psk o sae, sin WPS"]
+       FIX --> M["Repetir la medición"]
+       M --> S
+   ```
 
 ### Resultado esperado
 
