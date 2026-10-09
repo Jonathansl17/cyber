@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" width="720" height="360" font-family="sans-serif">
+  <rect x="0" y="0" width="720" height="360" fill="#ffffff"/>
+  <text x="360" y="28" text-anchor="middle" font-size="16" font-weight="bold" fill="#1f2328">Marco de pila de unsafe_copy (la pila crece hacia abajo)</text>
+
+  <text x="60" y="62" font-size="13" fill="#1f2328">Direcciones altas</text>
+
+  <rect x="60" y="72" width="300" height="46" fill="#f2f2f2" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="210" y="100" text-anchor="middle" font-size="14" fill="#1f2328">Marco de la función que llamó</text>
+
+  <rect x="60" y="118" width="300" height="46" fill="#ffd9d9" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="210" y="146" text-anchor="middle" font-size="14" fill="#1f2328">Dirección de retorno (8 B)</text>
+
+  <rect x="60" y="164" width="300" height="46" fill="#ffd9d9" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="210" y="192" text-anchor="middle" font-size="14" fill="#1f2328">RBP guardado (8 B)</text>
+
+  <rect x="60" y="210" width="300" height="46" fill="#fff2cc" stroke="#1f2328" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="210" y="238" text-anchor="middle" font-size="14" fill="#1f2328">Canario (si el compilador lo añade)</text>
+
+  <rect x="60" y="256" width="300" height="60" fill="#d0e4f7" stroke="#1f2328" stroke-width="1.5"/>
+  <text x="210" y="282" text-anchor="middle" font-size="14" fill="#1f2328">char name[16]</text>
+  <text x="210" y="302" text-anchor="middle" font-size="12" fill="#1f2328">strcpy empieza a escribir aquí</text>
+
+  <text x="60" y="340" font-size="13" fill="#1f2328">Direcciones bajas</text>
+
+  <!-- overflow arrow -->
+  <line x1="400" y1="300" x2="400" y2="84" stroke="#1f2328" stroke-width="2.5"/>
+  <polygon points="400,72 392,88 408,88" fill="#1f2328"/>
+  <text x="420" y="160" font-size="14" fill="#1f2328">Con 200 caracteres, strcpy</text>
+  <text x="420" y="180" font-size="14" fill="#1f2328">sigue escribiendo hacia</text>
+  <text x="420" y="200" font-size="14" fill="#1f2328">direcciones altas y pisa</text>
+  <text x="420" y="220" font-size="14" fill="#1f2328">canario, RBP guardado y</text>
+  <text x="420" y="240" font-size="14" fill="#1f2328">dirección de retorno</text>
+</svg>

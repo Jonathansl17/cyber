@@ -22,6 +22,18 @@ de comandos (`msmtp` o `mailx`). Tiempo: 2-3 h. Instalación de los intérpretes
 - Debian/Ubuntu: `sudo apt install python3 golang nodejs msmtp bsd-mailx`.
 - Arch: `sudo pacman -S python go nodejs msmtp s-nail`.
 
+Los cuatro scripts y la fuente que vigila cada uno en tu equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux"]
+        PW["check_hashes.py<br/>(Python)"] --> AR["Archivos: /etc/passwd,<br/>/etc/hosts"]
+        PC["portcheck<br/>(Go)"] --> SO["Puertos en escucha<br/>en 127.0.0.1"]
+        FL["flag404.js<br/>(Node)"] --> WL["Log web<br/>access.log"]
+        SS["top_ssh_failures.sh<br/>(Bash)"] --> JL["Journal de sshd"]
+    end
+```
+
 Crea una carpeta para los scripts y sus salidas:
 ```bash
 mkdir -p ~/segscripts/logs && cd ~/segscripts
@@ -46,6 +58,18 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    - `echo "codigo de salida: $?"` → imprime el código de salida del último comando; `$?` contiene ese valor (0 = todo bien).
    Recién hecha la base, no debe imprimir nada (solo informa de lo que no coincide) y
    el código de salida debe ser `0`. Cambia a drede
+
+```mermaid
+flowchart TD
+    B["sha256sum > base.txt<br/>(línea base de hoy)"] --> R["python3 check_hashes.py base.txt"]
+    R --> C{"Por cada archivo"}
+    C -- "no existe" --> MI["MISSING"]
+    C -- "hash distinto" --> CH["CHANGED"]
+    C -- "hash igual" --> OK["nada"]
+    MI --> E["Imprime y sale con 1"]
+    CH --> E
+    OK --> Z["Sin salida, sale con 0"]
+```
    un archivo de prueba y vuelve a correrlo: debe marcar `CHANGED` y salir con `1`.
 2. Script de puertos (Go). Copia `portcheck` del README a `~/segscripts/portcheck.go`,
    compílalo y apúntalo a tu propia máquina:
@@ -94,6 +118,19 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    ser root o pertenecer al grupo `systemd-journal` (`sudo usermod -aG systemd-journal
    USUARIO` y vuelve a iniciar sesión); sin eso, el script no verá los fallos de SSH,
    ni a mano ni desde tu crontab.
+
+   Comparación que haces en el paso 2:
+
+   ```mermaid
+   sequenceDiagram
+       participant P as ./portcheck 127.0.0.1
+       participant L as Interfaz lo (127.0.0.1)
+       participant S as Servicios del equipo
+       P->>L: Conecta a cada puerto de la lista, en paralelo
+       L->>S: Reenvía al servicio si escucha
+       S-->>P: Acepta y marca "N/tcp open", o timeout de 0,5 s
+       Note over P,S: ss -tlnp muestra la misma foto real de puertos
+   ```
 5. Programa los scripts con cron. Edita tu crontab:
    ```bash
    crontab -e
@@ -130,6 +167,17 @@ mkdir -p ~/segscripts/logs && cd ~/segscripts
    Para que `MAILTO` funcione, configura `msmtp` como `sendmail` (archivo
    `~/.msmtprc` con tu servidor SMTP) o, como alternativa, cambia cada línea para que
    el aviso lo mande el propio script, por ejemplo:
+
+   Cómo decide cron si te avisa:
+
+   ```mermaid
+   flowchart TD
+       T["cron ejecuta la tarea"] --> O{"¿La tarea imprimió<br/>algo en la salida?"}
+       O -- "No (todo normal)" --> N["Sin correo"]
+       O -- "Sí (anomalía)" --> M{"¿MAILTO con<br/>sendmail configurado?"}
+       M -- Sí --> C["Correo con la salida"]
+       M -- No --> R["Redirigir a un log o usar<br/>| mail -s en la propia línea"]
+   ```
    `... | mail -s "Fallos SSH" tu-correo@ejemplo.com`.
 
 ### Resultado esperado

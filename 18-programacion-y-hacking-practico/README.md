@@ -37,6 +37,16 @@ Existe en este roadmap porque casi toda tarea de seguridad es "leer algo, filtra
 
 Por dentro, Python compila tu archivo a un bytecode intermedio (`.pyc`) que una máquina virtual ejecuta instrucción por instrucción. Eso lo hace más lento que C++ o Go, pero en seguridad casi nunca importa: el cuello de botella suele ser la red o el disco, no la CPU.
 
+```mermaid
+flowchart LR
+    subgraph INT["Python (interpretado)"]
+        PY["script.py"] --> BC["Bytecode .pyc"] --> VM["Máquina virtual de Python:<br/>ejecuta instrucción por instrucción"]
+    end
+    subgraph COMP["C++ o Go (compilado)"]
+        SRC["Código fuente"] --> CC["Compilador"] --> BIN["Binario ELF con<br/>código máquina"] --> CPU["CPU directamente"]
+    end
+```
+
 Analogía: Python es la navaja suiza. No es la mejor sierra ni el mejor destornillador, pero la llevas siempre y resuelve el 80 % de los problemas en dos minutos.
 
 Ejemplo: verificar que nadie cambió los archivos de una carpeta. Guardas un manifiesto con el SHA-256 de cada archivo y el script lo compara con el estado actual. Es la idea detrás de las herramientas de integridad de archivos (FIM) como AIDE o Tripwire.
@@ -83,6 +93,20 @@ CHANGED  /etc/hosts
 ```
 
 Solo imprime los archivos que no coinciden (si todo está bien, no imprime nada), y el código de salida `1` cuando algo cambió permite encadenarlo con `cron` o con una alerta.
+
+```mermaid
+flowchart TD
+    L["Línea del manifiesto:<br/>hash esperado y ruta"] --> E{"¿Existe el archivo?"}
+    E -- No --> MI["MISSING"]
+    E -- Sí --> H["SHA-256 leyendo<br/>bloques de 64 KiB"]
+    H --> C{"¿Igual al esperado?"}
+    C -- Sí --> OK["OK: no imprime nada"]
+    C -- No --> CH["CHANGED"]
+    MI --> X["Imprime y suma al contador"]
+    CH --> X
+    X --> R["Al final: código de salida 1<br/>si hubo cambios, 0 si no"]
+    OK --> R
+```
 
 > [!TIP]
 > Si solo vas a aprender un lenguaje para seguridad, que sea Python: es el que más herramientas, cursos y respuestas en foros tiene, y el que más vas a encontrar leyendo exploits públicos.
@@ -148,6 +172,22 @@ $ go build -o portcheck . && ./portcheck 127.0.0.1
 
 Las seis comprobaciones corren a la vez, así que el script tarda como mucho 0,5 s en lugar de 3 s. Escanear redes que no son tuyas puede ser delito aunque solo "mires": este tipo de prueba se hace en tu red local o dentro del alcance firmado (ver [Penetration Testing Rules of Engagement](#penetration-testing-rules-of-engagement)).
 
+```mermaid
+flowchart LR
+    M["main"] --> G1["goroutine<br/>puerto 22"]
+    M --> G2["goroutine<br/>puerto 80"]
+    M --> G3["goroutine<br/>puerto 443"]
+    M --> G4["goroutine<br/>puerto 3306"]
+    M --> G5["goroutine<br/>puerto 5432"]
+    M --> G6["goroutine<br/>puerto 8080"]
+    G1 --> W["wg.Wait():<br/>espera a las seis,<br/>máx. 0,5 s cada una"]
+    G2 --> W
+    G3 --> W
+    G4 --> W
+    G5 --> W
+    G6 --> W
+```
+
 ```
 Go → binario único y portable, concurrencia barata; herramientas modernas y C2.
 Goroutine → tarea concurrente ligera de Go.
@@ -161,6 +201,21 @@ Compilación cruzada → compilar para otra arquitectura o sistema operativo des
 Existe en el roadmap porque para auditar una aplicación web hay que leer su JavaScript: ahí aparecen rutas de API ocultas, claves olvidadas, validaciones que solo ocurren en el navegador (y por tanto se saltan con un proxy) y los puntos donde un dato del usuario termina dentro de `innerHTML` o `eval`, que es donde nace el XSS (ver [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/)). La consola del navegador (F12) es un intérprete de JavaScript con acceso a la página, a sus cookies no protegidas y a su `localStorage`. Del lado del servidor, Node.js y su gestor npm traen otro riesgo: paquetes de terceros maliciosos o secuestrados, un ataque de cadena de suministro.
 
 Por dentro, el navegador ejecuta el JavaScript de cada sitio en una caja aislada por origen (same-origin policy): el código de `tienda.com` no puede leer las respuestas de `banco.com`. Casi todo ataque web del lado del cliente consiste en lograr que el navegador ejecute tu código dentro del origen equivocado.
+
+```mermaid
+flowchart LR
+    subgraph O1["Origen tienda.com"]
+        JT["JavaScript de tienda.com"]
+    end
+    subgraph O2["Origen banco.com"]
+        JB["JavaScript de banco.com"]
+        DB["Respuestas y datos<br/>de banco.com"]
+        X["Código del atacante inyectado<br/>(XSS vía innerHTML o eval)"]
+    end
+    JT -. "bloqueado por la<br/>same-origin policy" .-> DB
+    JB --> DB
+    X -- "corre dentro del origen:<br/>sí puede leer" --> DB
+```
 
 Analogía: el JavaScript de una página es el folleto de instrucciones que el restaurante le da al cliente. Si el restaurante confía en que el cliente siga el folleto al pie de la letra (validación solo en el navegador), cualquiera puede escribir su propio pedido.
 
@@ -225,6 +280,10 @@ void safe_copy(const char* input) {
 
 Si `input` trae 200 caracteres, `unsafe_copy` escribe 184 bytes fuera del arreglo y corrompe la pila del programa; `safe_copy` simplemente reserva lo que haga falta. Los compiladores modernos añaden defensas (canarios de pila, ASLR, DEP/NX) que dificultan aprovechar ese fallo, pero el remedio de fondo es no usar funciones sin control de longitud.
 
+Pila de `unsafe_copy` en x86-64, simplificada:
+
+![Marco de pila de unsafe_copy: strcpy escribe hacia direcciones altas y pisa el canario, el RBP guardado y la dirección de retorno](img/stack-overflow.svg)
+
 ```
 C++ → control directo de memoria; base de SO, navegadores, malware y exploits de memoria.
 strcpy → copia sin límite; origen clásico de buffer overflows.
@@ -262,6 +321,19 @@ $ ./top_ssh_failures.sh
 
 `set -euo pipefail` hace que el script se detenga ante el primer error en vez de seguir con datos incompletos; es la primera línea de cualquier script de Bash serio. ShellCheck revisa los errores típicos (variables sin comillas, por ejemplo).
 
+Qué hace cada eslabón de la tubería:
+
+```mermaid
+flowchart LR
+    J["journalctl -u ssh<br/>últimas 24 h"] --> G1["grep<br/>Failed password"]
+    G1 --> G2["grep -oE<br/>from + IP"]
+    G2 --> A["awk<br/>solo la IP"]
+    A --> S1["sort<br/>junta iguales"]
+    S1 --> U["uniq -c<br/>cuenta"]
+    U --> S2["sort -rn<br/>mayor a menor"]
+    S2 --> H["head -n 5<br/>top 5"]
+```
+
 ```
 Bash → pegamento de la terminal Linux; tuberías entre comandos.
 Tubería (|) → la salida de un comando entra al siguiente.
@@ -296,7 +368,31 @@ Crackeo offline      Nada en tus logs: ocurre en el equipo del atacante
 
 La última fila es la importante: el crackeo offline no se ve, así que la única defensa es que el hash robado sea muy caro de romper.
 
+```mermaid
+flowchart LR
+    subgraph ON["Online: Hydra"]
+        H["Equipo del atacante"] -- "cada intento viaja por la red" --> SV["Servicio SSH<br/>de la víctima"]
+        SV --> LG["Logs de la víctima:<br/>cientos de Failed password"]
+    end
+    subgraph OFF["Offline: John o hashcat"]
+        HS["Hash ya robado"] --> CR["Prueba candidatas en<br/>el equipo del atacante"]
+        CR --> NL["Logs de la víctima:<br/>nada"]
+    end
+```
+
 Ejemplo: en tu propio laboratorio con DVWA levantas Burp Suite, interceptas el envío del formulario de login y ves la contraseña viajando en el cuerpo de la petición. Si el sitio no usa HTTPS, cualquiera en tu red vería lo mismo.
+
+```mermaid
+sequenceDiagram
+    participant N as Navegador
+    participant B as Burp Suite (proxy)
+    participant A as DVWA
+    N->>B: POST de login con usuario y contraseña en el cuerpo
+    Note over B: Intercepta: cada parámetro<br/>se ve y se puede modificar
+    B->>A: Petición reenviada, tal cual o modificada
+    A-->>B: Respuesta
+    B-->>N: Respuesta
+```
 
 ```
 Burp/ZAP     → interceptar y modificar tráfico web.
@@ -331,6 +427,21 @@ Los frameworks del roadmap:
 
 Desde el lado defensivo: los exploits de estos frameworks aprovechan vulnerabilidades ya públicas, así que parchear a tiempo los deja sin munición; sus payloads y su tráfico de C2 tienen firmas que los EDR e IDS conocen; y el beaconing (conexiones periódicas al C2, por ejemplo cada 60 segundos) se ve en el análisis de tráfico (ver [`14-deteccion-y-monitoreo`](../14-deteccion-y-monitoreo/)).
 
+```mermaid
+sequenceDiagram
+    participant Op as Operador
+    participant C2 as Servidor C2
+    participant V as Equipo víctima
+    Op->>V: Exploit contra una vulnerabilidad publicada
+    Note over V: Se ejecuta el payload
+    V->>C2: Conexión saliente hacia el C2
+    Op->>C2: Deja órdenes
+    loop Beaconing, por ejemplo cada 60 s
+        V->>C2: ¿Hay órdenes?
+        C2-->>V: Órdenes pendientes
+    end
+```
+
 Ejemplo: en el laboratorio de TryHackMe de Metasploit buscas un módulo por el CVE de un servicio vulnerable de la máquina del laboratorio, configuras el objetivo, eliges un payload y obtienes una sesión. Lo instructivo es lo de después: mirar en los logs de esa máquina qué rastro quedó.
 
 > [!IMPORTANT]
@@ -359,6 +470,16 @@ En Linux, el catálogo de referencia es GTFOBins, que documenta qué puede hacer
 Ejemplo defensivo: auditas tu servidor Linux con `sudo -l` y descubres que un usuario puede ejecutar un editor de texto como root sin contraseña. Buscas ese editor en GTFOBins y ves que desde él se puede abrir una shell: ese permiso equivale a dar root completo. La corrección es quitar la regla de `sudoers`.
 
 Cómo se detecta el abuso: no por el programa (es legítimo) sino por el contexto: quién lo lanza, con qué argumentos y hacia dónde se conecta. Un servidor web que lanza una shell, o `curl` descargando un script lanzado por un proceso que nunca usa la red, son anomalías aunque ambos programas sean legítimos. El EDR y `auditd` registran esas cadenas de procesos.
+
+```mermaid
+flowchart LR
+    subgraph N1["Normal"]
+        A1["bash del administrador"] --> B1["curl"]
+    end
+    subgraph N2["Anómalo: mismos binarios, otro contexto"]
+        A2["nginx<br/>(servidor web)"] --> B2["sh"] --> C3["curl descarga<br/>un script"]
+    end
+```
 
 ```
 LotL     → abusar de programas legítimos ya instalados.
@@ -389,6 +510,13 @@ call print_ok      ; otherwise call the success routine
 ```
 
 Ese patrón `cmp` seguido de un salto condicional es exactamente lo que se busca en un crackme: el punto donde el programa compara tu contraseña con la correcta y decide qué mensaje mostrar. Ghidra lo traduce a pseudocódigo como `if (x == 8) print_ok(); else wrong();`, que se lee mucho más fácil.
+
+```mermaid
+flowchart TD
+    A["mov eax, 5<br/>add eax, 3"] --> B{"cmp eax, 8"}
+    B -- "jne: distinto" --> W["wrong"]
+    B -- "igual: sigue" --> OK["call print_ok"]
+```
 
 Ejemplo: descargas un crackme de nivel 1 de crackmes.one, lo abres en Ghidra, buscas la cadena "Wrong password", ves qué función la usa y en el pseudocódigo aparece la comparación con la contraseña esperada.
 
@@ -427,6 +555,18 @@ Las fases de un pentest según PTES (Penetration Testing Execution Standard), en
 7. Reporting: informe con hallazgos, evidencias, riesgo y cómo corregir.
 
 Ejemplo: una empresa contrata un pentest de su web `tienda.ejemplo` del 3 al 7 de noviembre, de 20:00 a 6:00, sin denegación de servicio ni phishing a empleados. El tercer día el equipo descubre que la base de datos es de un proveedor externo: aunque sea vulnerable, queda fuera de alcance y solo se reporta, no se prueba.
+
+```mermaid
+flowchart TD
+    F["Posible fallo en un sistema"] --> S{"¿Está dentro del<br/>alcance firmado?"}
+    S -- No --> R["Solo se reporta,<br/>no se prueba"]
+    S -- Sí --> V{"¿Dentro de la ventana<br/>y con técnica permitida?"}
+    V -- No --> E["No se prueba sin<br/>autorización por escrito"]
+    V -- Sí --> T["Se prueba y se documenta"]
+    T --> C{"¿Fallo crítico o rastro<br/>de un atacante real?"}
+    C -- Sí --> CE["Contacto de emergencia"]
+    C -- No --> IN["Al informe"]
+```
 
 > [!WARNING]
 > Practicar contra sistemas sin autorización por escrito es ilegal aunque "solo mires". Para aprender, usa laboratorios hechos para eso: TryHackMe, VulnHub, DVWA, Juice Shop o tus propias VMs.
