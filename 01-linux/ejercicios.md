@@ -74,6 +74,17 @@ Todo con herramientas del sistema base. Tiempo estimado: 20 minutos.
    grupo es SGID; la `T` al final es el sticky (en mayúscula porque "otros" no tiene
    `x`, lo cual aquí es correcto porque no queremos que otros entren).
 
+   Cómo queda montado el laboratorio en tu equipo:
+
+   ```mermaid
+   flowchart LR
+       A["ana"] -->|miembro| G["Grupo equipo"]
+       L["luis"] -->|miembro| G
+       G -->|"rwx por la terna del grupo"| C["/srv/compartido<br/>drwxrws--T (3770)<br/>grupo equipo"]
+       C --> F1["ana.txt<br/>dueño ana, grupo equipo"]
+       C --> F2["luis.txt<br/>dueño luis, grupo equipo"]
+   ```
+
 4. Crea un archivo dentro actuando como el primer usuario. Se usa `sudo -u` para
    ejecutar cada comando con la identidad de `ana` sin abrir una shell nueva, así el
    bloque se puede pegar entero.
@@ -122,6 +133,20 @@ Todo con herramientas del sistema base. Tiempo estimado: 20 minutos.
    Debe fallar con `Operation not permitted`. Eso es el sticky bit: aunque `luis` tiene
    permiso de escritura en la carpeta por el grupo, no puede borrar lo que no es suyo.
    Si usaste la alternativa con `su`, sal con `exit`.
+
+   Lo que decide el kernel en este paso:
+
+   ```mermaid
+   flowchart TD
+       A["luis: rm /srv/compartido/ana.txt"] --> B{"¿luis tiene w en la carpeta?"}
+       B -->|"sí, por el grupo equipo"| C{"¿La carpeta tiene sticky?"}
+       C -->|sí| D{"¿luis es dueño de ana.txt<br/>o es root?"}
+       D -->|no| E["Operation not permitted"]
+       D -->|sí| F["Borrado"]
+       C -->|no| F
+       B -->|no| G["Permission denied"]
+   ```
+
 
 ### Resultado esperado
 
@@ -225,6 +250,20 @@ sobre equipos ajenos.
 6. Para entender por qué importa, compara tu lista con lo que debería ser normal: un
    binario SUID que no reconoces, o uno de uso general como un editor o un intérprete,
    es justo lo que un auditor marca para investigar.
+
+   El recorrido completo del ejercicio:
+
+   ```mermaid
+   flowchart TD
+       A["find / -perm -4000 -type f"] --> B["~/suid.txt<br/>una ruta por línea"]
+       B --> C["awk -F/ '{print $NF}' | sort -u<br/>solo los nombres"]
+       C --> D["Buscar cada nombre en GTFOBins"]
+       D --> E{"¿Tiene etiqueta SUID?"}
+       E -->|no| N["No abusable por SUID"]
+       E -->|sí| F{"¿Es un SUID de fábrica<br/>(passwd, sudo, su, mount)?"}
+       F -->|sí| OK["Normal: lo necesita para su función"]
+       F -->|"no (find, vim, bash, cp)"| X["Anómalo: investigar"]
+   ```
 
 ### Resultado esperado
 
@@ -348,6 +387,24 @@ solo al instalar).
    La columna `Process` mostrará `python3` con su PID. Esa es la causa raíz: Python está
    ocupando el puerto que nginx quiere.
 
+   Lo que pasa en tu equipo desde el paso 2 hasta aquí:
+
+   ```mermaid
+   sequenceDiagram
+       participant P as python3 http.server
+       participant K as Kernel (puerto 80)
+       participant N as nginx (systemd)
+       participant T as Tu terminal
+       P->>K: bind 0.0.0.0:80
+       K-->>P: concedido, escucha en el 80
+       T->>N: systemctl start nginx
+       N->>K: bind 0.0.0.0:80
+       K-->>N: error 98: Address already in use
+       N-->>T: Job failed (Active: failed)
+       T->>K: ss -tulpn | grep ':80'
+       K-->>T: el 80 lo tiene python3 con su PID
+   ```
+
 7. Arregla la causa, no el síntoma: libera el puerto parando Python y vuelve a arrancar
    nginx.
    ```bash
@@ -414,6 +471,17 @@ ejercicio corre en esta misma máquina usando dos terminales: en la **Terminal 1
 intentos de login contra `127.0.0.1`. Tiempo estimado: 25 minutos. Los intentos fallidos
 se generan solo contra `127.0.0.1` / servicios que tú mismo levantaste en este equipo,
 nunca contra equipos ajenos.
+
+Montaje del ejercicio, todo dentro de tu equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo (un solo host)"]
+        T2["Terminal 2<br/>ssh -4 usuariofalso@127.0.0.1"] -->|"TCP por la interfaz lo"| SSHD["sshd<br/>escucha en el 22"]
+        SSHD -->|"escribe Failed password ... from 127.0.0.1"| LOG["/var/log/auth.log<br/>o el journal"]
+        T1["Terminal 1<br/>grep | awk | sort | uniq -c | sort -rn"] -->|lee| LOG
+    end
+```
 
 Instalación del servidor SSH:
 - Debian/Ubuntu: `sudo apt install openssh-server`
@@ -509,6 +577,17 @@ al instalar).
    las primeras. Muchos intentos desde una sola IP en poco tiempo es la firma de fuerza
    bruta.
 
+   Qué sale de cada eslabón con tus seis intentos:
+
+   ```mermaid
+   flowchart LR
+       A["auth.log<br/>todas las líneas"] -->|grep| B["6 líneas<br/>Failed password"]
+       B -->|awk| C["6 líneas<br/>127.0.0.1"]
+       C -->|sort| D["las 6 iguales,<br/>juntas"]
+       D -->|"uniq -c"| E["6 127.0.0.1"]
+       E -->|"sort -rn | head"| F["ranking final:<br/>6 127.0.0.1"]
+   ```
+
 ### Resultado esperado
 
 Una tabla con el número de intentos fallidos por cada IP, ordenada de mayor a menor,
@@ -589,6 +668,14 @@ borra al final.
    `cat` verás la sección `[Timer]` con `OnCalendar=*:*:00`. Espera un par de minutos y
    comprueba que funciona con `cat /tmp/prueba-timer.log` (`cat` muestra el archivo):
    debe haber una línea de fecha por minuto.
+
+   Las dos unidades que creó `systemd-run`:
+
+   ```mermaid
+   flowchart LR
+       T["prueba-timer.timer<br/>cuándo: OnCalendar=*:*:00"] -->|"cada minuto activa"| S["prueba-timer.service<br/>qué: /bin/sh -c 'date >> ...'"]
+       S -->|"añade una línea"| L["/tmp/prueba-timer.log"]
+   ```
 
 3. Ahora audita: lista los timers del sistema (los que corren como root) y las tareas
    cron.
@@ -686,6 +773,21 @@ borra al final.
    Además de la lista del ejercicio 2 aparecerán binarios SGID como `/usr/bin/crontab`
    (grupo `crontab`) o `/usr/bin/chage` (grupo `shadow`) en Debian/Ubuntu, que lo
    necesitan para su función.
+
+   La auditoría de los pasos 3 a 8 como una sola lista de decisiones:
+
+   ```mermaid
+   flowchart TD
+       A["Auditoría de tu equipo"] --> B{"Tareas de root:<br/>¿su programa es escribible por otros?"}
+       B -->|sí| R1["Escalada: corregir permisos"]
+       B -->|no| C{"PATH: ¿hay . , entrada vacía<br/>o carpeta escribible por otros?"}
+       C -->|sí| R2["Riesgo de PATH hijacking:<br/>chmod o-w o quitar la entrada"]
+       C -->|no| D{"getcap: ¿cap_setuid, cap_dac_override<br/>o cap_sys_admin en algo raro?"}
+       D -->|sí| R3["Equivale a root:<br/>setcap -r"]
+       D -->|no| E{"SUID/SGID: ¿alguno<br/>que no reconoces?"}
+       E -->|sí| R4["Investigar con GTFOBins"]
+       E -->|no| OK["Sin hallazgos"]
+   ```
 
 ### Resultado esperado
 

@@ -41,12 +41,48 @@ Cómo está organizado por dentro:
 
 El userland no toca el hardware directamente: pide cada cosa al kernel mediante una llamada al sistema (syscall), por ejemplo `open()` para abrir un archivo. En ese punto el kernel revisa los permisos. Por eso un bug en el kernel es mucho más grave que uno en un programa: el kernel es el que vigila.
 
+Recorrido de una syscall:
+
+```mermaid
+sequenceDiagram
+    participant P as Programa (cat)
+    participant K as Kernel
+    participant D as Disco
+    P->>K: open("/home/ana/notas.txt")
+    K->>K: ¿el UID del proceso tiene permiso?
+    alt permiso concedido
+        K-->>P: descriptor de archivo
+        P->>K: read()
+        K->>D: lee los bloques
+        D-->>K: datos
+        K-->>P: contenido del archivo
+    else permiso denegado
+        K-->>P: error Permission denied (EACCES)
+    end
+```
+
 Distribuciones: una **distro** es un sistema operativo completo que empaqueta el kernel Linux con un userland, un gestor de paquetes y una configuración por defecto. Las familias que más se ven en seguridad:
 
 - Debian y derivadas (Ubuntu, Kali Linux, Parrot): paquetes `.deb`, gestor `apt`. Kali y Parrot traen cientos de herramientas de pentesting preinstaladas.
 - Red Hat y derivadas (RHEL, Fedora, Rocky Linux, AlmaLinux): paquetes `.rpm`, gestor `dnf`. Muy comunes en servidores corporativos.
 - Arch Linux: actualización continua (rolling release), gestor `pacman`; documentación de referencia en la Arch Wiki.
 - Alpine: mínima (una imagen base de contenedor ocupa unos pocos MB), muy usada en Docker.
+
+Cómo se arma una distro y de dónde salen las derivadas:
+
+```mermaid
+flowchart LR
+    K["Kernel Linux"] --> D["Distribución"]
+    U["Userland<br/>(gran parte de GNU)"] --> D
+    G["Gestor de paquetes"] --> D
+    C["Configuración por defecto"] --> D
+    D --> DEB["Familia Debian<br/>.deb, apt"]
+    D --> RH["Familia Red Hat<br/>.rpm, dnf"]
+    D --> ARCH["Arch<br/>pacman"]
+    DEB --> UB["Ubuntu"]
+    DEB --> KALI["Kali / Parrot"]
+    RH --> FED["Fedora, RHEL,<br/>Rocky, AlmaLinux"]
+```
 
 Por qué domina en seguridad:
 
@@ -104,6 +140,18 @@ El árbol de archivos: Linux tiene una sola raíz `/` y todo cuelga de ella, inc
 ```
 
 Rutas: una ruta absoluta empieza en `/` y funciona desde cualquier lugar (`/etc/passwd`); una ruta relativa parte de la carpeta actual (`documentos/notas.txt`). Atajos: `.` es la carpeta actual, `..` la carpeta de arriba, `~` tu carpeta personal, `-` la carpeta donde estabas antes. Los archivos que empiezan con punto (`.bashrc`, `.ssh`) son ocultos: no aparecen en `ls` sin `-a` ni en la GUI sin activar "mostrar ocultos".
+
+Las dos formas de llegar a `/var/log` estando en `/home/ana`:
+
+```mermaid
+flowchart TD
+    R["/"] --> H["home"]
+    R --> V["var"]
+    H --> A["ana (carpeta actual, ~)"]
+    V --> L["log"]
+    A -->|"cd ../../var/log<br/>(relativa: sube dos y baja)"| L
+    R -.->|"cd /var/log<br/>(absoluta: parte de /)"| L
+```
 
 Ejemplo de recorrido:
 
@@ -200,6 +248,20 @@ Cómo se leen los permisos en `ls -l`:
 
 El kernel evalúa en orden y se queda con la primera coincidencia: si eres el dueño, aplica la terna del dueño; si no, y estás en el grupo, la del grupo; si no, la de otros. Por eso un dueño con `---` no puede leer su propio archivo aunque "otros" tenga `r`.
 
+```mermaid
+flowchart TD
+    A["Proceso pide leer, escribir o ejecutar"] --> B{"¿Es el dueño?"}
+    B -->|sí| C["Aplica la terna del dueño"]
+    B -->|no| D{"¿Está en el grupo<br/>del archivo?"}
+    D -->|sí| E["Aplica la terna del grupo"]
+    D -->|no| F["Aplica la terna de otros"]
+    C --> G{"¿La terna elegida<br/>tiene ese bit?"}
+    E --> G
+    F --> G
+    G -->|sí| H["Permitido"]
+    G -->|no| I["Permission denied"]
+```
+
 Qué significa cada letra depende de si es archivo o carpeta, y la diferencia se pregunta mucho:
 
 ```
@@ -234,6 +296,12 @@ Solo root puede cambiar el dueño de un archivo (`chown`); el dueño puede cambi
 
 umask: la **umask** es una máscara que resta permisos a los archivos y carpetas recién creados. Los archivos nacen como máximo con 666 y las carpetas con 777; la umask apaga bits. Con la umask típica 022: archivos 644, carpetas 755. Con 077: archivos 600, carpetas 700, nada visible para otros.
 
+```mermaid
+flowchart LR
+    F["Archivo nuevo<br/>máximo 666 (rw-rw-rw-)"] -->|"umask 022 apaga<br/>w de grupo y otros"| F2["644 (rw-r--r--)"]
+    D["Carpeta nueva<br/>máximo 777 (rwxrwxrwx)"] -->|"umask 022 apaga<br/>w de grupo y otros"| D2["755 (rwxr-xr-x)"]
+```
+
 ```
 $ umask
 0022
@@ -256,6 +324,20 @@ $ ls -l /usr/bin/passwd
 $ ls -ld /tmp
 drwxrwxrwt 18 root root 4096 oct  2 10:00 /tmp                 # 1777, sticky
 $ chmod 2775 /srv/equipo                                       # SGID en carpeta compartida
+```
+
+Qué cambia SUID al ejecutar `passwd`:
+
+```mermaid
+sequenceDiagram
+    participant A as ana (UID 1000)
+    participant P as /usr/bin/passwd<br/>(dueño root, SUID)
+    participant S as /etc/shadow<br/>(solo root escribe)
+    A->>P: ejecuta passwd
+    Note over P: el proceso corre con los<br/>permisos del dueño (root)
+    P->>S: escribe el nuevo hash
+    S-->>P: permitido
+    P-->>A: contraseña cambiada
 ```
 
 sudo: **sudo** es un programa que permite a usuarios autorizados ejecutar comandos como root (u otro usuario) usando su propia contraseña, y deja registro de cada uso. Las reglas viven en `/etc/sudoers` y `/etc/sudoers.d/`, y se editan siempre con `visudo`, que valida la sintaxis antes de guardar (un error de sintaxis puede dejar a todos sin sudo).
@@ -313,6 +395,24 @@ Resultado si se abusa  root                   root                    root
 
 La última fila es idéntica: cualquiera de los tres termina en root. Defensa: principio de mínimo privilegio (dar solo lo necesario), revisar periódicamente los SUID contra una lista conocida y limitar las reglas sudo a comandos exactos. Esto se practica legalmente en las salas de TryHackMe y en OverTheWire Bandit, nunca en equipos ajenos. El hardening completo está en [`13-defensa-y-hardening`](../13-defensa-y-hardening/).
 
+Todos los caminos de esta sección y de la siguiente llevan al mismo sitio:
+
+```mermaid
+flowchart LR
+    U["Usuario normal"] --> S1["Binario SUID root<br/>abusable (find)"]
+    U --> S2["Regla sudo amplia<br/>(vim, ALL)"]
+    U --> S3["/etc/passwd escribible"]
+    U --> S4["Script de root escribible<br/>(cron, timer)"]
+    U --> S5["Carpeta escribible<br/>antes en el PATH de root"]
+    U --> S6["Capability peligrosa<br/>(cap_setuid)"]
+    S1 --> R["root"]
+    S2 --> R
+    S3 --> R
+    S4 --> R
+    S5 --> R
+    S6 --> R
+```
+
 ```
 Escalada de privilegios → pasar de usuario normal a root.
 find -perm -4000 → lista binarios SUID.
@@ -352,6 +452,17 @@ Persistent=true                                # si estaba apagado, se ejecuta a
 
 Por qué importa en seguridad: una tarea que corre como root y ejecuta un script que un usuario normal puede modificar es una escalada directa: el usuario edita el script y espera al siguiente minuto. Y una tarea nueva que nadie recuerda haber creado es una de las formas típicas de persistencia de un intruso. La auditoría es mirar cada tarea de root y comprobar con `ls -l` quién puede escribir el script que ejecuta.
 
+```mermaid
+sequenceDiagram
+    participant U as ana (usuario normal)
+    participant S as Script de la tarea<br/>(escribible por ana)
+    participant C as cron (corre como root)
+    U->>S: añade una línea propia al script
+    Note over C: llega la hora programada
+    C->>S: ejecuta el script como root
+    S-->>U: la línea añadida corrió con permisos de root
+```
+
 PATH: cuando escribes `tar` sin ruta, la shell recorre las carpetas de `PATH` de izquierda a derecha y ejecuta el primer `tar` que encuentra. `type -a tar` o `command -v tar` dicen cuál se usará.
 
 ```
@@ -361,7 +472,17 @@ $ type -a tar
 tar is /usr/bin/tar
 ```
 
-PATH hijacking (secuestro de PATH): si un script que corre como root llama a `tar` sin ruta absoluta, y su `PATH` incluye antes de `/usr/bin` una carpeta donde un usuario normal puede escribir (o `.`, la carpeta actual, o una entrada vacía, que equivale a `.`), ese usuario deja ahí un archivo llamado `tar` y root lo ejecuta. Defensa: en scripts privilegiados usar rutas absolutas (`/usr/bin/tar`) o fijar `PATH` al principio del script; no poner `.` ni carpetas escribibles por otros en el `PATH` de root; `sudo` ya impone su propio `PATH` con la opción `secure_path` de sudoers.
+PATH hijacking (secuestro de PATH): si un script que corre como root llama a `tar` sin ruta absoluta, y su `PATH` incluye antes de `/usr/bin` una carpeta donde un usuario normal puede escribir (o `.`, la carpeta actual, o una entrada vacía, que equivale a `.`), ese usuario deja ahí un archivo llamado `tar` y root lo ejecuta:
+
+```mermaid
+flowchart TD
+    A["Script de root ejecuta tar sin ruta"] --> B{"1ª carpeta del PATH,<br/>escribible por un usuario:<br/>¿contiene tar?"}
+    B -->|"sí (tar falso dejado por el usuario)"| C["Root ejecuta el tar falso"]
+    B -->|no| D{"Siguiente carpeta:<br/>/usr/bin<br/>¿contiene tar?"}
+    D -->|sí| E["Root ejecuta /usr/bin/tar"]
+```
+
+Defensa: en scripts privilegiados usar rutas absolutas (`/usr/bin/tar`) o fijar `PATH` al principio del script; no poner `.` ni carpetas escribibles por otros en el `PATH` de root; `sudo` ya impone su propio `PATH` con la opción `secure_path` de sudoers.
 
 Capabilities: Linux divide los poderes de root en unas 40 piezas llamadas capabilities, y se puede dar solo una a un binario en lugar de hacerlo SUID root. `cap_net_raw` permite crear paquetes crudos (lo que necesitan `ping` o un sniffer), `cap_net_bind_service` permite escuchar en puertos menores de 1024. Es más seguro que SUID mientras la capability sea pequeña; algunas equivalen a root completo: `cap_setuid` (cambiar de UID, o sea volverse root), `cap_dac_override` (saltarse los permisos de archivos) o `cap_sys_admin`. El sufijo `=ep` significa effective + permitted: el binario la tiene activa al ejecutarse.
 
@@ -474,6 +595,19 @@ $ dig +short ejemplo.com     # probar la resolución
 
 `ss -tulpn` resuelve el caso de nginx de arriba: apache2 tiene el puerto 80. Y sirve en seguridad: un puerto en escucha que nadie reconoce es motivo de investigación.
 
+El caso de nginx, de punta a punta:
+
+```mermaid
+flowchart TD
+    A["nginx no arranca"] --> B["systemctl status nginx<br/>Active: failed"]
+    B --> C["journalctl -u nginx<br/>bind() to 0.0.0.0:80 failed:<br/>Address already in use"]
+    C --> D{"¿Quién tiene el 80?"}
+    D --> E["ss -tulpn<br/>apache2, pid 990"]
+    E --> F{"¿Ese proceso<br/>es legítimo?"}
+    F -->|sí| G["Liberar el puerto o mover<br/>uno de los dos servicios"]
+    F -->|no| H["Documentar ruta, PID y<br/>conexiones: posible intrusión"]
+```
+
 > [!TIP]
 > Orden práctico ante un servicio que falla: `systemctl status` del servicio, luego `journalctl -u` con el rango de tiempo, luego recursos (`df -h`, `free -h`) y por último red (`ss -tulpn`). El mensaje de error del log casi siempre dice exactamente qué pasó.
 
@@ -507,6 +641,17 @@ cmd >> f       → salida a archivo, añade al final.
 cmd 2> f       → errores a archivo (2 es la salida de errores); 2>/dev/null los descarta.
 cmd < f        → el archivo entra como entrada.
 cmd1 && cmd2   → cmd2 solo si cmd1 salió bien.
+```
+
+Cada programa tiene tres canales numerados: 0 entrada, 1 salida normal y 2 errores. Las redirecciones deciden a dónde va cada uno:
+
+```mermaid
+flowchart LR
+    IN["Archivo<br/>(cmd < f)"] -->|"0 stdin"| C1["cmd1"]
+    C1 -->|"1 stdout por la tubería |"| C2["cmd2"]
+    C1 -->|"2 stderr<br/>2>/dev/null"| N["/dev/null<br/>(se descarta)"]
+    C2 -->|"1 stdout<br/>> f o >> f"| OUT["Archivo"]
+    C2 -->|"2 stderr"| T["Terminal"]
 ```
 
 Archivos y carpetas:
