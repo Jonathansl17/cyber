@@ -25,3 +25,34 @@ Cada tema tiene conceptos con analogías y ejemplos, una sección de recursos (v
 | 17 | [Cloud](17-cloud/) | Seguridad en la nube, IaC, serverless, modelos, AWS/GCP/Azure, S3 |
 | 18 | [Programación y hacking práctico](18-programacion-y-hacking-practico/) | Lenguajes para seguridad, herramientas, exploit frameworks, GTFOBins, reversing, pentesting |
 | 19 | [Certificaciones y CTFs](19-certificaciones-y-ctfs/) | TryHackMe, VulnHub, picoCTF, pwn.college, certificaciones de entrada y avanzadas, ruta sugerida |
+
+Los temas están pensados para estudiarse en orden; cada bloque se apoya en el anterior:
+
+```mermaid
+flowchart TD
+    subgraph Base["Bases"]
+        direction LR
+        T01["01 Linux"] --> T02["02 Fundamentos de redes"] --> T03["03 Direccionamiento IP"] --> T04["04 Protocolos y puertos"] --> T05["05 Virtualización"]
+    end
+    subgraph Nucleo["Núcleo de seguridad"]
+        direction LR
+        T06["06 Herramientas de red"] --> T07["07 Autenticación"] --> T08["08 Conceptos de seguridad"] --> T09["09 Criptografía"]
+    end
+    subgraph Ofensiva["Ataque"]
+        direction LR
+        T10["10 Ataques y amenazas"] --> T11["11 Ataques web y de red"] --> T12["12 Frameworks de amenazas"]
+    end
+    subgraph Defensiva["Defensa"]
+        direction LR
+        T13["13 Defensa y hardening"] --> T14["14 Detección y monitoreo"] --> T15["15 Respuesta a incidentes y forense"]
+    end
+    subgraph Gobierno["Gobierno y nube"]
+        direction LR
+        T16["16 Estándares y cumplimiento"] --> T17["17 Cloud"]
+    end
+    subgraph Practica["Práctica"]
+        direction LR
+        T18["18 Programación y hacking práctico"] --> T19["19 Certificaciones y CTFs"]
+    end
+    Base --> Nucleo --> Ofensiva --> Defensiva --> Gobierno --> Practica
+```
