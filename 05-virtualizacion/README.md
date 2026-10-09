@@ -37,6 +37,30 @@ Un **hypervisor** (o VMM, virtual machine monitor) es un programa que crea y eje
 
 Cómo funciona por dentro. El sistema operativo invitado intenta ejecutar instrucciones privilegiadas (cambiar tablas de memoria, hablar con el disco). Las CPU modernas tienen extensiones de virtualización por hardware, Intel VT-x y AMD-V, que crean un nivel aún más privilegiado que ring 0 (a veces llamado "ring -1"): cuando el invitado ejecuta una de esas instrucciones, la CPU lo detiene y le pasa el control al hypervisor (un "VM exit"), que hace la operación de forma segura y devuelve el control. Para la memoria se usan tablas de páginas anidadas (Intel EPT, AMD NPT): el invitado cree que tiene las direcciones 0 a 4 GB, y la CPU traduce esas direcciones a otras distintas de la RAM real que el hypervisor eligió. Así cada VM ve "su" memoria y no puede ni nombrar la de la vecina. Los dispositivos (tarjeta de red, disco) se emulan por software o se aceleran con drivers paravirtualizados (virtio en KVM, VMware Tools, Guest Additions en VirtualBox).
 
+Ciclo de una instrucción privilegiada del invitado:
+
+```mermaid
+sequenceDiagram
+    participant G as Guest OS
+    participant C as CPU (VT-x / AMD-V)
+    participant H as Hypervisor ("ring -1")
+    G->>C: instrucción privilegiada (tablas de memoria, disco)
+    C->>H: VM exit: detiene al invitado y pasa el control
+    H->>H: hace la operación de forma segura
+    H->>C: devuelve el control
+    C->>G: el invitado continúa sin notar nada
+```
+
+Traducción de memoria con tablas anidadas: dos VMs usan las mismas direcciones y acaban en zonas distintas de la RAM real.
+
+```mermaid
+flowchart LR
+    A1["VM 1: dirección<br/>0 a 4 GB"] -->|"EPT / NPT"| R1["RAM real:<br/>zona elegida para VM 1"]
+    A2["VM 2: dirección<br/>0 a 4 GB"] -->|"EPT / NPT"| R2["RAM real:<br/>zona elegida para VM 2"]
+    H["Hypervisor"] -.->|"configura las tablas"| A1
+    H -.->|"configura las tablas"| A2
+```
+
 En Linux se comprueba si la CPU soporta virtualización por hardware así (el número es la cantidad de núcleos con el flag; 0 significa que está apagada en la BIOS o no existe):
 
 ```
@@ -156,6 +180,26 @@ Los modos de red de la VM deciden con quién puede hablar, y son la primera deci
 - Host-only: la VM solo ve al host y a otras VMs host-only; sin internet.
 - Internal network: las VMs solo se ven entre sí; ni siquiera el host. Es la red ideal para atacante + víctima.
 
+Con quién puede hablar la VM en cada modo:
+
+```mermaid
+flowchart LR
+    INET["Internet"]
+    LAN["LAN real<br/>(router de casa, teléfono, tele)"]
+    HOST["Host"]
+    NATVM["VM en NAT"]
+    BRVM["VM en bridged"]
+    HOVM["VM host-only"]
+    IN1["VM internal<br/>(atacante)"]
+    IN2["VM internal<br/>(víctima)"]
+    NATVM -->|"solo salida, a través del host"| HOST
+    HOST --- LAN
+    LAN --- INET
+    BRVM <-->|"IP propia del router"| LAN
+    HOVM <--> HOST
+    IN1 <--> IN2
+```
+
 ```
 NAT → VM sale a internet, nadie entra; para actualizar.
 Bridged → VM es un equipo más de la LAN real; evitar con malware.
@@ -164,6 +208,22 @@ Internal → solo VMs entre sí; red de laboratorio ideal.
 ```
 
 ## Common Virtualization Technologies
+
+Dónde encaja cada producto de esta sección:
+
+```mermaid
+flowchart TD
+    T1["Hypervisor tipo 1<br/>(sobre el hardware)"]
+    T2["Hypervisor tipo 2<br/>(app sobre un Host OS)"]
+    T1 --> ESXI["ESXi (VMware)"]
+    T1 --> PVE["Proxmox VE (Debian)"]
+    T2 --> WS["VMware Workstation<br/>(Windows / Linux)"]
+    T2 --> FU["VMware Fusion (macOS)"]
+    T2 --> VB["VirtualBox (Oracle, GPLv3)"]
+    VC["vCenter / vSphere"] -->|"gestiona muchos"| ESXI
+    PVE --> KVM["KVM/QEMU: VMs completas"]
+    PVE --> LXC["LXC: contenedores de sistema"]
+```
 
 ### VMWare
 
@@ -209,6 +269,17 @@ Detalles que importan en seguridad:
 
 - La gestión va por HTTPS (puerto 443) y SSH (22, apagado por defecto). Nunca debe exponerse a internet: las campañas como ESXiArgs (2023) cifraron miles de ESXi expuestos a través del servicio OpenSLP (puerto 427).
 - Los discos de las VMs viven en datastores como archivos `.vmdk`; quien obtiene root en ESXi tiene todos los discos.
+Cadena de un ataque tipo ESXiArgs contra un ESXi expuesto:
+
+```mermaid
+flowchart LR
+    A["Internet"] -->|"OpenSLP, puerto 427"| B["ESXi expuesto<br/>sin parchear"]
+    B --> C["Atacante con root<br/>en el hypervisor"]
+    C --> D["Apaga las VMs"]
+    D --> E["Cifra los .vmdk<br/>del datastore"]
+    E --> F["Caen todas las VMs<br/>y sus snapshots"]
+```
+
 - La edición gratuita fue retirada por Broadcom en 2024 y reintroducida en 2025 con la versión 8.0 Update 3e; su disponibilidad cambia, así que para un homelab Proxmox es la opción más estable.
 
 Analogía: ESXi es el administrador de un edificio que vive en el sótano y no tiene apartamento propio: su única función es el edificio.
@@ -248,6 +319,15 @@ root@pve:~# qm snapshot 102 limpio --description "recien instalada"
 
 > [!TIP]
 > En Proxmox, una VM (KVM) es la opción para todo lo que deba estar realmente aislado o no sea Linux (pfSense, que es FreeBSD; malware); un contenedor LXC es la opción ligera para servicios Linux de confianza (un SIEM, un DNS), porque comparte el kernel del host.
+
+```mermaid
+flowchart TD
+    Q1{"¿Es Linux?"}
+    Q1 -->|"no (pfSense, Windows)"| VM["VM con KVM (qm)"]
+    Q1 -->|sí| Q2{"¿Es de confianza?"}
+    Q2 -->|"no (malware, víctima)"| VM
+    Q2 -->|"sí (SIEM, DNS)"| CT["Contenedor LXC (pct)<br/>comparte el kernel del host"]
+```
 
 ```
 VMware → empresa/familia comercial dominante en empresas (Workstation, Fusion, ESXi, vSphere).
@@ -311,6 +391,22 @@ Analogía: apartamentos dentro de un mismo edificio con paredes de tablaroca. Ca
 
 El aislamiento es una propiedad que se mide por la frontera compartida, y por eso no hay que confundir "está en un contenedor" con "está en una caja segura".
 
+Qué queda debajo de cada aplicación:
+
+```mermaid
+flowchart TD
+    subgraph VMS["Máquinas virtuales"]
+        V1["App en VM 1"] --> K1["Kernel del invitado 1"]
+        V2["App en VM 2"] --> K2["Kernel del invitado 2"]
+        K1 --> HV["Hypervisor + CPU<br/>(lo compartido)"]
+        K2 --> HV
+    end
+    subgraph CTS["Contenedores"]
+        C1["App en contenedor 1<br/>(namespaces + cgroups)"] --> HK["Kernel del host<br/>(lo compartido)"]
+        C2["App en contenedor 2<br/>(namespaces + cgroups)"] --> HK
+    end
+```
+
 ```
                          VM                      Contenedor            Sandbox de proceso
 Kernel propio            sí                      no                    no
@@ -338,6 +434,16 @@ Formas habituales:
 - Sandbox de aplicación: el navegador ejecuta cada pestaña en un proceso sin permisos para tocar el disco; si una página explota un fallo del motor JavaScript, todavía necesita un segundo fallo para salir del sandbox.
 - Sandbox de sistema: Firejail, Bubblewrap o Flatpak en Linux, que dan a un programa una vista recortada del sistema.
 - Sandbox de análisis de malware: un entorno (Cuckoo/CAPE, Any.Run, el sandbox de un antivirus o de un gateway de correo) que ejecuta el archivo en una VM instrumentada y reporta qué archivos creó, qué procesos lanzó y a qué IP se conectó (ver [`15-respuesta-a-incidentes-y-forense`](../15-respuesta-a-incidentes-y-forense/)).
+
+Flujo de un sandbox de análisis, incluida la evasión (ver la nota de abajo):
+
+```mermaid
+flowchart LR
+    S["Archivo sospechoso"] --> V["VM instrumentada"]
+    V --> Q{"¿El malware detecta<br/>señales de sandbox?"}
+    Q -->|no| R["Reporte: archivos creados,<br/>procesos lanzados, IPs contactadas"]
+    Q -->|"sí (T1497)"| Z["Se queda quieto:<br/>el reporte sale limpio"]
+```
 
 Analogía: el arenero de un parque (de ahí el nombre "sandbox"): el niño puede hacer lo que quiera con la arena, pero la arena no sale del cajón.
 
@@ -405,6 +511,19 @@ Ejemplo de flujo en un lab de análisis:
 4. Copiar el sample, ejecutarlo, observar 10 minutos.
 5. Restaurar `limpio`. La VM vuelve a estar sin infectar en 5 segundos.
 
+```mermaid
+stateDiagram-v2
+    state "VM instalada y actualizada" as Instalada
+    state "Red internal, sin carpetas ni portapapeles" as Aislada
+    state "Snapshot limpio" as Limpio
+    state "VM infectada" as Infectada
+    [*] --> Instalada
+    Instalada --> Aislada: endurecer el aislamiento
+    Aislada --> Limpio: tomar snapshot
+    Limpio --> Infectada: copiar y ejecutar el sample
+    Infectada --> Limpio: restaurar (segundos)
+```
+
 ### Un snapshot no es un backup
 
 > [!IMPORTANT]
@@ -439,6 +558,13 @@ Decisión de plataforma:
 - Solo tienes tu laptop (16 GB de RAM o más): VirtualBox o VMware Workstation (tipo 2). Suficiente para 2-3 VMs a la vez.
 - Tienes una PC vieja o un mini PC dedicado (32 GB de RAM o más es lo cómodo): Proxmox VE (tipo 1), administrado desde la laptop por navegador. Permite tener encendidos 5-8 equipos y dejarlos corriendo.
 
+```mermaid
+flowchart TD
+    Q{"¿Qué hardware tienes?"}
+    Q -->|"solo la laptop (16 GB o más)"| T2["VirtualBox o VMware Workstation<br/>(tipo 2): 2-3 VMs a la vez"]
+    Q -->|"PC vieja o mini PC (32 GB o más)"| T1["Proxmox VE (tipo 1),<br/>administrado por navegador: 5-8 equipos"]
+```
+
 Topología mínima recomendada, con el firewall como única puerta entre el lab y la casa:
 
 ```
@@ -455,6 +581,23 @@ Topología mínima recomendada, con el firewall como única puerta entre el lab 
       |-- Ubuntu Server         10.10.10.30   servidor con SSH y auditd, envía logs al SIEM
       |-- Debian (escritorio)   10.10.10.31   estación de usuario
       |-- Wazuh / Security Onion 10.10.10.50  SIEM: ve lo que hace el atacante
+```
+
+Qué tráfico permite el firewall del lab (continua: permitido; punteada: bloqueado):
+
+```mermaid
+flowchart LR
+    CASA["Red de la casa<br/>192.168.1.0/24"]
+    FW["pfSense / OPNsense"]
+    subgraph LAB["labnet 10.10.10.0/24"]
+        KALI["Kali (atacante)"]
+        VIC["Víctimas:<br/>Metasploitable, DVWA,<br/>Ubuntu Server, Debian"]
+        SIEM["Wazuh / Security Onion"]
+    end
+    KALI -->|"ataques"| VIC
+    VIC -->|"logs"| SIEM
+    LAB --> FW
+    FW -.->|"bloqueado"| CASA
 ```
 
 Recursos de referencia por VM: Kali 4 GB/2 CPU/60 GB; Metasploitable 1 GB; Ubuntu Server 2 GB; Debian de escritorio 2-4 GB; Wazuh 4-8 GB; pfSense 1-2 GB. Total holgado: unos 16-22 GB de RAM, de ahí los 32 GB recomendados.

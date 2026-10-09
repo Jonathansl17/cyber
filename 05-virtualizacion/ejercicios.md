@@ -12,6 +12,41 @@ Objetivo: dejar dos VMs que solo se ven entre sí en una red interna, tomar un s
 
 Necesitas: VirtualBox 7 en el host (Debian/Ubuntu: `sudo apt install virtualbox`; Arch: `sudo pacman -S virtualbox virtualbox-host-modules-arch`) y dos VMs Linux ya instaladas, llamadas `atacante` y `victima` (por ejemplo Kali y Debian 12; sirve cualquier distribución). En la víctima, un usuario con `sudo`. La red será "internal", sin salida a internet ni a tu casa. Tiempo: 40 minutos más la instalación de las VMs si no las tienes.
 
+Montaje del ejercicio, todo dentro de tu único equipo físico:
+
+```mermaid
+flowchart TD
+    subgraph HOST["Tu equipo Linux (host) con VirtualBox"]
+        CLI["Terminal del host:<br/>VBoxManage"]
+        subgraph LABNET["Red internal labnet 10.10.10.0/24"]
+            DHCP["DHCP de VirtualBox<br/>10.10.10.1 (reparte .100 a .200)"]
+            ATK["VM atacante<br/>ping -D"]
+            VIC["VM victima<br/>p. ej. 10.10.10.101"]
+        end
+    end
+    INET["Internet / red de casa"]
+    CLI -->|"modifyvm, snapshot,<br/>controlvm, startvm"| VIC
+    DHCP -.->|"IP"| ATK
+    DHCP -.->|"IP"| VIC
+    ATK <-->|"ICMP"| VIC
+    LABNET -.-x|"sin salida"| INET
+```
+
+Ciclo de vida de la víctima durante el ejercicio:
+
+```mermaid
+stateDiagram-v2
+    state "Sana, encendida" as Sana
+    state "Snapshot limpio tomado (con RAM)" as Limpio
+    state "Rota: sin /etc/passwd" as Rota
+    state "Apagada en seco" as Apagada
+    [*] --> Sana
+    Sana --> Limpio: snapshot take limpio
+    Limpio --> Rota: sudo rm /etc/passwd
+    Rota --> Apagada: controlvm poweroff
+    Apagada --> Limpio: snapshot restore limpio + startvm
+```
+
 ### Pasos
 
 1. Apaga las dos VMs y comprueba que existen con esos nombres.
@@ -129,6 +164,21 @@ Necesitas: VirtualBox 7 en el host (Debian/Ubuntu: `sudo apt install virtualbox`
 
     Al final verás `real 0m4,812s` o similar: ese es el tiempo de la operación de restauración.
 11. Mira el ping del atacante. Habrá un hueco en la secuencia (`icmp_seq` salta) entre la última respuesta antes del apagado y la primera después de restaurar. Resta las dos marcas de tiempo `-D`: es el tiempo real sin servicio. Detén el ping con `Ctrl+C`; el resumen dirá cuántos paquetes se perdieron (cada paquete perdido es un segundo).
+
+    ```mermaid
+    sequenceDiagram
+        participant A as VM atacante (ping -D)
+        participant V as VM victima
+        participant H as Host (VBoxManage)
+        A->>V: echo request (icmp_seq=40)
+        V-->>A: echo reply [marca t1]
+        H->>V: controlvm poweroff
+        A-xV: echo request sin respuesta (icmp_seq salta)
+        H->>V: snapshot restore limpio + startvm
+        A->>V: echo request
+        V-->>A: echo reply [marca t2]
+        Note over A: tiempo sin servicio = t2 - t1
+    ```
 12. En la ventana de la víctima, que vuelve con la sesión que tenías al tomar el snapshot, comprueba que está sana.
     ```bash
     whoami
@@ -139,6 +189,14 @@ Necesitas: VirtualBox 7 en el host (Debian/Ubuntu: `sudo apt install virtualbox`
     - `/etc/passwd /tmp/passwd.antes` → los dos archivos cuya existencia se comprueba.
 
     `whoami` vuelve a dar tu usuario, `/etc/passwd` existe, y `/tmp/passwd.antes` tampoco existe: todo lo que hiciste después del snapshot desapareció, incluida la copia.
+
+    ```mermaid
+    flowchart LR
+        BASE["Disco base victima.vdi<br/>(congelado al tomar limpio)"]
+        DELTA["Delta posterior al snapshot:<br/>/tmp/passwd.antes,<br/>borrado de /etc/passwd"]
+        BASE --> DELTA
+        DELTA -->|"restore limpio:<br/>se descarta"| X["Nada de lo posterior queda"]
+    ```
 13. Repite los pasos 9 a 11 una segunda vez y anota los dos tiempos. Restaurar no depende de cuánto dañes la VM: solo se descarta el archivo diferencial.
 
 > [!NOTE]
@@ -191,6 +249,20 @@ Necesitas: un host Linux con Docker (Debian/Ubuntu: `sudo apt install docker.io`
    - `uname -r` y `grep PRETTY_NAME /etc/os-release` → el comando que se ejecuta dentro del contenedor (ver paso 1).
 
    La primera línea es idéntica a la del host (`7.2.7-arch1-1`); la segunda dice `PRETTY_NAME="Alpine Linux v3.xx"`. Los archivos son de Alpine, el kernel es el tuyo.
+
+   ```mermaid
+   sequenceDiagram
+       participant T as Terminal del host
+       participant D as dockerd
+       participant C as Proceso uname en el contenedor
+       participant K as Kernel del host
+       T->>D: docker run --rm alpine uname -r
+       D->>C: lo lanza con namespaces, cgroups<br/>y los archivos de la imagen Alpine
+       C->>K: llamada al sistema uname()
+       K-->>C: versión del kernel del host
+       C-->>T: 7.2.7-arch1-1 (igual que en el host)
+       D->>D: --rm borra el contenedor
+   ```
 3. Entra en una shell del contenedor y mira la vista recortada de procesos y de módulos.
    ```bash
    docker run --rm -it alpine sh
@@ -250,6 +322,25 @@ Necesitas: un host Linux con Docker (Debian/Ubuntu: `sudo apt install docker.io`
    - `'VBoxHeadless|VirtualBoxVM|qemu'` → nombres de los procesos que ejecutan una VM en VirtualBox (sin ventana o con ella) y en KVM/QEMU.
 
    Verás un proceso por VM encendida; los procesos de dentro de la VM no se ven desde el host.
+
+   Lo que `ps -ef` del host ve y no ve en los pasos 4 y 6:
+
+   ```mermaid
+   flowchart TD
+       subgraph HOSTPS["Procesos visibles con ps -ef en el host"]
+           SL["sleep 300<br/>(contenedor prueba, PID normal del host)"]
+           VBX["VBoxHeadless / VirtualBoxVM / qemu<br/>(un proceso por VM)"]
+       end
+       KH["Kernel del host (7.2.7-arch1-1)"]
+       subgraph VMIN["Dentro de la VM (invisible para el host)"]
+           KV["Kernel propio de la VM<br/>(6.1.0-26-amd64)"]
+           PV["Procesos de la VM"]
+       end
+       SL -->|"syscalls directas"| KH
+       VBX --> KH
+       VBX -->|"hardware virtual"| KV
+       PV --> KV
+   ```
 7. Escribe en tus notas una tabla en texto plano con tres columnas (host, contenedor, VM) y dos filas (`uname -r`, `PRETTY_NAME`), y una frase que explique la diferencia.
 
 ### Resultado esperado
