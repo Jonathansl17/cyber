@@ -55,6 +55,16 @@ Cómo leer cada capa por dentro:
 
 Ejemplo: abres `https://ejemplo.com`. La capa 7 arma un `GET /` de HTTP, la 6 lo cifra con TLS, la 5 mantiene la sesión TLS abierta, la 4 lo mete en un segmento TCP hacia el puerto 443, la 3 le pone la IP destino del servidor (por ejemplo 198.51.100.7, una IP reservada para documentación), la 2 le pone la MAC del router de tu casa y la 1 lo convierte en ondas de radio de Wi-Fi.
 
+```mermaid
+flowchart TD
+    L7["7 Application: arma GET / de HTTP"] --> L6["6 Presentation: lo cifra con TLS"]
+    L6 --> L5["5 Session: mantiene la sesión TLS abierta"]
+    L5 --> L4["4 Transport: segmento TCP al puerto 443"]
+    L4 --> L3["3 Network: IP destino 198.51.100.7"]
+    L3 --> L2["2 Data Link: MAC del router de casa"]
+    L2 --> L1["1 Physical: ondas de radio Wi-Fi"]
+```
+
 > [!WARNING]
 > Las capas 5, 6 y 7 se confunden porque en TCP/IP están fundidas en una sola; en un examen, "cifrado y formato" es capa 6, "abrir y cerrar el diálogo" es capa 5 y "el protocolo que usa la aplicación" es capa 7.
 
@@ -125,6 +135,13 @@ Cifras que conviene recordar: cabecera Ethernet de 14 bytes más 4 de FCS, cabec
 
 Un punto que confunde: en cada salto, el router quita la trama Ethernet vieja y construye una nueva con MACs nuevas, pero deja intactas las IP de origen y destino (salvo que haga NAT). Por eso la MAC cambia en cada tramo y la IP se mantiene de extremo a extremo.
 
+```mermaid
+flowchart LR
+    PC["PC<br/>192.168.1.10"] -->|"MAC: PC → R1<br/>IP: 192.168.1.10 → 198.51.100.7"| R1["Router 1"]
+    R1 -->|"MAC: R1 → R2<br/>IP: 192.168.1.10 → 198.51.100.7"| R2["Router 2"]
+    R2 -->|"MAC: R2 → servidor<br/>IP: 192.168.1.10 → 198.51.100.7"| SV["Servidor<br/>198.51.100.7"]
+```
+
 Ejemplo: capturar en tu propia máquina con `tcpdump -e` (muestra la cabecera de capa 2) el inicio de una conexión web:
 
 ```
@@ -169,6 +186,18 @@ La fila que prueba la idea es la de la izquierda: subiendo de capa, cada disposi
 
 Ejemplo: un atacante en la misma Wi-Fi de una cafetería envía respuestas ARP falsas diciendo "la IP del router 192.168.1.1 está en mi MAC". Es capa 2, así que la defensa también está en capa 2 (Dynamic ARP Inspection en el switch) o arriba (TLS cifra los datos aunque pasen por el intruso). Un firewall que solo mira puertos no lo ve.
 
+```mermaid
+sequenceDiagram
+    participant V as Víctima
+    participant A as Atacante (misma Wi-Fi)
+    participant R as Router 192.168.1.1
+    A->>V: ARP falso: 192.168.1.1 está en la MAC del atacante
+    Note over V: guarda la MAC falsa en su caché ARP
+    V->>A: tramas para el router (van a la MAC del atacante)
+    A->>R: las reenvía para no levantar sospechas
+    Note over V,R: si el tráfico va en TLS, el atacante solo ve bytes cifrados
+```
+
 Límite de la regla: varios equipos modernos trabajan en muchas capas a la vez (un router doméstico es switch, router, firewall, servidor DHCP y access point en una caja). Se clasifica cada función por separado, no la caja.
 
 Los ataques se estudian en [`10-ataques-y-amenazas`](../10-ataques-y-amenazas/) y [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/); las defensas, en [`13-defensa-y-hardening`](../13-defensa-y-hardening/).
@@ -197,6 +226,23 @@ Cómo lo consigue TCP:
 - Control de flujo (ventana) y de congestión: el emisor baja el ritmo si el receptor o la red se saturan.
 - Cierre ordenado de la conexión con FIN.
 
+Secuencia, ACK y retransmisión cuando se pierde un segmento:
+
+```mermaid
+sequenceDiagram
+    participant E as Emisor
+    participant R as Receptor
+    E->>R: segmento seq=1 (1000 bytes)
+    R-->>E: ACK 1001
+    E-xR: segmento seq=1001 (se pierde)
+    E->>R: segmento seq=2001
+    Note over R: guarda el 2001, pero falta el 1001
+    R-->>E: ACK 1001 (sigue esperando el 1001)
+    Note over E: el 1001 no se confirmó a tiempo
+    E->>R: retransmite seq=1001
+    R-->>E: ACK 3001 (todo recibido hasta el byte 3000)
+```
+
 Todo eso cuesta: una cabecera de 20 bytes como mínimo y al menos un viaje de ida y vuelta antes del primer dato. UDP no hace nada de lo anterior: su cabecera tiene 8 bytes (puerto de origen, puerto de destino, longitud y checksum) y el primer paquete ya lleva datos. Si la aplicación necesita fiabilidad sobre UDP, la implementa ella misma; es lo que hace QUIC, el transporte de HTTP/3.
 
 ```
@@ -212,10 +258,36 @@ Usos          Web (HTTP/HTTPS), SSH, correo, FTP    DNS, DHCP, VoIP, streaming, 
 
 Ejemplo: al abrir `https://ejemplo.com`, el navegador primero pregunta la IP al DNS por UDP 53 (una pregunta y una respuesta de unos 100 bytes; si se pierde, simplemente pregunta otra vez) y luego abre una conexión TCP al puerto 443 para descargar la página, donde perder un byte rompería el HTML. Dos protocolos en el mismo clic, cada uno donde encaja.
 
+```mermaid
+sequenceDiagram
+    participant N as Navegador
+    participant D as Servidor DNS
+    participant W as Servidor web
+    N->>D: UDP 53: ¿IP de ejemplo.com?
+    D-->>N: UDP 53: 198.51.100.7
+    Note over N,W: TCP 443: handshake antes de cualquier dato
+    N->>W: SYN
+    W-->>N: SYN-ACK
+    N->>W: ACK
+    N->>W: petición de la página
+    W-->>N: página en segmentos numerados
+```
+
 Desde seguridad importan tres consecuencias:
 
 - Un escaneo de puertos TCP es fiable porque el handshake obliga a responder: SYN-ACK si el puerto está abierto, RST si está cerrado. La excepción es un firewall delante: si descarta el SYN no llega nada, y si lo rechaza devuelve un ICMP "destination unreachable"; en ambos casos el escáner lo marca como filtrado (`filtered` en nmap), no como abierto ni cerrado. En UDP un puerto abierto a menudo no responde nada, y no responder es justo lo mismo que hace uno filtrado; solo un cerrado se delata con un ICMP "port unreachable". Por eso el escaneo UDP es lento y ambiguo (`open|filtered`).
 - Como UDP no tiene handshake, un solo paquete con la IP de origen falsificada basta para que el servidor responda, y la respuesta va a la IP falsificada, es decir, a la víctima. En TCP falsificar el origen sirve de poco: el SYN-ACK va a la IP falsa y el handshake nunca se completa, así que no llega a haber petición que responder. Ese es el principio de los ataques de reflexión y amplificación (DNS, NTP, memcached): una pregunta pequeña con origen falso provoca una respuesta grande dirigida a la víctima (ver [`11-ataques-web-y-de-red`](../11-ataques-web-y-de-red/)).
+
+  ```mermaid
+  sequenceDiagram
+      participant A as Atacante
+      participant S as Servidor DNS abierto
+      participant V as Víctima
+      A->>S: consulta UDP pequeña con origen falso = IP de la víctima
+      S->>V: respuesta grande que la víctima nunca pidió
+      Note over A,V: multiplicado por miles de servidores, satura a la víctima
+  ```
+
 - Un firewall con estado sigue las conexiones TCP por sus banderas; en UDP solo puede aproximarlo con temporizadores.
 
 > [!TIP]
@@ -275,6 +347,16 @@ Criterios: n nodos necesitan n enlaces. En un anillo simple, un solo corte tumba
 
 Ejemplo: un anillo de 6 sedes con 6 tramos de fibra. Si una excavadora corta el tramo B-C en un anillo simple, se cae la red; en un anillo doble, el tráfico de B a C da la vuelta por A-F-E-D-C y llega con algo más de latencia.
 
+```mermaid
+flowchart LR
+    B["Sede B"] -. "tramo B-C cortado" .- C["Sede C"]
+    B -->|"anillo doble:<br/>vuelta por el otro lado"| A["Sede A"]
+    A --> F["Sede F"]
+    F --> E["Sede E"]
+    E --> D["Sede D"]
+    D --> C
+```
+
 ```
 Ring → cada nodo con dos vecinos; n enlaces; token para turnarse; un corte tumba un anillo simple.
 ```
@@ -326,6 +408,22 @@ Ejemplo: 10 PCs en un coaxial de 150 m. Si se afloja el conector T del PC 5, los
 
 > [!NOTE]
 > Una red con hub es estrella física pero bus lógico: el hub repite cada trama por todos los puertos, así que todos ven todo y hay colisiones; el switch rompió ese bus lógico al enviar cada trama solo al puerto destino.
+
+```mermaid
+flowchart LR
+    subgraph HUB["Hub: bus lógico"]
+        H1["PC1 envía a PC3"] --> H["Hub"]
+        H --> H2["PC2 la recibe"]
+        H --> H3["PC3 la recibe"]
+        H --> H4["PC4 la recibe"]
+    end
+    subgraph SWITCH["Switch"]
+        S1["PC1 envía a PC3"] --> S["Switch"]
+        S --> S3["PC3 la recibe"]
+        S -. "no se envía" .- S2["PC2 no la ve"]
+        S -. "no se envía" .- S4["PC4 no la ve"]
+    end
+```
 
 ```
 Star → centro único; fallo aislado salvo el centro; LAN y Wi-Fi actuales.
@@ -387,6 +485,21 @@ $ ping -c 3 10.20.0.1
 64 bytes from 10.20.0.1: icmp_seq=3 ttl=62 time=120 ms
 ```
 
+Los ejemplos de MAN y WAN juntos: dos campus unidos dentro de la ciudad y una sucursal en otro país:
+
+```mermaid
+flowchart LR
+    subgraph CIUDAD["MAN: anillo de fibra en la ciudad"]
+        L1["LAN campus 1"] --- L2["LAN campus 2"]
+        L2 --- L3["LAN campus 3"]
+        L3 --- L1
+    end
+    subgraph EXT["Otro país"]
+        L4["LAN sucursal"]
+    end
+    L1 ---|"WAN: VPN sobre Internet<br/>~120 ms"| L4
+```
+
 ```
 WAN → entre ciudades/países, enlaces de operadores, MPLS/VPN/SD-WAN, latencia alta.
 ```
@@ -400,6 +513,15 @@ Existe para dar movilidad: portátiles y teléfonos se conectan sin cable dentro
 Analogía: una conversación en voz alta dentro de una sala: todos los que estén en la sala pueden oírla, por eso hace falta hablar en clave.
 
 Por esa razón la WLAN tiene un problema de seguridad que la LAN cableada no tiene: cualquiera dentro del alcance de la señal recibe las tramas, aunque no esté dentro del edificio. Se protege con cifrado WPA2 o, mejor, WPA3 (ver [`09-criptografia`](../09-criptografia/)); una red abierta sin cifrado expone todo lo que no vaya cifrado en capas superiores.
+
+```mermaid
+flowchart LR
+    P["Portátil"] -.->|"radio 802.11"| AP["Access point<br/>(SSID)"]
+    T["Teléfono"] -.->|"radio 802.11"| AP
+    AP --- SW["Switch de la LAN cableada"]
+    SW --- SV["Servidor de archivos"]
+    AP -.->|"la señal sale del edificio"| X["Vecino a 20 m:<br/>recibe las tramas;<br/>sin WPA2/WPA3 lee lo no cifrado"]
+```
 
 Ejemplo: una casa con un router Wi-Fi en 5 GHz da unos 500 Mbps a 5 m del AP, pero baja a 50 Mbps dos paredes más allá; el vecino, a 20 m, aún ve el SSID.
 
@@ -463,6 +585,18 @@ sdb      8:16   0  500G  0 disk
 > La diferencia entre NAS y SAN no es el tamaño ni el precio, sino quién maneja el sistema de archivos: en el NAS lo maneja el propio NAS y el cliente pide archivos; en la SAN lo maneja el servidor y la red solo le entrega bloques crudos.
 
 Esta distinción es el criterio que separa almacenamiento a nivel de archivo de almacenamiento a nivel de bloque. Un bloque es un trozo de tamaño fijo del disco (por ejemplo 4 KB) sin nombre; un archivo es un conjunto de bloques al que un sistema de archivos le pone nombre, carpeta y permisos.
+
+```mermaid
+flowchart LR
+    subgraph NAS["NAS: nivel archivo"]
+        C1["PC cliente"] -->|"SMB / NFS:<br/>dame informe.pdf"| N1["NAS<br/>(maneja el sistema de archivos)"]
+        N1 --> D1[("Discos")]
+    end
+    subgraph SAN["SAN: nivel bloque"]
+        S1["Servidor<br/>(maneja su sistema de archivos)"] -->|"FC / iSCSI:<br/>bloques crudos"| A1["Cabina<br/>(LUN)"]
+        A1 --> D2[("Discos")]
+    end
+```
 
 ```
                      DAS (disco local)   NAS                  SAN

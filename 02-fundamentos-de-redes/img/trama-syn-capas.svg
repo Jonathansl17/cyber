@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 250" width="900" height="250" font-family="sans-serif">
+<rect x="0" y="0" width="900" height="250" fill="#ffffff"/>
+<text x="450.0" y="30" text-anchor="middle" font-size="17" font-weight="bold" fill="#1f2328">Trama del SYN capturado: length 74 = 14 + 20 + 40 bytes</text>
+<rect x="40" y="55" width="155.13513513513513" height="70" fill="#dbe9ff" stroke="#1f2328" stroke-width="1.5"/>
+<text x="117.56756756756756" y="85" text-anchor="middle" font-size="14" font-weight="bold" fill="#1f2328">Ethernet (capa 2)</text>
+<text x="117.56756756756756" y="107" text-anchor="middle" font-size="14" fill="#1f2328">14 bytes</text>
+<text x="117.56756756756756" y="152" text-anchor="middle" font-size="13" fill="#1f2328">MAC origen > MAC destino</text>
+<text x="117.56756756756756" y="172" text-anchor="middle" font-size="13" fill="#1f2328">ethertype IPv4</text>
+<rect x="195.13513513513513" y="55" width="221.6216216216216" height="70" fill="#ffe8a3" stroke="#1f2328" stroke-width="1.5"/>
+<text x="305.94594594594594" y="85" text-anchor="middle" font-size="14" font-weight="bold" fill="#1f2328">IPv4 (capa 3)</text>
+<text x="305.94594594594594" y="107" text-anchor="middle" font-size="14" fill="#1f2328">20 bytes</text>
+<text x="305.94594594594594" y="152" text-anchor="middle" font-size="13" fill="#1f2328">192.168.1.10 ></text>
+<text x="305.94594594594594" y="172" text-anchor="middle" font-size="13" fill="#1f2328">198.51.100.7</text>
+<rect x="416.7567567567568" y="55" width="443.2432432432432" height="70" fill="#d8f5d0" stroke="#1f2328" stroke-width="1.5"/>
+<text x="638.3783783783783" y="85" text-anchor="middle" font-size="14" font-weight="bold" fill="#1f2328">TCP (capa 4)</text>
+<text x="638.3783783783783" y="107" text-anchor="middle" font-size="14" fill="#1f2328">40 bytes</text>
+<text x="638.3783783783783" y="152" text-anchor="middle" font-size="13" fill="#1f2328">51000 > 443, Flags [S]</text>
+<text x="638.3783783783783" y="172" text-anchor="middle" font-size="13" fill="#1f2328">20 fijos + 20 de opciones</text>
+<text x="450.0" y="225" text-anchor="middle" font-size="14" fill="#1f2328">Datos de aplicación: ninguno (el length 0 del final de la línea)</text>
+</svg>

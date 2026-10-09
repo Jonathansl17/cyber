@@ -78,6 +78,22 @@ PC1 = `192.168.1.10`, PC2 = `192.168.1.11`, máscara `255.255.255.0`, gateway
 `192.168.1.1`. Srv = `192.168.4.10`, máscara `255.255.255.0`, gateway `192.168.4.1`. Esos
 datos se ponen en cada equipo en `Desktop` → `IP Configuration`.
 
+La topología completa con su plan de direcciones (todo simulado dentro de Packet Tracer):
+
+```mermaid
+flowchart LR
+    PC1["PC1<br/>192.168.1.10"] --- SW["Switch 2960"]
+    PC2["PC2<br/>192.168.1.11"] --- SW
+    SW ---|"192.168.1.0/24"| R1["R1"]
+    R1 ---|"10.0.12.0/30"| R2["R2"]
+    R1 ---|"10.0.13.0/30"| R3["R3"]
+    R1 ---|"10.0.14.0/30"| R4["R4"]
+    R2 ---|"10.0.23.0/30"| R3
+    R2 ---|"10.0.24.0/30"| R4
+    R3 ---|"10.0.34.0/30"| R4
+    R4 ---|"192.168.4.0/24"| SRV["Srv<br/>192.168.4.10"]
+```
+
 ### Parte C: configuración del switch
 
 Abre el switch, pestaña `CLI`, y pega:
@@ -276,6 +292,15 @@ write memory
    Es lo que dice la teoría: la MAC/trama cambia en cada salto, la IP se mantiene de
    extremo a extremo.
 
+   Lo que deberías ver salto a salto con el enlace directo R1-R4 activo:
+
+   ```mermaid
+   flowchart LR
+       PC1["PC1"] -->|"Ethernet: MAC PC1 → MAC R1<br/>IP 192.168.1.10 → 192.168.4.10"| R1["R1"]
+       R1 -->|"Serie (HDLC/PPP): trama nueva<br/>IP 192.168.1.10 → 192.168.4.10"| R4["R4"]
+       R4 -->|"Ethernet: MAC R4 → MAC Srv<br/>IP 192.168.1.10 → 192.168.4.10"| SRV["Srv"]
+   ```
+
 5. Prueba la redundancia de la malla. Vuelve a `Realtime`, entra a R1 y apaga el enlace
    directo a R4:
    ```
@@ -290,6 +315,19 @@ write memory
    Vuelve a hacer ping desde PC1 a `192.168.4.10`: tras unos segundos de reconvergencia
    OSPF debe volver a responder, ahora pasando por R2 o R3. Reactiva el enlace con `no
    shutdown` (ver Parte C) dentro de `interface Serial0/1/0` al terminar.
+
+   Qué cambia al apagar `Serial0/1/0` de R1:
+
+   ```mermaid
+   flowchart LR
+       PC1["PC1"] --> R1["R1"]
+       R1 -. "R1-R4 apagado" .- R4["R4"]
+       R1 -->|"camino alternativo"| R2["R2"]
+       R1 -->|"o este otro"| R3["R3"]
+       R2 --> R4
+       R3 --> R4
+       R4 --> SRV["Srv"]
+   ```
 
 ### Resultado esperado
 
@@ -326,6 +364,18 @@ Necesitas: tu propio equipo Linux con una interfaz de red activa; `tcpdump`
 (instalar con `sudo apt install tcpdump` en Debian/Ubuntu o `sudo pacman -S tcpdump` en
 Arch). Necesita `sudo` para capturar. Tiempo estimado: 20 minutos. Capturas tu propio
 tráfico hacia una web; nada de interceptar a terceros.
+
+Montaje del ejercicio en tu equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo"]
+        C["Otra terminal: curl -4<br/>abre TCP al 443"] --> K["Pila TCP/IP del kernel"]
+        K --> I["Interfaz activa<br/>(eth0, wlan0...)"]
+        T["Terminal de captura: tcpdump -e<br/>filtro: SYN sin ACK"] -. "recibe una copia del<br/>primer SYN que sale" .- I
+    end
+    I -->|"SYN hacia el 443"| W["example.com"]
+```
 
 ### Pasos
 
@@ -392,6 +442,8 @@ tráfico hacia una web; nada de interceptar a terceros.
    más 20 de opciones del SYN) = 74. El `length 0` del final indica que todavía no viajan
    datos de aplicación, lo normal en el SYN.
 
+   ![La trama del SYN dividida en 14 bytes de Ethernet, 20 de IPv4 y 40 de TCP](img/trama-syn-capas.svg)
+
 ### Resultado esperado
 
 Una línea de captura anotada por ti donde quede marcado qué es capa 2, qué es capa 3 y
@@ -432,6 +484,24 @@ terminales y usa cada una para un rol:
 - **Terminal 2 (rol cliente)**: monta la carpeta NFS y se conecta al target iSCSI.
 
 Tiempo estimado: 45 minutos.
+
+Montaje de los dos roles dentro del mismo equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo (un solo host)"]
+        subgraph SRV["Terminal 1: rol servidor"]
+            NFS["nfs-server<br/>exporta /srv/compartido"]
+            TGT["target iSCSI (targetcli)<br/>LUN sobre /srv/iscsi/disk01.img"]
+        end
+        subgraph CLI["Terminal 2: rol cliente"]
+            MNT["/mnt/nas<br/>mount -t nfs"]
+            DSK["disco nuevo (sdX)<br/>mkfs.ext4 y /mnt/san"]
+        end
+        MNT -->|"NFS por 127.0.0.1:<br/>pide archivos"| NFS
+        DSK -->|"iSCSI por 127.0.0.1:<br/>pide bloques"| TGT
+    end
+```
 
 ### Parte A: NFS (nivel archivo, el modelo NAS)
 
@@ -536,6 +606,18 @@ Tiempo estimado: 45 minutos.
    usuario `nobody` del servidor, y `nobody` no puede escribir en `/srv/compartido`
    (es de root con permisos 755). Así, ser root en un cliente no te hace root en los
    archivos del servidor.
+
+   ```mermaid
+   sequenceDiagram
+       participant C as Cliente (sudo, UID 0)
+       participant N as Servidor NFS
+       participant F as /srv/compartido (root, 755)
+       C->>N: crear prueba-root como UID 0
+       Note over N: root_squash: UID 0 se trata como nobody
+       N->>F: crear como nobody
+       F-->>N: sin permiso de escritura
+       N-->>C: Permission denied
+   ```
 
    Lo contrario es `no_root_squash`, que se añade a mano en `/etc/exports` (por ejemplo
    `(rw,sync,no_root_squash)`). Con ella, root en cualquier equipo de la red autorizada es
@@ -662,6 +744,21 @@ Tiempo estimado: 45 minutos.
 
    Aquí está la diferencia clave: en NFS el servidor ya tenía el sistema de archivos; en
    iSCSI tú lo creaste con `mkfs`. Ese es el comportamiento SAN.
+
+   Recorrido de la Parte B, de la sesión iSCSI al disco montado:
+
+   ```mermaid
+   sequenceDiagram
+       participant C as Cliente (Terminal 2)
+       participant T as Target iSCSI (Terminal 1)
+       C->>T: iscsiadm discovery sendtargets en 127.0.0.1
+       T-->>C: iqn.2026-10.lab.servidor:disco1
+       C->>T: login con el IQN autorizado en la ACL
+       T-->>C: sesión abierta, entrega el LUN
+       Note over C: lsblk: aparece un disco de 500M sin formato
+       Note over C: mkfs.ext4 y mount en /mnt/san:<br/>el sistema de archivos lo pone el cliente
+       C->>T: lecturas y escrituras de bloques
+   ```
 
 ### Resultado esperado
 
