@@ -38,12 +38,43 @@ Las dos primeras filas son del cliente en todas las columnas: nunca se delegan.
 
 Ejemplo concreto: una empresa usa una base de datos gestionada (RDS). AWS parchea el motor de la base de datos y el sistema operativo debajo; pero si la empresa deja el puerto 5432 abierto a `0.0.0.0/0` (todo internet) en el grupo de seguridad, con la contraseña `admin123`, la brecha es suya.
 
+```mermaid
+flowchart TB
+    subgraph CLI["Seguridad EN la nube: cliente"]
+        D["Datos y quién accede"]
+        ID["Identidades y permisos"]
+        CF["Configuración: grupo de seguridad<br/>con 5432 abierto a 0.0.0.0/0"]
+    end
+    subgraph PRO["Seguridad DE la nube: proveedor"]
+        M["Motor de base de datos y SO<br/>(parcheados por AWS en RDS)"]
+        HV["Hypervisor y red física"]
+        HW["Edificio y hardware"]
+    end
+    CLI --> PRO
+```
+
 ### La nube no te quita responsabilidad, te la cambia de sitio
 
 > [!IMPORTANT]
 > El proveedor casi nunca es la causa de una brecha en la nube: la causa típica es una configuración del cliente (un bucket público, una clave filtrada, un permiso `*`). Lo que el cliente siempre conserva son sus datos y sus identidades.
 
 La responsabilidad compartida es un reparto de tareas, no una transferencia del riesgo: subir algo a la nube no lo vuelve seguro, solo cambia qué partes cuidas tú. Gartner proyectó que hasta 2025 el 99 % de los fallos de seguridad en la nube serían culpa del cliente. El caso clásico es Capital One (2019): una aplicación web con un firewall mal configurado permitió un ataque SSRF (hacer que el servidor haga peticiones en nombre del atacante) contra el servicio de metadatos de la VM, que entregó credenciales temporales de un rol con permisos de lectura sobre buckets S3; se filtraron datos de más de 100 millones de personas. Ninguna pieza de AWS falló: falló la configuración del cliente.
+
+Recorrido del ataque a Capital One:
+
+```mermaid
+sequenceDiagram
+    participant At as Atacante
+    participant W as App web con WAF<br/>mal configurado
+    participant IM as Metadatos<br/>169.254.169.254 (IMDSv1)
+    participant S3 as Buckets S3
+    At->>W: Petición SSRF con URL de metadatos
+    W->>IM: GET credenciales del rol de la VM
+    IM-->>W: Credenciales temporales del rol
+    W-->>At: Devuelve las credenciales
+    At->>S3: Usa el rol con permisos de lectura demasiado amplios
+    S3-->>At: Descarga de datos de más de 100 millones de personas
+```
 
 ```
 Capa del cliente:   WAF mal configurado -> SSRF -> 169.254.169.254 (metadatos, IMDSv1)
@@ -53,6 +84,17 @@ Capa del proveedor: hypervisor, red, hardware -> nada comprometido
 ```
 
 La defensa estándar hoy es exigir IMDSv2 (los metadatos solo responden a quien primero pidió un token con un `PUT`, cosa que un SSRF simple no puede hacer) y dar a cada rol solo los permisos mínimos.
+
+```mermaid
+sequenceDiagram
+    participant P as Proceso en la VM
+    participant IM as Metadatos (IMDSv2)
+    P->>IM: PUT para pedir un token de sesión
+    IM-->>P: Token
+    P->>IM: GET de metadatos con el token en una cabecera
+    IM-->>P: Respuesta
+    Note over P,IM: Un SSRF simple solo logra GET sin cabeceras propias,<br/>así que no obtiene token y los metadatos no responden
+```
 
 ```
 Seguridad DE la nube → proveedor: edificios, hardware, red física, hypervisor.
@@ -72,6 +114,16 @@ Diferencias que importan:
 - Elasticidad: on-prem tarda semanas en comprar, recibir e instalar un servidor; en la nube una VM nueva está lista en un minuto y se apaga cuando no hace falta.
 - Control físico: on-prem controlas la puerta, los discos y puedes llevarte un disco para forense; en la nube no tocas el hardware y la evidencia sale de logs (CloudTrail, Azure Activity Log, Cloud Audit Logs) y snapshots.
 - Perímetro: on-prem la frontera es la red (firewall en la entrada, ver [`13-defensa-y-hardening`](../13-defensa-y-hardening/)); en la nube la frontera real es la identidad: quien tiene una clave de acceso válida puede llegar al recurso desde cualquier lugar del mundo.
+
+```mermaid
+flowchart LR
+    subgraph ONP["On-premises: perímetro de red"]
+        I1["Internet"] --> FW["Firewall en la entrada"] --> S1["Servidores"]
+    end
+    subgraph CLD["Cloud: perímetro de identidad"]
+        I2["Cualquier lugar del mundo"] -- "clave de acceso válida" --> API["API del proveedor<br/>(IAM decide)"] --> R2["Recursos"]
+    end
+```
 - Velocidad de error: on-prem, exponer un servidor exige tocar varios equipos; en la nube, un clic o una línea de código lo publica a internet en segundos.
 - Cumplimiento y residencia de datos: on-prem sabes en qué edificio están los datos; en la nube eliges región (por ejemplo, una región europea para datos sujetos a GDPR, ver [`16-estandares-y-cumplimiento`](../16-estandares-y-cumplimiento/)).
 
@@ -99,6 +151,17 @@ Cómo funciona por dentro. Hay dos estilos:
 - Imperativo/configuración: describes pasos a ejecutar sobre máquinas existentes. Ansible, scripts.
 
 Terraform guarda un archivo de estado (`terraform.tfstate`) con lo que cree que existe; en cada `plan` compara código, estado y realidad, y muestra la diferencia antes de aplicarla.
+
+Las tres fuentes que compara `plan` y dónde aparece la deriva:
+
+```mermaid
+flowchart LR
+    C["Código<br/>main.tf en git"] --> PL{"terraform plan<br/>compara"}
+    ST["Estado<br/>terraform.tfstate"] --> PL
+    RE["Realidad<br/>API del proveedor"] --> PL
+    MAN["Cambio manual<br/>en la consola"] -. "drift" .-> RE
+    PL --> DIFF["Diferencia:<br/>+ crear, ~ cambiar, - borrar"]
+```
 
 ```
   main.tf (código en git) --> terraform plan --> diff (+ crear, ~ cambiar, - borrar)
@@ -173,6 +236,14 @@ Ejemplo concreto: una función que genera miniaturas cuando alguien sube una fot
 
 Seguridad en serverless: desaparece el parcheo del SO (lo hace el proveedor), pero la superficie se mueve a tres sitios: el código de la función (inyección a través de los datos del evento, por ejemplo el nombre de un archivo subido), las dependencias que empaqueta, y sobre todo el rol IAM de la función. Una función con permiso `s3:*` sobre `*` que sufre una inyección le da al atacante todos los buckets de la cuenta.
 
+```mermaid
+flowchart LR
+    EV["Evento con dato malicioso<br/>(nombre de archivo subido)"] --> FN["Función con<br/>inyección"]
+    FN --> ROL{"Rol IAM<br/>de la función"}
+    ROL -- "s3:* sobre *" --> ALL["Todos los buckets<br/>de la cuenta"]
+    ROL -- "mínimo privilegio" --> ONE["Solo el bucket<br/>que necesita"]
+```
+
 ```
 Serverless → el proveedor gestiona servidores y escalado; pagas por ejecución.
 Función (Lambda, Azure Functions, Cloud Run functions) → código disparado por eventos.
@@ -209,7 +280,35 @@ Términos del flujo:
 - Canary: se manda primero un 5-10 % del tráfico a la versión nueva y se sube si no hay errores.
 - Rollback: volver a la versión anterior.
 
+```mermaid
+flowchart LR
+    subgraph BG["Blue/green"]
+        LB1["Balanceador"] -- "100 %" --> G["Green (nueva)"]
+        LB1 -. "rollback: volver aquí" .-> B["Blue (vieja)"]
+    end
+    subgraph CA["Canary"]
+        LB2["Balanceador"] -- "90 %" --> V1["Versión actual"]
+        LB2 -- "10 %" --> V2["Versión nueva"]
+    end
+```
+
 Seguridad del pipeline: el pipeline tiene permisos para cambiar producción, así que es un objetivo de alto valor (ataques a la cadena de suministro). Buenas prácticas: credenciales de corta duración mediante federación OIDC entre el sistema de CI y la nube en lugar de claves de acceso fijas guardadas como secreto, secretos en un gestor (AWS Secrets Manager, Azure Key Vault, Google Secret Manager) y nunca en el código, y revisión obligatoria antes de producción.
+
+Credenciales de corta duración con federación OIDC:
+
+```mermaid
+sequenceDiagram
+    participant CI as Trabajo de CI
+    participant IdP as Emisor OIDC del sistema de CI
+    participant N as IAM de la nube
+    participant R as Recursos de producción
+    CI->>IdP: Pide un token firmado de este trabajo
+    IdP-->>CI: Token OIDC (repo, rama)
+    CI->>N: Presenta el token para asumir un rol
+    N->>N: Verifica firma y condiciones del rol
+    N-->>CI: Credenciales temporales
+    CI->>R: Despliega con credenciales que caducan solas
+```
 
 Ejemplo concreto: un equipo hace 20 despliegues por semana. Con canary al 10 %, una versión que rompe el pago afecta a 1 de cada 10 clientes durante 5 minutos antes del rollback automático, en lugar de a todos durante una hora.
 
@@ -253,6 +352,21 @@ El riesgo propio de la nube pública es que el recurso está a un permiso de dis
 Una **nube híbrida** es una arquitectura que combina infraestructura privada (u on-premises) con una o más nubes públicas, conectadas para que datos y aplicaciones se muevan entre ellas. Es el modelo más común en empresas grandes: lo sensible o lo heredado se queda en casa y lo elástico va a la pública.
 
 Cómo se conecta: VPN site-to-site cifrada o enlaces dedicados (AWS Direct Connect, Azure ExpressRoute, Google Cloud Interconnect), y una identidad unificada (por ejemplo, el directorio LDAP local federado con el IAM de la nube mediante SAML u OIDC, para que cada persona use una sola cuenta).
+
+```mermaid
+flowchart LR
+    subgraph ONP["Privada / on-premises"]
+        DIR["Directorio LDAP local"]
+        HC["Historias clínicas"]
+    end
+    subgraph PUB["Nube pública"]
+        IAM["IAM de la nube"]
+        WEB["Web de citas y<br/>procesos por lotes"]
+    end
+    T["VPN site-to-site o enlace dedicado<br/>(Direct Connect, ExpressRoute,<br/>Interconnect)"]
+    HC <--> T <--> WEB
+    DIR -. "federación SAML u OIDC" .-> IAM
+```
 
 Analogía: tener piscina en casa y además abono de la municipal para los días que vienen 40 invitados (a esto se le llama "cloud bursting").
 
@@ -322,6 +436,21 @@ Un error típico en GCP: crear claves JSON descargables para cuentas de servicio
 
 **Azure** es la nube pública de Microsoft, con alrededor de un 20 % del mercado y muy fuerte en empresas que ya usan Microsoft 365. La identidad vive en Microsoft Entra ID (antes Azure AD) y los permisos sobre recursos en Azure RBAC; los recursos se organizan en grupos de administración → suscripciones → grupos de recursos.
 
+Jerarquía de organización de recursos en cada nube:
+
+```mermaid
+flowchart TB
+    subgraph AWS
+        O1["AWS Organizations"] --> A1["Cuenta<br/>(unidad de aislamiento)"]
+    end
+    subgraph GCP
+        O2["Organización"] --> F2["Carpetas"] --> P2["Proyectos"]
+    end
+    subgraph Azure
+        O3["Grupos de administración"] --> S3["Suscripciones"] --> R3["Grupos de recursos"]
+    end
+```
+
 Analogía: la tienda de la marca que ya tienes en casa: si toda tu oficina usa Microsoft, todo encaja con lo que ya conoces.
 
 Ejemplo:
@@ -360,6 +489,19 @@ https://acme-backups.s3.us-east-1.amazonaws.com/db/2026-10-01.sql.gz
 Como el nombre es global y predecible (`acme-backups`, `acme-logs`, `acme-dev`), un atacante puede adivinar buckets de una empresa probando nombres.
 
 Políticas: quién puede hacer qué se decide combinando varias capas, y una denegación explícita siempre gana:
+
+Simplificación de cómo se decide una petición a un bucket:
+
+```mermaid
+flowchart TD
+    REQ["Petición a S3"] --> DENY{"¿Alguna política<br/>tiene Deny explícito?"}
+    DENY -- Sí --> NO["Denegada"]
+    DENY -- No --> BPA{"¿Es acceso público y<br/>Block Public Access lo bloquea?"}
+    BPA -- Sí --> NO
+    BPA -- No --> AL{"¿Allow en la política IAM<br/>o en la bucket policy?"}
+    AL -- Sí --> YES["Permitida"]
+    AL -- No --> NO2["Denegada por defecto"]
+```
 
 - Políticas IAM: pegadas a un usuario o rol ("Juan puede leer el bucket X").
 - Bucket policy: pegada al bucket, en JSON ("cualquiera puede leer los objetos de este bucket").

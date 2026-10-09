@@ -45,6 +45,22 @@ en tu propio equipo. Tienes dos maneras de ejecutarlos:
 - **AWS real (capa gratuita).** Para ver el comportamiento exacto de AWS (imprescindible
   en el ejercicio 3), usa una cuenta tuya como se explica en la siguiente sección.
 
+Dónde corre cada pieza en los dos caminos:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux"]
+        CLI["AWS CLI v2 o awslocal,<br/>y Terraform"]
+        CK["Checkov<br/>(análisis estático, sin red)"]
+        subgraph D["Docker"]
+            LS["Contenedor LocalStack<br/>escucha en localhost:4566"]
+        end
+    end
+    AWS["AWS real<br/>(tu cuenta)"]
+    CLI -- "camino local:<br/>http://localhost:4566" --> LS
+    CLI -- "camino real:<br/>API HTTPS de AWS" --> AWS
+```
+
 Levantar LocalStack:
 
 ```bash
@@ -106,6 +122,24 @@ causas más comunes de cuentas comprometidas. Prefiere credenciales temporales:
   terminar los ejercicios (ver la limpieza del ejercicio 3).
 
 Comprueba siempre con `aws sts get-caller-identity` con qué identidad estás operando.
+
+Flujo de la opción recomendada, IAM Identity Center:
+
+```mermaid
+sequenceDiagram
+    participant U as Tú en el navegador
+    participant CLI as AWS CLI
+    participant IC as IAM Identity Center
+    participant STS as AWS STS
+    CLI->>IC: aws sso login --profile lab
+    IC->>U: Página de inicio de sesión
+    U->>IC: Inicias sesión y autorizas
+    IC-->>CLI: Token de sesión en caché
+    CLI->>IC: Pide credenciales del permission set
+    IC-->>CLI: Credenciales temporales (caducan en horas)
+    CLI->>STS: aws sts get-caller-identity
+    STS-->>CLI: Arn assumed-role/AWSReservedSSO_...
+```
 
 ## Ejercicio 1: Bucket S3 con Terraform y escaneo con Checkov
 
@@ -256,6 +290,17 @@ controles de logging, versionado, cifrado y similares en FAILED), el filtrado de
 (5 PASSED, 0 FAILED) y el filtrado del paso 6 (0 PASSED, 5 FAILED), y un bucket privado
 creado y luego destruido.
 
+```mermaid
+flowchart LR
+    M["main.tf con el<br/>bloqueo en true"] --> I["terraform init y plan:<br/>2 to add"]
+    I --> C1["checkov filtrado:<br/>5 PASSED"]
+    C1 --> A["terraform apply"]
+    A --> G["get-public-access-block:<br/>las cuatro en true"]
+    G --> F["main.tf con false<br/>(sin aplicar)"]
+    F --> C2["checkov filtrado:<br/>5 FAILED"]
+    C2 --> R["Volver a true y<br/>terraform destroy"]
+```
+
 ### Comprueba que lo lograste
 
 - ¿La diferencia entre los dos informes filtrados está exactamente en los controles de
@@ -331,6 +376,13 @@ Solo tu bucket; nunca pruebes esto contra buckets ajenos.
    recomendable). Compruébalo con
    `aws s3control get-public-access-block --account-id <tu-id-de-cuenta>`; en ese caso
    puedes quedarte en este punto: ya has visto que el bloqueo impide abrir el bucket.
+
+   ```mermaid
+   flowchart TD
+       E["put-bucket-policy da AccessDenied<br/>aunque eres administrador"] --> Q{"¿s3control get-public-access-block<br/>muestra el bloqueo activo en la cuenta?"}
+       Q -- Sí --> S["El bloqueo de cuenta impide la<br/>política pública: puedes parar aquí"]
+       Q -- No --> R["Revisar la identidad con<br/>aws sts get-caller-identity y sus permisos"]
+   ```
 4. Crea `policy.json` con una bucket policy abierta (sustituye el nombre del bucket) y
    aplícala:
    ```json
@@ -404,6 +456,23 @@ Solo tu bucket; nunca pruebes esto contra buckets ajenos.
 Tres salidas de la misma orden `aws s3 ls --no-sign-request`: denegado, luego listado,
 luego denegado otra vez con la política pública todavía puesta (paso 6). Es la
 demostración de que Block Public Access anula la política pública.
+
+Estados del bucket a lo largo de los pasos:
+
+```mermaid
+stateDiagram-v2
+    state "Privado: ls anónimo da AccessDenied" as P1
+    state "Sin bloqueo y sin política" as P2
+    state "Público: ls anónimo lista prueba.txt" as P3
+    state "Bloqueo activo con política pública: AccessDenied" as P4
+    state "Bloqueo activo y sin política" as P5
+    [*] --> P1: paso 1, s3 mb
+    P1 --> P2: paso 3, delete-public-access-block
+    P2 --> P3: paso 4, put-bucket-policy
+    P3 --> P4: paso 6, put-public-access-block
+    P4 --> P5: paso 7, delete-bucket-policy
+    P5 --> [*]: limpieza
+```
 
 ### Comprueba que lo lograste
 
@@ -536,6 +605,15 @@ cobrarse.
    Salida esperada: `s3:GetObject` → `allowed`; `s3:PutObject` y `s3:DeleteObject` →
    `implicitDeny` (denegado porque ninguna política lo permite; en IAM todo lo que no se
    permite explícitamente está denegado).
+
+   ```mermaid
+   flowchart TD
+       A["Acción que se simula<br/>para el rol"] --> D{"¿Algún Deny explícito?"}
+       D -- Sí --> X["explicitDeny"]
+       D -- No --> AL{"¿perm.json la permite?"}
+       AL -- Sí --> OK["allowed:<br/>s3:GetObject"]
+       AL -- No --> IM["implicitDeny:<br/>s3:PutObject, s3:DeleteObject"]
+   ```
 5. Crea un perfil de la CLI que asume el rol y úsalo: una lectura permitida y dos
    operaciones que deben fallar:
    ```bash
@@ -561,6 +639,25 @@ cobrarse.
    Salida esperada, en orden: un `Arn` `arn:aws:sts::<cuenta>:assumed-role/lab-lectura-s3/investigacion-lab`;
    el texto `dato de laboratorio`; un error `AccessDenied` al subir; y otro
    `AccessDenied` al listar los buckets. El rol hace lo que necesita y nada más.
+
+   ```mermaid
+   sequenceDiagram
+       participant CLI as AWS CLI, perfil lab-lectura
+       participant STS as STS
+       participant S3 as S3
+       participant CT as Historial de CloudTrail
+       CLI->>STS: AssumeRole lab-lectura-s3, sesión investigacion-lab
+       STS->>CT: Evento AssumeRole
+       STS-->>CLI: Credenciales temporales del rol
+       CLI->>S3: GetObject prueba.txt
+       S3-->>CLI: dato de laboratorio
+       CLI->>S3: PutObject intruso.txt
+       S3-->>CLI: AccessDenied
+       CLI->>S3: ListBuckets
+       S3->>CT: Evento ListBuckets con AccessDenied
+       S3-->>CLI: AccessDenied
+       Note over S3,CT: GetObject y PutObject son eventos de datos:<br/>no quedan en el historial gratuito
+   ```
 6. Espera entre 5 y 15 minutos (CloudTrail tarda en mostrar los eventos) e investiga.
    Primero, ¿quién asumió el rol?
    ```bash
