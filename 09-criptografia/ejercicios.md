@@ -21,6 +21,20 @@ enviado, y repetirlo con un primo real de 2048 bits generado con openssl.
 
 Necesitas: Python 3 y OpenSSL (suelen venir en Linux; si faltan, Debian/Ubuntu: `sudo apt install python3 openssl`; Arch: `sudo pacman -S python openssl`). 20 minutos. No hace falta red.
 
+El intercambio que vas a reproducir en el paso 1 (todo se calcula en tu terminal; Ana y Luis son solo papeles):
+
+```mermaid
+sequenceDiagram
+    participant Ana as Ana (a = 6, secreto)
+    participant E as Espía (ve p = 23, g = 5, A, B)
+    participant Luis as Luis (b = 15, secreto)
+    Ana->>Luis: A = 5^6 mod 23 = 8
+    Luis->>Ana: B = 5^15 mod 23 = 19
+    Note over Ana: s = 19^6 mod 23 = 2
+    Note over Luis: s = 8^15 mod 23 = 2
+    Note over E: para sacar s necesita a o b:<br/>logaritmo discreto (paso 2)
+```
+
 ### Pasos
 
 1. Haz a mano el ejemplo de la nota: público `p = 23`, `g = 5`; Ana elige `a = 6`, Luis
@@ -134,6 +148,19 @@ hoja) con openssl, verificar la cadena con `openssl verify`, revocar la hoja y g
 CRL, y comprobar que tras la revocación la verificación con `-crl_check` falla.
 
 Necesitas: OpenSSL (suele venir en Linux; probado con OpenSSL 3.x; si falta, Debian/Ubuntu: `sudo apt install openssl`; Arch: `sudo pacman -S openssl`). 40 minutos. No hace falta red.
+
+Lo que construyes y compruebas, archivo por archivo:
+
+```mermaid
+flowchart TD
+    R["raiz.key + raiz.crt<br/>autofirmada (paso 2)"] -->|"firma la CSR"| I["intermedia.crt<br/>marcada como CA (paso 3)"]
+    I -->|"openssl ca firma hoja.csr<br/>y lo anota en index.txt"| H["hoja.crt<br/>CN = www.lab.local (paso 5)"]
+    H --> V1["openssl verify (paso 6)"]
+    V1 --> OK["hoja.crt: OK"]
+    OK --> RV["openssl ca -revoke + -gencrl<br/>intermedia.crl (paso 7)"]
+    RV --> V2["openssl verify -crl_check (paso 8)"]
+    V2 --> BAD["error 23: certificate revoked"]
+```
 
 ### Pasos
 
@@ -336,6 +363,28 @@ Instalación:
 
 En Arch los demonios no arrancan solos al instalar: `sudo systemctl start sshd` (el servidor SSH) y, tras configurarlo en el paso 1, `vsftpd`. En Debian/Ubuntu `ssh` suele arrancar solo. Para capturar con `tshark`/Wireshark sin ser root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`, luego reinicia sesión; en Debian/Ubuntu además `sudo dpkg-reconfigure wireshark-common`). Tiempo: 45 minutos.
 
+Montaje del laboratorio en tu único equipo:
+
+```mermaid
+flowchart LR
+    subgraph HOST["Tu equipo Linux"]
+        subgraph T3["Terminal 3 (cliente)"]
+            FTPC["ftp 127.0.0.1"]
+            SFTPC["sftp pruebaftp@127.0.0.1"]
+        end
+        subgraph LO["Interfaz lo (127.0.0.1)"]
+            P21["TCP 21 (+20 o pasivo)"]
+            P22["TCP 22"]
+        end
+        V["vsftpd<br/>(Terminal 1)"]
+        S["sshd"]
+        TS["tshark -i lo<br/>(Terminal 2)"]
+        FTPC --> P21 --> V
+        SFTPC --> P22 --> S
+        TS -.->|"captura"| LO
+    end
+```
+
 ### Pasos
 
 1. **Terminal 1 (servidor).** Configura vsftpd de forma explícita, arráncalo y crea un usuario de prueba solo para el laboratorio. No confíes en los valores por defecto: en varias distros vsftpd trae `write_enable=NO`, así que el `put` del paso 3 fallaría con "550 Permission denied" si no lo activas; otras opciones también cambian entre distros. Fíjalas tú:
@@ -412,6 +461,23 @@ En Arch los demonios no arrancan solos al instalar: `sudo systemctl start sshd` 
 
    Esperado: dos líneas, `USER pruebaftp` y `PASS Lab12345`. La contraseña viaja legible.
 
+   Lo que quedó en la captura de cada sesión:
+
+   ```mermaid
+   sequenceDiagram
+       participant C as Cliente (Terminal 3)
+       participant F as vsftpd :21
+       participant S as sshd :22
+       C->>F: USER pruebaftp (legible)
+       F-->>C: 331 pide contraseña
+       C->>F: PASS Lab12345 (legible)
+       F-->>C: 230 login correcto
+       C->>F: STOR subida.txt + conexión de datos (legible)
+       C->>S: negociación SSH (versión y algoritmos)
+       Note over C,S: a partir de aquí todo cifrado
+       C->>S: usuario, contraseña y archivo (ilegibles)
+   ```
+
 6. **Terminal 2 (captura).** Comprueba que el tráfico SFTP no enseña nada: filtra por SSH y verás solo paquetes cifrados.
    ```bash
    tshark -r ~/captura.pcapng -Y 'ssh' -T fields -e tcp.dstport -e ssh.message_code | head
@@ -459,6 +525,23 @@ Instalación:
 - Arch: `sudo pacman -S strongswan wireshark-cli`
 
 En Arch el servicio no arranca solo al instalar: se levanta con `sudo systemctl start strongswan` (paso 2). Para capturar con `tshark`/Wireshark sin ser root, añade tu usuario al grupo `wireshark` (`sudo usermod -aG wireshark $USER`, luego reinicia sesión; en Debian/Ubuntu además `sudo dpkg-reconfigure wireshark-common`). Tiempo: 1 hora.
+
+Montaje: un solo demonio `charon` hace de los dos extremos sobre loopback:
+
+```mermaid
+flowchart LR
+    subgraph HOST["Tu equipo Linux"]
+        subgraph CH["charon (strongSwan, Terminal 1)"]
+            IZQ["lab-izq<br/>local 127.0.0.1"]
+            DER["lab-der<br/>local 127.0.0.2"]
+        end
+        IZQ <-->|"IKEv2 UDP 500<br/>PSK + X25519"| DER
+        PING["ping -I 127.0.0.1 127.0.0.2<br/>(Terminal 3)"] --> LO["Interfaz lo"]
+        IZQ -.-> LO
+        DER -.-> LO
+        TS["tshark -i lo<br/>(Terminal 2)"] -.->|"captura"| LO
+    end
+```
 
 ### Pasos
 
@@ -579,6 +662,19 @@ En Arch el servicio no arranca solo al instalar: se levanta con `sudo systemctl 
 
    Esperado: protocolo `50` (ESP) y ninguna línea de ICMP visible: el ping viaja cifrado dentro de ESP.
 
+   Qué decide lo que ves en cada captura, y qué revisar si no sale:
+
+   ```mermaid
+   flowchart TD
+       P["ping 127.0.0.1 → 127.0.0.2"] --> Q{"¿Hay CHILD_SA net instalada<br/>para esos selectores /32?"}
+       Q -->|"no (paso 3, start_action = none)"| C1["Sale como ICMP: protocolo 1,<br/>echo request/reply legibles"]
+       Q -->|"sí (tras swanctl --initiate)"| C2["Sale como ESP: protocolo 50,<br/>ICMP oculto dentro"]
+       Q -->|"--list-sas no muestra ESTABLISHED"| T{"¿Revisaste?"}
+       T --> T1["Otra política IPsec previa cargada"]
+       T --> T2["charon arrancado y escuchando<br/>(systemctl start strongswan)"]
+       T --> T3["swanctl --load-all cargó<br/>2 conexiones y 1 secreto"]
+   ```
+
 ### Resultado esperado
 
 Una SA establecida con IKEv2 y ESP, y dos capturas comparables: sin túnel el ICMP se lee como protocolo 1 con sus echo request/reply; con túnel solo hay protocolo 50 (ESP) y el ICMP desaparece de la vista. Eso demuestra que IPsec protege el paquete entero en capa 3, aunque aquí los dos extremos vivan en la misma máquina sobre loopback.
@@ -617,6 +713,20 @@ bcrypt sigue siendo válida.
 
 - Debian/Ubuntu: `sudo apt install hashcat python3-bcrypt apache2-utils`
 - Arch: `sudo pacman -S hashcat python-bcrypt apache` (htpasswd viene en `apache`)
+
+Flujo de archivos del ejercicio, todo dentro de `~/bcrypt-lab`:
+
+```mermaid
+flowchart LR
+    PW["passwords.txt<br/>20 contraseñas"] -->|"hashlib, sin sal"| MD5["md5.txt<br/>las 2 'password' iguales"]
+    PW -->|"bcrypt coste 10, sal propia"| BC["bcrypt.txt<br/>20 hashes distintos"]
+    D["dict.txt<br/>solo las débiles"] --> H1["hashcat -m 0"]
+    D --> H2["hashcat -m 3200"]
+    MD5 --> H1
+    BC --> H2
+    H1 --> R1["Rompe al instante<br/>Speed en GH/s"]
+    H2 --> R2["Rompe las mismas, mucho más lento<br/>Speed en H/s"]
+```
 
 ### Pasos
 
@@ -873,6 +983,18 @@ Ripper). 30 minutos. No hace falta red.
 
    Esperado: John rompe `victima` (`hunter2`) casi al instante y deja `victima2` sin romper.
    `--show` termina con algo como `1 password hash cracked, 1 left`.
+
+   ```mermaid
+   flowchart LR
+       PS["/etc/passwd"] --> U["sudo unshadow"]
+       SH["/etc/shadow<br/>(solo root)"] --> U
+       U --> UT["~/unshadowed.txt"]
+       UT --> J["john --wordlist=dict.txt<br/>--format=crypt<br/>--users=victima,victima2"]
+       DI["~/dict.txt<br/>incluye hunter2"] --> J
+       J --> V1["victima: hunter2<br/>rota"]
+       J --> V2["victima2: no está en el<br/>diccionario, resiste"]
+       V1 --> POT["~/.john/john.pot<br/>(lo lee --show)"]
+   ```
 
 ### Resultado esperado
 

@@ -21,6 +21,18 @@ Una **función hash** criptográfica es un algoritmo que transforma una entrada 
 
 Existe para comprobar integridad sin guardar ni enviar el dato completo: verificar que una ISO descargada no fue alterada, guardar contraseñas sin guardarlas, firmar documentos (se firma el hash, no el documento entero) y encadenar bloques en Git o en una blockchain.
 
+Verificar una ISO descargada con su hash:
+
+```mermaid
+flowchart LR
+    P["Sitio oficial publica<br/>SHA-256 de la ISO"] --> CMP{"¿Coinciden?"}
+    D["ISO descargada"] --> H["sha256sum calcula<br/>la huella local"]
+    H --> CMP
+    CMP -->|sí| OK["Íntegra: no fue alterada"]
+    CMP -->|no| BAD["Alterada o corrupta:<br/>no usarla"]
+    H -.-x|"imposible volver atrás"| D
+```
+
 Analogía: la huella dactilar de una persona. Es pequeña comparada con la persona, identifica a una sola, y teniendo la huella no puedes reconstruir a la persona.
 
 Propiedades que debe cumplir, en este orden:
@@ -113,6 +125,23 @@ LOGIN
   comparar hash(sal + contraseña_tecleada) con el guardado
 ```
 
+```mermaid
+flowchart TD
+    subgraph REG["Registro"]
+        R1["Contraseña"] --> R3["hash(sal + contraseña)"]
+        R2["Sal aleatoria<br/>16 bytes, por usuario"] --> R3
+        R3 --> DB[("Base de datos:<br/>usuario, sal, hash")]
+        R2 --> DB
+    end
+    subgraph LOG["Login"]
+        L1["Contraseña tecleada"] --> L3["hash(sal + contraseña tecleada)"]
+        DB -->|"lee la sal en claro"| L3
+        L3 --> L4{"¿Igual al hash guardado?"}
+        L4 -->|sí| L5["Acceso"]
+        L4 -->|no| L6["Rechazo"]
+    end
+```
+
 La sal se guarda en claro junto al hash (bcrypt y Argon2 la incrustan en el propio string). No necesita ser secreta: su trabajo no es esconderse, es obligar al atacante a atacar cada hash por separado. NIST pide al menos 32 bits; lo habitual son 16 bytes (128 bits) generados con un generador aleatorio criptográfico.
 
 Ejemplo con números redondos: dos usuarios con la contraseña `password`.
@@ -175,6 +204,23 @@ Criterios reales: DH clásico (finite field) con `p` de al menos 2048 bits; ECDH
 
 Límite: DH por sí solo no autentica. Un MITM puede hacer un DH con Ana y otro con Luis y quedarse en medio leyendo todo. Por eso en TLS el servidor firma sus valores DH con su llave privada, respaldada por un certificado (ver PKI).
 
+MITM contra un DH sin autenticar (el atacante usa su propio secreto `m`):
+
+```mermaid
+sequenceDiagram
+    participant Ana
+    participant M as Atacante (MITM)
+    participant Luis
+    Ana->>M: A = g^a mod p
+    M->>Luis: M = g^m mod p (se hace pasar por Ana)
+    Luis->>M: B = g^b mod p
+    M->>Ana: M = g^m mod p (se hace pasar por Luis)
+    Note over Ana,M: llave s1 = g^(am) mod p
+    Note over M,Luis: llave s2 = g^(bm) mod p
+    Ana->>M: mensaje cifrado con s1
+    M->>Luis: lo descifra, lo lee y lo recifra con s2
+```
+
 Hacia el futuro: los computadores cuánticos romperían DH y RSA. NIST publicó en 2024 ML-KEM (FIPS 203), y navegadores y servidores ya usan un intercambio híbrido (X25519 + ML-KEM-768) en TLS 1.3.
 
 ```
@@ -191,6 +237,21 @@ DH sin autenticar → vulnerable a MITM; se arregla firmando con certificado.
 La criptografía **simétrica** es un tipo de cifrado que usa la misma llave privada para cifrar y descifrar; la criptografía **asimétrica** (o de llave pública) es un tipo de cifrado que usa un par de llaves matemáticamente relacionadas, una pública que se reparte y una privada que nunca sale de su dueño.
 
 Las dos existen porque se complementan. La simétrica es muy rápida (AES cifra gigabytes por segundo con soporte del procesador) pero exige compartir la llave antes. La asimétrica resuelve el reparto (la llave pública se puede publicar en un cartel) pero es entre 100 y 1000 veces más lenta. En la práctica se usan juntas: la asimétrica para acordar o transportar una llave, la simétrica para cifrar los datos. Eso se llama cifrado híbrido y es lo que hacen TLS, SSH, PGP y S/MIME.
+
+Cifrado híbrido en su variante de transporte de llave (la de PGP y S/MIME; TLS acuerda la llave con ECDHE en vez de transportarla):
+
+```mermaid
+flowchart LR
+    D["Datos en claro"] --> S["Cifrado simétrico<br/>AES-GCM"]
+    K["Llave de sesión<br/>aleatoria"] --> S
+    K --> A["Cifrado asimétrico con la<br/>llave PÚBLICA del destinatario"]
+    S --> C1["Datos cifrados"]
+    A --> C2["Llave de sesión cifrada"]
+    C1 --> R["Destinatario"]
+    C2 --> R
+    R --> P["Abre la llave de sesión<br/>con su llave PRIVADA"]
+    P --> M["Descifra los datos con AES"]
+```
 
 Analogía: la simétrica es una caja fuerte con una llave copiada para cada persona; la asimétrica es un buzón con ranura. Cualquiera puede echar una carta por la ranura (llave pública), pero solo el dueño tiene la llave que abre el buzón (llave privada).
 
@@ -298,6 +359,21 @@ La cadena de confianza es la secuencia de certificados en la que cada uno está 
 
 El servidor envía la hoja y la intermedia. El navegador verifica cada firma con la llave pública del nivel superior, sube hasta una raíz que ya tiene guardada, y además comprueba que el dominio coincida con el SAN, que la fecha esté dentro de la validez y que nada esté revocado. Si un eslabón falla, aparece la pantalla de advertencia.
 
+```mermaid
+flowchart TD
+    S["Servidor envía hoja + intermedia"] --> V1{"¿Firma de la hoja válida con<br/>la llave pública de la intermedia?"}
+    V1 -->|sí| V2{"¿Firma de la intermedia válida<br/>con una raíz del trust store?"}
+    V2 -->|sí| V3{"¿El dominio coincide con el SAN?"}
+    V3 -->|sí| V4{"¿Fecha dentro de<br/>Not Before / Not After?"}
+    V4 -->|sí| V5{"¿Ningún certificado revocado?"}
+    V5 -->|sí| OK["Candado: conexión aceptada"]
+    V1 -->|no| W["Pantalla de advertencia"]
+    V2 -->|no| W
+    V3 -->|no| W
+    V4 -->|no| W
+    V5 -->|no| W
+```
+
 ```
 $ openssl s_client -connect ejemplo.com:443 -servername ejemplo.com </dev/null 2>/dev/null | head -6
 CONNECTED(00000003)
@@ -320,6 +396,23 @@ La revocación es el mecanismo de PKI que anula un certificado antes de su venci
 - CRL (Certificate Revocation List): lista firmada por la CA con los números de serie revocados; el cliente la descarga periódicamente. Simple, pero puede pesar megas y llegar tarde.
 - OCSP (Online Certificate Status Protocol, RFC 6960): el cliente pregunta en línea "¿el serial 0x4A3F sigue vigente?". Más fresco, pero le dice a la CA qué sitios visitas y, si la CA no responde, los navegadores suelen dejar pasar (soft-fail).
 - OCSP stapling: el propio servidor consulta OCSP y "grapa" la respuesta firmada al handshake, ahorrándole la consulta al cliente.
+
+```mermaid
+sequenceDiagram
+    participant C as Navegador
+    participant S as Servidor
+    participant O as Respondedor OCSP (CA)
+    Note over C,O: OCSP clásico
+    C->>S: handshake TLS
+    S-->>C: certificado (serial 0x4A3F)
+    C->>O: ¿el serial 0x4A3F sigue vigente?
+    O-->>C: respuesta firmada (la CA sabe qué sitio visitas)
+    Note over C,O: OCSP stapling
+    S->>O: consulta periódica de su propio certificado
+    O-->>S: respuesta firmada
+    C->>S: handshake TLS
+    S-->>C: certificado + respuesta OCSP grapada
+```
 
 La tendencia es volver a CRLs con certificados de vida corta: Let's Encrypt apagó sus respondedores OCSP en agosto de 2025 por privacidad y coste.
 
@@ -367,6 +460,18 @@ Cifrado          sí, con la llave    sí (la llave)        confidencialidad
 Hashing          no                  no (salvo HMAC)      integridad / contraseñas
 ```
 
+La misma tabla como pregunta de clasificación:
+
+```mermaid
+flowchart TD
+    Q1{"¿Se puede revertir?"} -->|no| H["Hashing<br/>integridad / contraseñas"]
+    Q1 -->|sí| Q2{"¿Hace falta un secreto<br/>para revertirla?"}
+    Q2 -->|"sí, la llave"| C["Cifrado<br/>confidencialidad"]
+    Q2 -->|no| Q3{"¿Busca dificultar<br/>la lectura humana?"}
+    Q3 -->|sí| O["Ofuscación"]
+    Q3 -->|"no, solo cambia el formato"| E["Codificación<br/>base64, hex, URL"]
+```
+
 ### Base64
 
 Base64 es un esquema de codificación que representa bytes arbitrarios usando solo 64 caracteres imprimibles (`A-Z a-z 0-9 + /`), tomando grupos de 3 bytes (24 bits) y convirtiéndolos en 4 caracteres de 6 bits cada uno. Por eso crece un 33 % y por eso a veces termina en `=` o `==` (relleno cuando el último grupo no llega a 3 bytes). Existe porque muchos sistemas (correo, JSON, URLs) solo transportan texto, no binario.
@@ -400,6 +505,17 @@ Base64 → 3 bytes → 4 caracteres; +33 %; "=" de relleno; no es seguridad.
 FTP (File Transfer Protocol) es un protocolo de transferencia de archivos de 1971 (versión actual en RFC 959) que envía usuario, contraseña, comandos y datos en texto claro; SFTP (SSH File Transfer Protocol) es un protocolo de transferencia de archivos distinto que funciona como subsistema dentro de una conexión SSH cifrada.
 
 FTP usa dos conexiones: control en TCP 21 y datos en TCP 20 (modo activo) o en un puerto alto negociado (modo pasivo). Eso complica los firewalls y todo viaja legible. SFTP usa una sola conexión TCP 22, con la autenticación de SSH (contraseña o llave) y todo cifrado.
+
+```mermaid
+flowchart LR
+    subgraph FTP["FTP (en claro)"]
+        C1["Cliente"] -->|"control TCP 21:<br/>USER, PASS, comandos"| S1["Servidor"]
+        C1 <-->|"datos: TCP 20 (activo)<br/>o puerto alto (pasivo)"| S1
+    end
+    subgraph SFTP["SFTP (cifrado)"]
+        C2["Cliente"] -->|"una sola conexión TCP 22:<br/>SSH con comandos y datos"| S2["Servidor"]
+    end
+```
 
 Analogía: FTP es mandar documentos en una caja abierta por mensajería; SFTP es mandarlos dentro de un camión blindado que además ya tiene cerrojo.
 
@@ -542,6 +658,19 @@ Modo túnel (ESP):      [ IP nueva | ESP | IP orig | TCP | datos | trailer | ICV
 
 Ejemplo: la oficina de San José (10.1.0.0/16) y la de Liberia (10.2.0.0/16) se unen con dos firewalls. Un PC de San José envía a 10.2.0.50; su firewall mete el paquete entero dentro de un ESP en modo túnel dirigido a la IP pública del firewall de Liberia. Quien mira internet solo ve tráfico ESP entre dos IPs públicas, sin saber qué equipos internos hablan.
 
+```mermaid
+sequenceDiagram
+    participant PC as PC San José (10.1.0.10)
+    participant FW1 as Firewall San José (200.0.0.1)
+    participant FW2 as Firewall Liberia (201.0.0.1)
+    participant SRV as Equipo Liberia (10.2.0.50)
+    FW1->>FW2: IKEv2 (UDP 500): negocia algoritmos, autentica y hace DH
+    FW2-->>FW1: SA establecidas (una por cada sentido)
+    PC->>FW1: paquete IP 10.1.0.10 → 10.2.0.50 (en claro en la LAN)
+    FW1->>FW2: ESP modo túnel 200.0.0.1 → 201.0.0.1 (paquete original cifrado dentro)
+    FW2->>SRV: desenvuelve y entrega el paquete original
+```
+
 ```
 $ sudo swanctl --list-sas
 oficinas: #1, ESTABLISHED, IKEv2
@@ -625,6 +754,23 @@ Dos formas de proteger LDAP:
 - LDAPS: TLS desde el primer byte, en TCP 636.
 - StartTLS: se conecta en claro al 389 y luego envía la operación extendida StartTLS para pasar a TLS. Es el estándar del IETF (RFC 4513). Riesgo: si el cliente no exige que la mejora ocurra, un MITM puede quitar el StartTLS (ataque de downgrade) y el cliente sigue en claro.
 
+Downgrade de StartTLS cuando el cliente no exige TLS:
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente LDAP
+    participant M as Atacante (MITM)
+    participant S as Servidor LDAP (TCP 389)
+    C->>M: operación extendida StartTLS
+    M-->>C: error: StartTLS no disponible
+    Note over C: no exige TLS y sigue en claro
+    C->>M: bind simple con DN y contraseña en claro
+    Note over M: captura la contraseña
+    M->>S: reenvía el bind
+    S-->>M: bind correcto
+    M-->>C: bind correcto
+```
+
 El servidor necesita un certificado de una CA en la que confíen los clientes; el error clásico es que la aplicación desactive la validación del certificado "para que funcione", lo que deja la puerta abierta a un MITM.
 
 ```
@@ -658,6 +804,15 @@ Cómo funciona:
 - SRTCP: lo mismo para RTCP, el canal de control y estadísticas.
 - SRTP no negocia llaves. Las llaves llegan por otro lado: SDES (en el mensaje SIP; solo seguro si SIP va sobre TLS, puerto 5061), DTLS-SRTP (un handshake DTLS sobre el mismo UDP, obligatorio en WebRTC) o ZRTP.
 
+Las llaves y la voz viajan por caminos distintos:
+
+```mermaid
+flowchart LR
+    T1["Teléfono IP A"] -->|"SIP sobre TLS (5061)<br/>llaves SRTP vía SDES"| PBX["Centralita SIP"]
+    PBX -->|"SIP sobre TLS (5061)"| T2["Teléfono IP B"]
+    T1 <-->|"SRTP sobre UDP, puertos dinámicos<br/>cabecera RTP en claro, carga cifrada + HMAC"| T2
+```
+
 Ejemplo: una centralita con 100 teléfonos IP. Con RTP, un atacante en la VLAN de voz graba todas las llamadas. Con SIP sobre TLS (5061) + SRTP, captura paquetes UDP con contenido ilegible. Cada videollamada de un navegador (Meet, Teams web) ya usa DTLS-SRTP por obligación.
 
 ```
@@ -675,6 +830,20 @@ S/MIME (Secure/Multipurpose Internet Mail Extensions, versión 4.0 en RFC 8551) 
 El correo nació sin seguridad: SMTP no autentica al remitente del contenido y los mensajes quedan guardados en servidores intermedios. STARTTLS entre servidores cifra el transporte salto por salto, pero el mensaje se guarda legible en cada servidor. S/MIME protege el mensaje en sí: solo el destinatario lo lee y cualquiera puede verificar quién lo firmó.
 
 Analogía: STARTTLS es que el cartero viaje en un camión blindado entre oficinas de correo (pero en cada oficina abren la saca); S/MIME es una carta en sobre lacrado con tu sello personal, que solo el destinatario puede abrir.
+
+```mermaid
+flowchart LR
+    subgraph ST["Solo STARTTLS: cifrado salto a salto"]
+        A1["Ana"] -->|TLS| M1["Servidor de Ana<br/>mensaje legible"]
+        M1 -->|TLS| M2["Servidor de Luis<br/>mensaje legible"]
+        M2 -->|TLS| L1["Luis"]
+    end
+    subgraph SM["S/MIME: cifrado extremo a extremo"]
+        A2["Ana cifra y firma"] --> N1["Servidor de Ana<br/>solo ve cifrado"]
+        N1 --> N2["Servidor de Luis<br/>solo ve cifrado"]
+        N2 --> L2["Luis descifra<br/>y verifica"]
+    end
+```
 
 Cómo funciona:
 
