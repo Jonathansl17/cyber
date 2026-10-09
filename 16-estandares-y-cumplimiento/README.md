@@ -31,9 +31,29 @@ La clave de 27001 es que no es una lista de productos sino un sistema de gestió
 - Anexo A: 93 controles agrupados en 4 temas: organizacionales (37), de personas (8), físicos (14) y tecnológicos (34).
 - SoA (Statement of Applicability, declaración de aplicabilidad): el documento donde la organización dice cuáles de los 93 controles aplica, cuáles excluye y por qué. Un control solo se excluye si el análisis de riesgos lo justifica.
 
+Ciclo PDCA de 27001 y las cláusulas que corresponden a cada paso:
+
+```mermaid
+flowchart LR
+    P["Plan<br/>Cláusulas 4 a 7: contexto, liderazgo,<br/>riesgos y objetivos, soporte"] --> D["Do<br/>Cláusula 8: ejecutar el<br/>tratamiento de riesgos"]
+    D --> C["Check<br/>Cláusula 9: medición, auditoría<br/>interna, revisión por la dirección"]
+    C --> A["Act<br/>Cláusula 10: no conformidades<br/>y acciones correctivas"]
+    A --> P
+```
+
 ISO 27002:2022 tiene los mismos 93 controles, cada uno con su propósito y guía de implantación, y les añade atributos (por ejemplo, si el control es preventivo, detectivo o correctivo, y qué propiedad de la tríada CIA protege). 27002 no es certificable.
 
 Ciclo de certificación: auditoría de etapa 1 (revisión de la documentación), auditoría de etapa 2 (comprobar que el ISMS funciona en la práctica), certificado válido 3 años con auditorías de seguimiento anuales y una recertificación al final.
+
+```mermaid
+flowchart LR
+    E1["Etapa 1:<br/>revisión de la<br/>documentación"] --> E2["Etapa 2:<br/>el ISMS funciona<br/>en la práctica"]
+    E2 --> CERT["Certificado<br/>válido 3 años"]
+    CERT --> S1["Seguimiento<br/>año 1"]
+    S1 --> S2["Seguimiento<br/>año 2"]
+    S2 --> RC["Recertificación"]
+    RC --> CERT
+```
 
 Ejemplo: una empresa de software de 50 personas quiere vender a bancos europeos, que exigen ISO 27001. Define el alcance (desarrollo y operación de su plataforma), hace su análisis de riesgos, decide aplicar 85 de los 93 controles (excluye, por ejemplo, controles de desarrollo subcontratado porque no subcontrata) y lo justifica en la SoA. Tras 9 meses de funcionamiento con evidencias, pasa la etapa 2 con 2 no conformidades menores y obtiene el certificado.
 
@@ -69,6 +89,17 @@ Prepare -> Categorize -> Select -> Implement -> Assess -> Authorize -> Monitor
 ```
 
 Ejemplo: una agencia lanza un portal de citas que guarda nombres y teléfonos. Confidencialidad moderada, integridad moderada, disponibilidad baja: el sistema es "moderado". Se parte de la línea base moderada de 800-53, se implantan los controles, un evaluador encuentra 4 debilidades, se registran en un plan de acción (POA&M) con fechas, el AO acepta el riesgo residual y firma una ATO.
+
+```mermaid
+flowchart LR
+    C["Confidencialidad:<br/>moderado"] --> HW{"High-water mark:<br/>el más alto de los tres"}
+    I["Integridad:<br/>moderado"] --> HW
+    A["Disponibilidad:<br/>bajo"] --> HW
+    HW --> CAT["Sistema moderado"]
+    CAT --> LB["Línea base moderada<br/>(SP 800-53B)"]
+    LB --> EV["Implantar y evaluar:<br/>4 debilidades al POA&M"]
+    EV --> ATO["El AO acepta el riesgo<br/>residual y firma la ATO"]
+```
 
 ```
 RMF (SP 800-37) → 7 pasos: Prepare, Categorize, Select, Implement, Assess, Authorize, Monitor.
@@ -153,6 +184,19 @@ El orden no es casual: no puedes proteger lo que no sabes que tienes, por eso lo
 - IG2: IG1 + 74 = 130, para organizaciones con datos sensibles y un equipo de IT dedicado.
 - IG3: IG2 + 23 = las 153, para organizaciones con datos muy sensibles y equipos de seguridad especializados.
 
+```mermaid
+flowchart TB
+    subgraph IG3["IG3: 153 salvaguardas"]
+        X3["+23: datos muy sensibles,<br/>equipo de seguridad especializado"]
+        subgraph IG2["IG2: 130 salvaguardas"]
+            X2["+74: datos sensibles,<br/>equipo de IT dedicado"]
+            subgraph IG1["IG1: 56 salvaguardas"]
+                X1["Higiene básica: pyme<br/>con poco personal de IT"]
+            end
+        end
+    end
+```
+
 Los Benchmarks tienen dos perfiles: Level 1 (ajustes básicos que casi no afectan al funcionamiento) y Level 2 (defensa en profundidad para entornos muy sensibles, que puede romper alguna funcionalidad). Se pueden comprobar automáticamente con herramientas como CIS-CAT o, de forma aproximada, con auditores libres como Lynis.
 
 Ejemplo: una recomendación típica del benchmark de Ubuntu es "asegurar que el acceso SSH como root está deshabilitado". Comprobarla:
@@ -204,6 +248,12 @@ Estructura: cada función se divide en categorías (22 en total) y estas en subc
 - Niveles (Tiers): describen el rigor de la gestión del riesgo, del 1 al 4: Partial (parcial), Risk Informed (informado por el riesgo), Repeatable (repetible), Adaptive (adaptativo). No son una nota de madurez obligatoria; son una referencia para fijar la meta.
 
 Ejemplo: una clínica con 30 empleados evalúa su perfil actual y ve que en Recover no tiene backups probados (RC sin cubrir) y en Govern nadie es responsable de la seguridad. Su perfil objetivo para el año próximo fija: un responsable nombrado (GV.RR), backups 3-2-1 con prueba trimestral de restauración (PR y RC) y pasar de Tier 1 a Tier 2.
+
+```mermaid
+flowchart LR
+    PA["Perfil actual<br/>RC: sin backups probados<br/>GV: nadie responsable<br/>Tier 1"] --> GAP["Diferencia entre perfiles<br/>= plan de trabajo"]
+    PO["Perfil objetivo<br/>GV.RR: responsable nombrado<br/>PR y RC: backups 3-2-1 con<br/>prueba trimestral<br/>Tier 2"] --> GAP
+```
 
 ```
 CSF 2.0 → marco voluntario de resultados; 6 funciones, 22 categorías, 106 subcategorías.
@@ -293,7 +343,31 @@ Proceso típico de una auditoría:
 4. Informe: opinión formal y hallazgos.
 5. Remediación y seguimiento: la organización presenta un plan de acción con fechas y el auditor verifica que se cerró.
 
+```mermaid
+flowchart LR
+    P["Planificación:<br/>alcance, criterios,<br/>calendario"] --> T["Trabajo de campo:<br/>entrevista, inspección,<br/>observación, reejecución<br/>sobre una muestra"]
+    T --> H["Hallazgos:<br/>no conformidad mayor o<br/>menor, observaciones"]
+    H --> I["Informe:<br/>opinión formal"]
+    I --> R["Remediación:<br/>plan de acción<br/>con fechas"]
+    R --> S["Seguimiento:<br/>el auditor verifica<br/>el cierre"]
+```
+
 Ejemplo: en una auditoría SOC 2, el control dice "los accesos de los empleados que se van se revocan en menos de 24 horas". El auditor pide la lista de 40 bajas del año, toma una muestra de 25 y compara la fecha de salida en RR. HH. con la fecha de desactivación de la cuenta. Encuentra 2 cuentas desactivadas a los 5 días: es una excepción que aparece en el informe, y la empresa automatiza la baja desde el sistema de RR. HH.
+
+```mermaid
+sequenceDiagram
+    participant A as Auditor
+    participant E as Empresa
+    participant RH as Sistema de RR. HH.
+    A->>E: Pide la lista de bajas del año
+    E-->>A: 40 bajas
+    A->>A: Toma una muestra de 25
+    A->>RH: Consulta la fecha de salida de cada una
+    A->>E: Consulta la fecha de desactivación de cada cuenta
+    A->>A: Compara y encuentra 2 cuentas desactivadas a los 5 días
+    A-->>E: Excepción en el informe
+    E->>RH: Automatiza la baja desde RR. HH.
+```
 
 SOC 2 tiene dos tipos que se confunden a menudo: Type I evalúa si los controles están bien diseñados en una fecha concreta; Type II evalúa si funcionaron de verdad durante un periodo (normalmente de 3 a 12 meses). Los clientes serios piden Type II.
 
@@ -363,6 +437,17 @@ El ciclo es una secuencia de seis fases que se repite sin fin:
 
 Las políticas suelen fijar plazos de remediación por severidad; un ejemplo habitual es 15 días para críticas, 30 para altas, 90 para medias y 180 para bajas. La guía de NIST para el parcheo es SP 800-40 Rev. 4.
 
+```mermaid
+flowchart TD
+    H["Hallazgo confirmado"] --> P{"¿Se puede corregir<br/>(parche o cambio de<br/>configuración) en plazo?"}
+    P -- Sí --> C["Corregir"]
+    P -- No --> M{"¿Existe un control<br/>compensatorio?"}
+    M -- Sí --> MI["Mitigar: bloquear el puerto,<br/>regla de WAF, aislar"]
+    M -- No --> AC["Aceptar formalmente,<br/>firmado y con fecha de revisión"]
+    C --> V["Verificar: reescanear"]
+    MI --> V
+```
+
 ```
 Corregir → parche o cambio de configuración: elimina la vulnerabilidad.
 Mitigar → control compensatorio: la vulnerabilidad sigue, pero no se puede explotar o duele menos.
@@ -382,6 +467,15 @@ Términos vecinos:
 - NVD (National Vulnerability Database, de NIST): enriquece cada CVE con puntuación CVSS, productos afectados (CPE) y tipo de fallo (CWE).
 - CWE (Common Weakness Enumeration): el tipo de error, no el caso concreto. CWE-79 es XSS; CVE-2021-44228 es una instancia concreta que NVD clasifica, entre otras, como CWE-917 (inyección de expresiones).
 - CPE: nombre estandarizado de un producto y versión, como `cpe:2.3:a:apache:log4j:2.14.1`.
+
+```mermaid
+flowchart LR
+    CNA["CNA<br/>(fabricante, CERT,<br/>investigador)"] -- asigna --> CVE["CVE-2021-44228<br/>(Log4Shell)"]
+    CVE --> NVD["NVD (NIST)<br/>enriquece el registro"]
+    NVD --> CVSS["CVSS:<br/>gravedad"]
+    NVD --> CPE["CPE:<br/>apache log4j 2.14.1"]
+    NVD --> CWE["CWE-917:<br/>tipo de debilidad"]
+```
 
 Analogía: el CVE es la matrícula de un coche concreto; el CWE es el modelo de coche; el CPE es la ficha técnica de qué coches afecta.
 
@@ -433,6 +527,21 @@ CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H   →  10,0 Critical
 
 Si el mismo fallo exigiera estar logueado (PR:L) y que un usuario abriera un archivo (UI:R), la nota bajaría a la franja alta: el vector explica de dónde sale cada décima. Las calculadoras oficiales de FIRST permiten cambiar cada métrica y ver el efecto.
 
+Cómo se agrupan las métricas Base del vector:
+
+```mermaid
+flowchart LR
+    V["Vector CVSS 3.1"] --> EX["Explotabilidad:<br/>¿qué tan fácil es?"]
+    V --> SC["Alcance"]
+    V --> IM["Impacto:<br/>¿cuánto daño hace?"]
+    EX --> AV["AV: N, A, L, P"]
+    EX --> AC["AC: L, H"]
+    EX --> PR["PR: N, L, H"]
+    EX --> UI["UI: N, R"]
+    SC --> S["S: U, C"]
+    IM --> CIA["C, I, A: H, L, N"]
+```
+
 ```
 CVSS → gravedad técnica de 0,0 a 10,0; mantenido por FIRST.
 Rangos → 0 None; 0,1-3,9 Low; 4,0-6,9 Medium; 7,0-8,9 High; 9,0-10,0 Critical.
@@ -469,6 +578,18 @@ Prioridad real          media                    máxima                 baja
 ```
 
 La fila de prioridad real no sigue a la fila de CVSS: la vulnerabilidad con la nota más baja es la primera que hay que parchear. Ejemplo cotidiano: una ventana sin cerrar en el piso 20 es un fallo "grave", pero la puerta de la calle sin llave en un barrio con robos esa misma semana es lo urgente.
+
+```mermaid
+flowchart TD
+    H["Hallazgo con CVE"] --> K{"¿Está en CISA KEV?"}
+    K -- Sí --> MAX["Prioridad máxima,<br/>sea cual sea su CVSS"]
+    K -- No --> G["Gravedad: CVSS Base"]
+    K -- No --> E["Probabilidad: EPSS"]
+    K -- No --> A["Activo: exposición a Internet,<br/>datos sensibles, controles<br/>compensatorios"]
+    G --> PR["Prioridad real y plazo"]
+    E --> PR
+    A --> PR
+```
 
 Límite: CVSS sigue siendo útil como primer filtro y para comunicar; el error es usarlo como única variable.
 
@@ -515,6 +636,15 @@ Lectura con lo visto: los tres son críticos o altos por CVSS, pero las dos de A
 
 > [!WARNING]
 > Un hallazgo basado solo en el número de versión puede ser un falso positivo: distribuciones como Red Hat o Debian aplican el parche sin cambiar la versión principal (backporting). Confirma con un escaneo con credenciales o con el aviso del fabricante antes de abrir el ticket.
+
+```mermaid
+flowchart TD
+    B["Escáner sin credenciales<br/>lee el banner: versión X"] --> L["Base de CVE:<br/>la versión X es vulnerable"]
+    L --> HZ["Hallazgo"]
+    HZ --> Q{"Escaneo con credenciales<br/>o aviso del fabricante:<br/>¿parche por backporting?"}
+    Q -- Sí --> FP["Falso positivo:<br/>no se abre ticket"]
+    Q -- No --> T["Hallazgo real:<br/>se abre el ticket"]
+```
 
 ```
 Escáner de vulnerabilidades → compara versiones y configuración con una base de CVE.

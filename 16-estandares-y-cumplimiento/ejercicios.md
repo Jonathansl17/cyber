@@ -22,6 +22,18 @@ Necesitas: solo un navegador. Las calculadoras oficiales de FIRST
 ([3.1](https://www.first.org/cvss/calculator/3.1), [4.0](https://www.first.org/cvss/calculator/4.0))
 y la base [NVD](https://nvd.nist.gov/vuln/search). Tiempo: 45-60 min. No instalas nada.
 
+Método para cada CVE:
+
+```mermaid
+flowchart LR
+    D["Descripción del CVE<br/>(sin mirar la nota)"] --> M["8 métricas Base<br/>en papel"]
+    M --> C["Calculadora FIRST 3.1:<br/>vector y nota"]
+    C --> N{"¿Misma franja<br/>que NVD?"}
+    N -- No --> R["Releer la descripción y anotar<br/>en qué métrica difieres"]
+    R --> M
+    N -- Sí --> T["Fila de la tabla"]
+```
+
 ### Pasos
 
 1. Elige tres CVE de perfiles distintos para que el ejercicio no sea repetitivo. Una
@@ -82,6 +94,25 @@ el escáner y el objetivo estarían en equipos distintos, pero el flujo de escan
 observas es el mismo; aquí ambos papeles los hace tu propio host. Trabajarás con dos
 terminales: la **Terminal 1 (Greenbone)**, para levantar el stack y seguir sus logs, y la
 **Terminal 2 (operador)**, para los comandos sueltos y las consultas de KEV/EPSS.
+
+Montaje del ejercicio, todo en un solo equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux (un solo host)"]
+        NAV["Navegador"]
+        SSHD["sshd del host, escuchando<br/>en todas las interfaces"]
+        GW(["Puerta de enlace de la red Docker:<br/>la IP de tu equipo vista<br/>desde los contenedores"])
+        subgraph NET["Red Docker greenbone-community-edition_default"]
+            WEB["Contenedor de la<br/>interfaz web"]
+            GVMD["gvmd<br/>(gestión)"]
+            SC["Escáner OpenVAS"]
+        end
+    end
+    NAV -- "https://127.0.0.1<br/>o puerto 9392" --> WEB
+    WEB --> GVMD --> SC
+    SC -- "escaneo del objetivo" --> GW --> SSHD
+```
 
 ```bash
 sudo apt install docker.io     # Debian/Ubuntu
@@ -161,6 +192,20 @@ sudo pacman -S docker          # Arch
    misma red Docker y apuntar el objetivo a su nombre.)
 5. Duplica el objetivo, esta vez asignándole las credenciales SSH del paso 3, y vuelve
    a escanear. Anota de nuevo el total.
+
+   ```mermaid
+   sequenceDiagram
+       participant S as Escáner OpenVAS
+       participant H as Tu equipo (sshd y servicios)
+       Note over S,H: Primer escaneo, sin credenciales
+       S->>H: Sondea puertos y lee banners
+       H-->>S: Versiones anunciadas
+       Note over S,H: Segundo escaneo, con credenciales SSH
+       S->>H: Inicia sesión SSH con el usuario local
+       S->>H: Lee paquetes instalados y configuración
+       H-->>S: Versiones exactas
+       Note over S: Más hallazgos y menos falsos positivos
+   ```
 6. Para los cinco hallazgos de mayor CVSS del escaneo autenticado, abre cada CVE y
    cruza su explotabilidad real:
    - CISA KEV: busca el CVE en
@@ -182,6 +227,19 @@ justificado.
   paquetes instalados en vez de solo adivinar por banners.
 - ¿Tu primer puesto de la lista es el que está en KEV aunque no sea el de mayor CVSS?
   Esa es la lección: gravedad no es lo mismo que riesgo.
+
+Si el escaneo no encuentra nada en tu equipo:
+
+```mermaid
+flowchart TD
+    Z["Sin servicios detectados"] --> A{"¿El objetivo es la puerta<br/>de enlace de la red Docker?"}
+    A -- No --> A1["Repetir el paso 4<br/>con docker network inspect"]
+    A -- Sí --> B{"¿El servicio escucha en todas<br/>las interfaces, no solo en 127.0.0.1?"}
+    B -- No --> B1["Ajustar el servicio y<br/>comprobar con ss -tlnp"]
+    B -- Sí --> C{"¿El cortafuegos permite<br/>esa subred?"}
+    C -- No --> C1["Permitir la subred de Docker<br/>en el cortafuegos"]
+    C -- Sí --> D["Si el autenticado no da más:<br/>revisar las credenciales SSH"]
+```
 
 ### Limpieza
 
@@ -214,6 +272,22 @@ analizar, deja escuchando algún servicio en la **Terminal 1 (servicio)** (por e
 `sshd` del ejercicio anterior, o un contenedor con una versión antigua) y lanza Nmap
 desde la **Terminal 2 (escaneo)**. En un entorno real el objetivo estaría en otra máquina;
 aquí el objetivo es tu propio host en loopback, y el escaneo es idéntico.
+
+Montaje del ejercicio, todo en un solo equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Tu equipo Linux (un solo host)"]
+        T2["Terminal 2:<br/>nmap -sV --script vulners"]
+        LO(["Interfaz lo<br/>127.0.0.1"])
+        T1["Terminal 1: servicios<br/>en escucha (sshd u otros)"]
+    end
+    API["Base de vulners<br/>en internet"]
+    T2 -- "sondea los 65535 puertos" --> LO --> T1
+    T1 -- "banners y versiones" --> T2
+    T2 -- "versión detectada" --> API
+    API -- "CVE con su CVSS" --> T2
+```
 
 ### Pasos
 
@@ -257,6 +331,15 @@ aquí el objetivo es tu propio host en loopback, y el escaneo es idéntico.
    - Aceptar: el riesgo es bajo y lo registras con fecha de revisión (servicio de
      laboratorio sin datos).
 
+   ```mermaid
+   flowchart TD
+       H["Servicio con hallazgos"] --> P{"¿Hay actualización disponible<br/>y el servicio importa?"}
+       P -- Sí --> C["Corregir: actualizar"]
+       P -- No --> E{"¿Se puede reducir la<br/>exposición sin parchear?"}
+       E -- Sí --> M["Mitigar: cerrar el puerto,<br/>regla de firewall, solo loopback"]
+       E -- No --> A["Aceptar con fecha de revisión<br/>(riesgo bajo, sin datos)"]
+   ```
+
 ### Resultado esperado
 
 El archivo `vulners.txt` y tu tabla de decisiones con una fila por servicio vulnerable.
@@ -284,6 +367,18 @@ Necesitas: tu Linux de siempre; Lynis instalado; acceso al CIS
 Benchmark de tu distribución (descarga gratuita previo registro en
 [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks)). Tiempo: 1 h. No modifica
 nada del sistema: Lynis solo audita.
+
+De dónde sale cada dato del ejercicio:
+
+```mermaid
+flowchart LR
+    L["sudo lynis audit system"] --> LOG["/var/log/lynis.log"]
+    L --> DAT["/var/log/lynis-report.dat"]
+    LOG -- "grep hardening index" --> HI["Hardening index<br/>de 0 a 100"]
+    DAT -- "grep suggestion[]=" --> SUG["sugerencias.txt"]
+    SUG --> CIS["Mapear 5 sugerencias al<br/>CIS Benchmark: número y nivel"]
+    CIS --> V["Verificar una a mano:<br/>sshd -T, permitrootlogin"]
+```
 
 ### Pasos
 
