@@ -25,6 +25,20 @@ Necesitas:
 > [!WARNING]
 > Las reglas y el modo inline de este ejercicio actúan solo sobre tráfico de loopback que tú mismo generas contra `127.0.0.1`. No apuntes estas técnicas contra equipos ajenos ni servicios que no hayas levantado tú en este equipo.
 
+Las dos posiciones de Suricata en el mismo equipo: en modo IDS (pasos 6 y 7) lee una copia de `lo`; en modo IPS (pasos 9 a 12) el kernel le entrega cada paquete y espera su veredicto.
+
+```mermaid
+flowchart LR
+    subgraph H["Un solo equipo Linux, interfaz lo"]
+        C["Terminal 3 (cliente)<br/>ping, curl"] -->|"127.0.0.1"| K["Kernel, hook input"]
+        K --> W["Terminal 1 (servidor víctima)<br/>http.server 127.0.0.1:80"]
+        K -.->|"IDS: copia (-i lo)"| S1["Terminal 2: Suricata<br/>solo alerta"]
+        K <-->|"IPS: queue num 0 (-q 0)"| S2["Terminal 2: Suricata<br/>accept o drop"]
+        S1 --> L["fast.log, eve.json"]
+        S2 --> L
+    end
+```
+
 ### Pasos
 
 1. Comprueba que tienes loopback en marcha (donde hablarán el servidor y el cliente) y abre tres terminales en el mismo equipo:
@@ -235,6 +249,26 @@ Necesitas:
     - `-m 5` → tiempo máximo total de la operación, en segundos; corta el `curl` a los 5 segundos porque la petición bloqueada nunca obtendrá respuesta.
     - `http://127.0.0.1/` → la raíz del servidor, sin la cadena de la regla: debe pasar.
     Esperado: `3 packets transmitted, 0 received, 100% packet loss`; el primer `curl` termina con `curl: (28) Operation timed out`; el segundo, sin la cadena, recibe el listado de directorio del servidor Python. En la Terminal 1 (servidor web) solo aparece la petición a `/`, nunca la de `/hola-ids`.
+
+    Recorrido de las dos peticiones `curl` con Suricata inline:
+
+    ```mermaid
+    sequenceDiagram
+        participant C as curl (Terminal 3)
+        participant K as Kernel (nft queue 0)
+        participant S as Suricata -q 0
+        participant W as http.server :80
+        C->>K: GET /hola-ids
+        K->>S: paquete encolado
+        S-->>K: drop (sid 1000002)
+        Note over C: curl (28) Operation timed out
+        C->>K: GET /
+        K->>S: paquete encolado
+        S-->>K: accept
+        K->>W: GET /
+        W-->>C: listado de directorio (la respuesta también pasa por la cola)
+    ```
+
 12. Confirma el bloqueo en `eve.json`:
     ```bash
     sudo jq -c 'select(.event_type=="alert") | {sid: .alert.signature_id, action: .alert.action}' /var/log/suricata/eve.json
@@ -288,6 +322,22 @@ Necesitas:
   - Arch: `sudo pacman -S audit openssh sshpass`
   En Arch el paquete de auditoría es `audit` (trae `auditd`, `auditctl`, `augenrules` y `ausearch`) y el de SSH es `openssh` (el demonio es `sshd`). Ninguno arranca solo tras instalar: actívalos con `sudo systemctl start auditd` y `sudo systemctl start sshd` (en Debian/Ubuntu el servicio SSH se llama `ssh` y suele quedar arrancado al instalar).
 - Tiempo estimado: 45 minutos.
+
+De dónde sale cada pieza de la línea de tiempo, todo en el mismo equipo:
+
+```mermaid
+flowchart LR
+    subgraph H["Un solo equipo Linux"]
+        SP["sshpass + ssh<br/>noexiste@127.0.0.1 ×5"] -->|"TCP 22 por lo"| SSHD["sshd"]
+        AD["Tu terminal<br/>sudo useradd, passwd, usermod"] --> ID["/etc/passwd, shadow,<br/>group, gshadow"]
+        SSHD -->|"Failed password"| J["journal"]
+        AD -->|"sudo, useradd, usermod"| J
+        AD -->|"execve, clave procesos"| AU["auditd<br/>audit.log"]
+        ID -->|"-w, clave identidad"| AU
+    end
+    J --> TL["Línea de tiempo"]
+    AU --> TL
+```
 
 ### Pasos
 
@@ -525,6 +575,20 @@ Necesitas: cualquier Linux con systemd (Ubuntu, Debian, Arch) y `logger` (paquet
    <36>1 2026-10-02T12:34:46.740976-06:00 equipo jony - - [timeQuality tzKnown="1" isSynced="1" syncAccuracy="1497500"] prueba de syslog
    ```
    `<36>` es el PRI que calculaste, `1` la versión del formato, luego marca de tiempo con zona horaria, equipo, aplicación, PID y MSGID (`-` = ninguno) y los datos estructurados que `logger` añade sobre la sincronización del reloj.
+
+   El mismo mensaje por los dos caminos del ejercicio:
+
+   ```mermaid
+   sequenceDiagram
+       participant L as logger -p auth.warning
+       participant J as journal
+       participant R as Receptor Python 127.0.0.1:5514
+       L->>J: Paso 1, mensaje local
+       Note over J: journalctl -p warning lo muestra (severidad 4)
+       L->>R: Paso 5, datagrama UDP por lo (-n 127.0.0.1 -P 5514 -d)
+       Note over R: Imprime <36>1 ... prueba de syslog
+   ```
+
 6. Practica la fórmula al revés con dos casos más y compruébalos repitiendo el paso 5 con otra `-p`:
    - `logger -p local0.err ...` → 16 × 8 + 3 = 131.
    - `logger -p cron.info ...` → 9 × 8 + 6 = 78.
@@ -554,6 +618,21 @@ Necesitas:
   - Arch: `sudo pacman -S tcpdump wireshark-qt` (la GUI; `wireshark-qt` ya incluye `tshark`). Si solo quieres la línea de comandos, `sudo pacman -S tcpdump wireshark-cli`.
   Para capturar sin ser root debes estar en el grupo `wireshark`: `sudo usermod -aG wireshark $USER` y vuelve a iniciar sesión. En Debian/Ubuntu, además, `sudo dpkg-reconfigure wireshark-common` y elige "sí" para permitir la captura a los usuarios del grupo `wireshark`.
 - Tiempo estimado: 30 minutos.
+
+Qué queda en la captura de una visita a un sitio HTTPS:
+
+```mermaid
+sequenceDiagram
+    participant B as Navegador
+    participant D as Resolver DNS
+    participant S as Servidor web
+    Note over B,S: tcpdump en la interfaz de salida guarda port 53 or port 443
+    B->>D: Consulta DNS (puerto 53), nombre en claro
+    D-->>B: Respuesta con la IP
+    B->>S: TLS Client Hello (443), SNI en claro
+    S-->>B: Server Hello y datos cifrados
+    Note over B,S: La URL completa y el contenido no se ven
+```
 
 ### Pasos
 
@@ -744,6 +823,19 @@ Necesitas: Linux con navegador, `sha256sum`, `curl` y Python 3 (en Arch, `python
    Fíjate en si el titular aparece o sale `REDACTED FOR PRIVACY`.
 7. Cierra con una conclusión por escrito de dos líneas: qué te dijo cada servicio y qué enviaste a cada uno (un hash y tres nombres de dominio, ninguno de ellos dato interno).
 
+   Qué sale de tu equipo y hacia dónde:
+
+   ```mermaid
+   flowchart LR
+       subgraph L["Tu equipo"]
+           E["Cadena EICAR<br/>(no se sube)"] -->|"printf + sha256sum"| H["SHA-256 275a02..."]
+           D["google.com, wikipedia.org,<br/>github.com"]
+       end
+       H -->|"pestaña SEARCH"| VT["VirusTotal"]
+       D -->|"navegador"| ICANN["lookup.icann.org<br/>(RDAP)"]
+       D -->|"curl"| RDAP["Servidores RDAP del registro<br/>Verisign (.com), PIR (.org)"]
+   ```
+
 ### Resultado esperado
 
 Un texto con el SHA-256 de EICAR, su ratio de detección, su fecha de primer envío y su número de nombres, las fechas de creación de tres dominios obtenidas por dos vías que coinciden, y la constancia de que no subiste ningún archivo.
@@ -772,6 +864,19 @@ Necesitas:
   - Arch: `sudo pacman -S openssh sshpass` (demonio `sshd`, arráncalo con `sudo systemctl start sshd`).
 - Haber hecho el ejercicio 2 ayuda: aquí se repiten sus eventos, pero los ve el SIEM en vez de `journalctl`.
 - Tiempo estimado: 90 minutos (unos 20 son la instalación del servidor).
+
+Arquitectura del laboratorio: manager y agente en el mismo equipo, unidos por loopback.
+
+```mermaid
+flowchart LR
+    subgraph H["Un solo equipo Linux"]
+        SRC["journald o /var/log/auth.log<br/>+ /srv/lab-fim (FIM)"] --> AG["wazuh-agent"]
+        AG -->|"127.0.0.1:1515/tcp registro<br/>127.0.0.1:1514/tcp eventos"| MG["wazuh-manager<br/>decodifica y aplica reglas"]
+        MG -->|"alertas"| IX["Indexador"]
+        IX --> DB["Dashboard"]
+        NAV["Navegador<br/>https://127.0.0.1"] --> DB
+    end
+```
 
 ### Pasos
 
@@ -928,6 +1033,20 @@ Necesitas:
    echo "puerto=4444" | sudo tee -a /srv/lab-fim/config.txt
    sudo rm /srv/lab-fim/config.txt
    ```
+
+   Qué alerta debería producir cada acción:
+
+   ```mermaid
+   flowchart LR
+       A1["10 × ssh noexiste"] --> R5710["5710 por intento"]
+       R5710 -->|"8 en 120 s"| R5712["5712 fuerza bruta"]
+       A2["ssh con tu usuario<br/>y clave errónea"] --> R5760["5760"]
+       A3["sudo ls /root"] --> R5402["5402 / 5403"]
+       A4["useradd labwazuh"] --> R5902["5901 / 5902"]
+       A5["usermod -aG sudo"] --> GAP["Ninguna regla de fábrica<br/>(hueco: regla 100100 en el paso 12)"]
+       A6["config.txt: crear,<br/>modificar, borrar"] --> FIM["554, 550, 553 (FIM)"]
+   ```
+
    - `date '+%H:%M:%S'` → muestra la hora actual (ver ejercicio 2, paso 3).
    - `for i in $(seq 1 10); do sshpass ... done` → diez intentos SSH fallidos contra una cuenta que no existe; `$(seq 1 10)` se sustituye por los números del 1 al 10, y cada opción de `sshpass` y `ssh` está explicada en el ejercicio 2, paso 4. Cada intento deja al menos la línea `Invalid user noexiste`, así que se superan los 8 eventos en 2 minutos que cuenta la regla de fuerza bruta.
    - `"$USER"@127.0.0.1` → un intento más con contraseña errónea contra tu propia cuenta, que sí existe; `$USER` es tu nombre de usuario.

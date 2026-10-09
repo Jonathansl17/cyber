@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 250" width="640" height="250" font-family="sans-serif">
+  <rect x="0" y="0" width="640" height="250" fill="#ffffff"/>
+  <text x="320" y="28" text-anchor="middle" font-size="17" font-weight="bold" fill="#1f2328">PRI &lt;34&gt; como byte: facility × 8 + severity</text>
+  <g font-size="12" fill="#57606a" text-anchor="middle">
+    <text x="90" y="62">bit 7</text><text x="150" y="62">6</text><text x="210" y="62">5</text><text x="270" y="62">4</text>
+    <text x="330" y="62">3</text><text x="410" y="62">2</text><text x="470" y="62">1</text><text x="530" y="62">bit 0</text>
+  </g>
+  <g stroke="#1f2328" stroke-width="1.5">
+    <rect x="60" y="72" width="300" height="50" fill="#dbe9f8"/>
+    <rect x="380" y="72" width="180" height="50" fill="#fbe5c8"/>
+  </g>
+  <g stroke="#1f2328" stroke-width="1">
+    <line x1="120" y1="72" x2="120" y2="122"/><line x1="180" y1="72" x2="180" y2="122"/>
+    <line x1="240" y1="72" x2="240" y2="122"/><line x1="300" y1="72" x2="300" y2="122"/>
+    <line x1="440" y1="72" x2="440" y2="122"/><line x1="500" y1="72" x2="500" y2="122"/>
+  </g>
+  <g font-size="22" font-family="monospace" fill="#1f2328" text-anchor="middle">
+    <text x="90" y="105">0</text><text x="150" y="105">0</text><text x="210" y="105">1</text><text x="270" y="105">0</text><text x="330" y="105">0</text>
+    <text x="410" y="105">0</text><text x="470" y="105">1</text><text x="530" y="105">0</text>
+  </g>
+  <text x="210" y="148" text-anchor="middle" font-size="14" font-weight="bold" fill="#1f2328">facility (5 bits)</text>
+  <text x="210" y="168" text-anchor="middle" font-size="13" fill="#1f2328">00100 = 4 (auth)</text>
+  <text x="470" y="148" text-anchor="middle" font-size="14" font-weight="bold" fill="#1f2328">severity (3 bits)</text>
+  <text x="470" y="168" text-anchor="middle" font-size="13" fill="#1f2328">010 = 2 (Critical)</text>
+  <text x="320" y="208" text-anchor="middle" font-size="13" fill="#1f2328">Multiplicar por 8 es desplazar 3 bits: 4 × 8 + 2 = 32 + 2 = 34 = 0010 0010 en binario.</text>
+  <text x="320" y="230" text-anchor="middle" font-size="13" fill="#1f2328">3 bits dan las 8 severidades (0-7); la facility ocupa el resto (0-23).</text>
+</svg>

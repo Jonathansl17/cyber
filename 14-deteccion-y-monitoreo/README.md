@@ -56,6 +56,16 @@ El IDS pasivo no añade latencia ni puede tumbar la red si falla, pero cuando av
 
 Falsos positivos. Una regla dispara sobre tráfico inocente: un IDS lo convierte en ruido para el analista; un IPS lo convierte en una caída de servicio, porque bloquea a usuarios legítimos. Por eso las reglas nuevas se despliegan primero en modo solo alerta, se miden unos días y solo después se pasan a bloqueo. Las métricas (precisión, recall, falacia de la tasa base) están en [`08-conceptos-de-seguridad`](../08-conceptos-de-seguridad/).
 
+```mermaid
+flowchart LR
+    N["Regla nueva"] --> AL["Modo solo alerta<br/>(alert)"]
+    AL --> M["Medir falsos positivos<br/>unos días"]
+    M --> Q{"¿Tasa<br/>aceptable?"}
+    Q -->|"no"| AJ["Ajustar la regla<br/>(rev + 1)"]
+    AJ --> AL
+    Q -->|"sí"| BL["Modo bloqueo<br/>(drop / reject)"]
+```
+
 > [!WARNING]
 > Un falso positivo en un IPS no es una alerta molesta: es un usuario legítimo bloqueado. Toda regla nueva va primero en modo alerta y pasa a bloqueo cuando se midió su tasa de falsos positivos.
 
@@ -113,6 +123,18 @@ Cómo se despliega:
 - Capacidad: un enlace de 1 Gbit/s al 70 % de uso son unos 87 MB por segundo que inspeccionar; si el sensor no da abasto, descarta paquetes sin avisar y sin alertar. Se vigila el contador de paquetes perdidos (`kernel_drops` en Suricata).
 - Lo que no ve: tráfico este-oeste entre dos equipos del mismo switch si no se replica, tráfico cifrado (salvo descifrado TLS en un proxy) y lo que pasa dentro de un equipo.
 
+Un sensor por segmento, cada uno alimentado por SPAN o TAP:
+
+```mermaid
+flowchart TD
+    I["Internet"] --> FW["Firewall"] --> SW1["Switch de frontera"] --> DMZ["DMZ"]
+    DMZ --> SW2["Switch DMZ / interna"] --> RI["Red interna"]
+    RI --> SW3["Switch de servidores"] --> SC["Servidores críticos"]
+    SW1 -.->|"SPAN / TAP"| N1["Sensor NIDS 1"]
+    SW2 -.->|"SPAN / TAP"| N2["Sensor NIDS 2"]
+    SW3 -.->|"SPAN / TAP"| N3["Sensor NIDS 3"]
+```
+
 Ejemplo: una red con 300 equipos y un sensor Suricata en el SPAN del switch de núcleo. A las 03:00 dispara una regla de Emerging Threats por un User-Agent asociado a un malware conocido desde `10.0.5.44` hacia `203.0.113.80:8080`. El analista no necesitó ningún agente en `10.0.5.44` para saber que ese equipo es el primero que hay que revisar.
 
 ```
@@ -168,6 +190,14 @@ La fila "Puede bloquear" depende solo de la columna, es decir, de la posición. 
 
 Ejemplo: un atacante que ya está dentro se mueve de un PC a otro dentro de la misma VLAN. Ese tráfico nunca pasa por el NIPS del perímetro; solo lo ven un agente en los equipos o un sensor en ese switch.
 
+```mermaid
+flowchart LR
+    I["Internet"] --> NIPS["NIPS del perímetro"] --> SW["Switch de la VLAN"]
+    SW --- PC1["PC comprometido<br/>+ agente HIPS/EDR"]
+    SW --- PC2["PC vecino<br/>+ agente HIPS/EDR"]
+    PC1 -.->|"movimiento lateral este-oeste<br/>(no cruza el NIPS)"| PC2
+```
+
 ```
 Posición → decide si el sensor ve y si puede bloquear.
 Tráfico este-oeste → entre equipos internos; el sensor del perímetro no lo ve.
@@ -199,6 +229,21 @@ EDR ──API────────────┘                  user, acti
 2. Normalización (parseo): convierte cada formato en campos comunes. El firewall dice `SRC=203.0.113.7`, sshd dice `from 203.0.113.7` y el proxy dice `c-ip`; tras normalizar, los tres son `src_ip` y se pueden buscar juntos. Esquemas comunes: Splunk CIM, Elastic ECS.
 3. Correlación: reglas que unen eventos de distintas fuentes en una ventana de tiempo. Ejemplo: "10 o más logins SSH fallidos (`Failed password`) para el mismo usuario en 5 minutos, seguidos de un login correcto (`Accepted password`) desde la misma IP" es un ataque de fuerza bruta que tuvo éxito; ninguno de esos eventos solo lo dice.
 4. Alerta, búsqueda y retención: la alerta va a una cola de triaje; el analista pivota con búsquedas; los datos se conservan el tiempo que pidan la investigación y la normativa. NIST SP 800-92 trata la gestión de logs en detalle.
+
+La regla de correlación del paso 3, vista en el tiempo:
+
+```mermaid
+sequenceDiagram
+    participant A as 203.0.113.45
+    participant S as sshd
+    participant SI as SIEM
+    A->>S: 10 o más contraseñas incorrectas
+    S->>SI: Failed password ×10, mismo usuario
+    A->>S: Contraseña correcta
+    S->>SI: Accepted password, misma IP
+    Note over SI: Regla con ventana de 5 minutos
+    SI->>SI: Alerta de fuerza bruta con éxito
+```
 
 Ejemplo concreto: búsqueda en SPL (Search Processing Language, el lenguaje de Splunk) que encuentra IPs con muchos logins fallidos en los últimos 15 minutos:
 
@@ -245,6 +290,17 @@ Cómo funciona:
 - Automatización: cada paso que una máquina puede hacer sin criterio humano.
 - Playbook: el flujo de pasos para un tipo de alerta, con condiciones ("si el veredicto es malicioso, entonces...") y puntos de aprobación humana. Playbooks y runbooks se definen en [`08-conceptos-de-seguridad`](../08-conceptos-de-seguridad/).
 - Caso: el SOAR agrupa la alerta, todo lo que encontró y lo que se hizo, con fecha y hora; sirve de registro para la investigación.
+
+```mermaid
+flowchart LR
+    SIEM["SIEM<br/>(alerta)"] --> SOAR["SOAR<br/>playbook + caso"]
+    SOAR <-->|"API"| VT["VirusTotal"]
+    SOAR <-->|"API"| DIR["Directorio"]
+    SOAR <-->|"API"| EDR["EDR"]
+    SOAR <-->|"API"| FW["Firewall"]
+    SOAR <-->|"API"| TK["Tickets"]
+    SOAR -->|"acción de alto impacto"| AN{"Aprobación<br/>del analista"}
+```
 
 Ejemplo concreto, playbook de "correo de phishing reportado por un usuario":
 
@@ -303,6 +359,21 @@ Los mensajes que un analista debe reconocer de memoria:
 - auditd `type=EXECVE` junto a `type=SYSCALL ... syscall=execve`: se ejecutó un programa. Campos: `exe` (el programa), `a0`, `a1`... (los argumentos), `ppid` (el proceso padre), `uid` (como quién corre) y `auid` (quién abrió la sesión, aunque luego hiciera `sudo`).
 - auditd `type=CONFIG_CHANGE` o `type=DAEMON_END`: alguien cambió las reglas de auditoría o detuvo auditd. Rara vez es legítimo fuera de una ventana de mantenimiento.
 - `systemd[1]: Started updater.service` con una unidad que nadie instaló: un servicio nuevo, una forma común de persistencia. Se ve mejor vigilando con auditd `/etc/systemd/system/` (`-w /etc/systemd/system/ -p wa`).
+
+Por qué `auid` sobrevive a `sudo`:
+
+```mermaid
+sequenceDiagram
+    participant Ana
+    participant SSH as sshd
+    participant SU as sudo
+    participant K as auditd
+    Ana->>SSH: Login por SSH (pts/0)
+    Note over SSH: La sesión fija auid = ana
+    Ana->>SU: sudo bash
+    SU->>K: execve /usr/bin/bash
+    Note over K: uid = root, auid = ana
+```
 
 La columna TTY y el método dicen cómo entró la persona:
 
@@ -365,6 +436,8 @@ Cómo funciona por dentro. Cada mensaje lleva una prioridad PRI entre `<` y `>` 
 PRI = facility × 8 + severity
 <34>  →  34 = 4 × 8 + 2  →  facility 4 (auth), severity 2 (Critical)
 ```
+
+![Byte PRI 34 dividido en facility de 5 bits (4, auth) y severity de 3 bits (2, Critical)](img/syslog-pri-bits.svg)
 
 Las 8 severidades de RFC 5424, en orden (menor número, más grave):
 
@@ -432,6 +505,16 @@ Cómo funciona:
 - Versiones: NetFlow v5 (campos fijos, solo IPv4), NetFlow v9 (RFC 3954, basado en plantillas, admite IPv6) e IPFIX (RFC 7011, el estándar de la IETF derivado de v9, puerto 4739). sFlow es un primo que muestrea paquetes en lugar de agregar flujos. El puerto que suelen usar los colectores NetFlow es UDP 2055, aunque es configurable.
 - Muestreo: en enlaces muy cargados se exporta 1 de cada N paquetes (por ejemplo 1:1000), lo que basta para estadísticas pero puede perder conexiones cortas.
 
+```mermaid
+flowchart LR
+    P["Paquetes por<br/>la interfaz"] --> CA["Caché de flujos<br/>agrupa por tupla de 5"]
+    CA --> Q{"¿Exportar<br/>el flujo?"}
+    Q -->|"FIN o RST"| EX["Registro de flujo<br/>sin payload"]
+    Q -->|"inactivo ~15 s"| EX
+    Q -->|"activo ~30 min"| EX
+    EX -->|"UDP 2055 o IPFIX 4739"| COL["Colector<br/>(nfdump)"]
+```
+
 Qué guarda un registro de flujo: IP y puerto de origen y destino, protocolo, número de paquetes y de bytes, hora de inicio y fin, flags TCP acumulados (SYN, ACK, FIN, RST vistos en el flujo), tipo de servicio, interfaces de entrada y salida y, en routers de borde, sistemas autónomos y siguiente salto.
 
 Qué no guarda: el payload. Ni la URL, ni el nombre de usuario, ni el archivo, ni el contenido del correo. Tampoco el nombre del dominio (para eso están los logs DNS o del proxy).
@@ -471,6 +554,16 @@ Cómo funciona:
 - Captura: `tcpdump` en servidores y sensores, Wireshark o `dumpcap` en escritorio. El filtro de captura usa la sintaxis BPF (`host 10.0.5.44 and port 80`) y decide qué se guarda; lo que no pasa el filtro se pierde.
 - Análisis: Wireshark disecciona cada protocolo en campos y permite filtrar con filtros de visualización, que no borran nada, solo esconden lo que no coincide. Sintaxis distinta a la de BPF.
 - El tráfico cifrado con TLS se ve como cifrado; sin las claves de sesión solo quedan metadatos (handshake, SNI, certificado).
+
+```mermaid
+flowchart LR
+    T["Tráfico en<br/>la interfaz"] --> BPF{"Filtro de captura BPF<br/>host ... and port 80"}
+    BPF -->|"no coincide"| LOST["Se pierde"]
+    BPF -->|"coincide"| F["lab.pcap"]
+    F --> DF{"Filtro de visualización<br/>http.request"}
+    DF -->|"coincide"| V["Se muestra"]
+    DF -->|"no coincide"| H["Se oculta<br/>(sigue en el archivo)"]
+```
 
 Filtros de visualización de Wireshark que más se usan:
 
@@ -534,6 +627,20 @@ Los firewalls comerciales escriben los mismos datos con otro formato (por ejempl
 
 Ejemplo concreto de lectura en conjunto: en 60 segundos aparecen 1.000 líneas BLOCK desde `203.0.113.45` hacia `192.0.2.10`, cada una con un `DPT` distinto del 1 al 1000 y todas con `SYN`: es un escaneo de puertos. Si luego aparece una línea ALLOW de esa IP hacia el puerto 443, ese es el único servicio que encontró abierto, y el siguiente lugar a mirar es el log del servidor web.
 
+```mermaid
+sequenceDiagram
+    participant A as 203.0.113.45
+    participant FW as Firewall
+    participant W as 192.0.2.10
+    loop 1.000 puertos distintos en 60 s
+        A->>FW: SYN a un puerto cerrado
+        Note over FW: UFW BLOCK con SYN
+    end
+    A->>FW: SYN al 443
+    FW->>W: UFW ALLOW, reenviado
+    Note over W: Siguiente paso, el log del servidor web
+```
+
 ```
 Allow/accept → la conexión pasó; muestra lo que realmente ocurrió.
 Deny/drop → se descartó en silencio; el origen no recibe respuesta.
@@ -560,6 +667,15 @@ Hay que activarlo    sí (auditoría)  sí (envío)     sí (exportar)  sí (sen
 La última fila es igual en todas las columnas: ninguna fuente existe por defecto con el detalle y la retención necesarios.
 
 Ejemplo: durante un incidente se descubre que el atacante entró hace 45 días. Si el SIEM retiene 30, la entrada original ya no existe en ningún lado; si además el atacante vació `auth.log` y el journal del equipo, la copia local tampoco. Por eso las guías (NIST SP 800-92) piden enviar los logs fuera del equipo en tiempo casi real, sincronizar relojes por NTP y definir la retención antes de necesitarla.
+
+```mermaid
+flowchart LR
+    E["Entrada del atacante<br/>hace 45 días"] --> S{"¿Retención del SIEM<br/>de 45 días o más?"}
+    S -->|"sí"| OK["Se puede investigar"]
+    S -->|"no, 30 días"| L["Entrada borrada<br/>del SIEM"]
+    L --> LOC{"¿Copia local<br/>en el equipo?"}
+    LOC -->|"auth.log y journal vaciados"| N["Sin evidencia<br/>de la entrada"]
+```
 
 ```
 Centralizar → la copia en el SIEM sobrevive al borrado local.
@@ -732,6 +848,16 @@ Alternativa segura  buscar por hash   Unlisted/Private   plan privado    on-prem
 La fila "Quién lo ve" es la que decide: solo urlvoid y WHOIS reciben algo que ya era público.
 
 Ejemplo: llega un adjunto `Nomina_septiembre.xlsm` a 30 empleados. Lo correcto es calcular su SHA-256 y buscarlo; si no existe, analizarlo en una sandbox privada o en una máquina aislada propia. Subirlo a VirusTotal expondría la nómina de la empresa si el archivo es real, y avisaría al atacante si es malicioso y dirigido.
+
+```mermaid
+flowchart TD
+    M["Muestra: archivo, URL o dominio"] --> H["Calcular SHA-256<br/>o tomar el dominio"]
+    H --> E{"¿Ya existe<br/>un informe?"}
+    E -->|"sí"| R["Usar el informe<br/>sin entregar nada"]
+    E -->|"no"| D{"¿Datos internos<br/>o ataque dirigido?"}
+    D -->|"sí"| P["Sandbox privada, on-premise<br/>o máquina aislada propia"]
+    D -->|"no"| PUB["Servicio público"]
+```
 
 ```
 Buscar antes que subir → hash o dominio primero.
