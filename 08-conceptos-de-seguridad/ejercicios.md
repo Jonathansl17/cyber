@@ -23,6 +23,25 @@ para simular el sitio remoto: la copia "fuera del sitio" será una segunda carpe
 que restic entra por SFTP contra `127.0.0.1` (sin segundo equipo ni VM). Paquetes `restic` y
 el servidor OpenSSH. Unos 30 minutos.
 
+Dónde queda cada copia, todo en un solo equipo:
+
+```mermaid
+flowchart LR
+    subgraph EQ["Tu equipo Linux"]
+        O["~/datos-prueba<br/>(original, copia 1)"]
+        R["restic"]
+        L["~/restic-local<br/>(disco del equipo)"]
+        U["/mnt/usb/restic-usb<br/>(pendrive, otro soporte)"]
+        S["sshd en 127.0.0.1:22"]
+        F["~/restic-offsite<br/>(mismo disco, simula el sitio remoto)"]
+    end
+    O --> R
+    R -->|"paso 2"| L
+    R -->|"paso 3"| U
+    R -->|"paso 4: SFTP por loopback"| S
+    S --> F
+```
+
 Instalación:
 - Debian/Ubuntu: `sudo apt update && sudo apt install restic openssh-server`
 - Arch: `sudo pacman -S restic openssh`
@@ -108,6 +127,19 @@ instalar `openssh-server`). Comprueba que escucha con `ss -tlnp | grep ':22'`.
    La primera conexión SSH a `127.0.0.1` te pedirá aceptar la huella del host (escribe `yes`) y
    la contraseña de tu usuario, salvo que ya tengas una clave SSH cargada.
 
+   ```mermaid
+   sequenceDiagram
+       participant R as restic
+       participant S as sshd (127.0.0.1:22)
+       participant F as ~/restic-offsite
+       R->>S: conexión SSH como TU_USUARIO
+       S-->>R: huella del host (escribes yes)
+       R->>S: contraseña o clave SSH
+       R->>S: abre el subsistema SFTP
+       R->>S: init / backup: bloques ya cifrados
+       S->>F: escribe los archivos del repositorio
+   ```
+
    Con esto recorres el esquema 3-2-1 de punta a punta. Cuenta las copias de los datos: el
    original y el repo local están los dos en el disco del equipo, así que ese disco aporta una
    sola copia útil frente a un fallo (si el disco muere, caen las dos); el USB aporta otra sobre
@@ -156,6 +188,13 @@ Tres repositorios restic con el mismo snapshot, la carpeta restaurada con sus 20
 intactos, y dos números escritos: RPO = tiempo entre el último snapshot y el momento del
 desastre (si solo haces backup una vez al día, tu RPO es de hasta 24 horas); RTO = el valor
 `real` del paso 6.
+
+```mermaid
+flowchart LR
+    B["restic backup<br/>(hora apuntada, paso 2)"] -->|"RPO: datos que se pierden"| D["rm -rf ~/datos-prueba<br/>(desastre, paso 5)"]
+    D -->|"RTO: valor real de time"| RS["restore terminado<br/>(paso 6)"]
+    RS --> C["restic check:<br/>no errors were found"]
+```
 
 ### Comprueba que lo lograste
 
@@ -239,6 +278,17 @@ Necesitas: Python 3 (ya viene en Linux). 20 minutos. No hace falta red ni permis
    control barato lo mejora; transferir (un seguro) si el impacto es alto y raro; evitar si
    puedes dejar de exponer el activo.
 
+   ```mermaid
+   flowchart TD
+       S["Fila del script:<br/>SLE, ALE, valor_control"] --> Q{"¿valor_control > 0?"}
+       Q -->|"sí"| M["Mitigar: comprar el control"]
+       Q -->|"no"| Q2{"¿Impacto alto y raro?"}
+       Q2 -->|"sí"| T["Transferir (seguro)"]
+       Q2 -->|"no"| Q3{"¿Puedes dejar de<br/>exponer el activo?"}
+       Q3 -->|"sí"| E["Evitar"]
+       Q3 -->|"no"| A["Aceptar: el ALE ya es pequeño"]
+   ```
+
 ### Resultado esperado
 
 Una tabla con SLE, ALE y valor del control de tus tres activos, y una decisión por activo
@@ -276,6 +326,23 @@ Las tres zonas y sus IP:
 - DMZ → `10.0.1.1/24` (interfaz `zonadmz`)
 - usuarios → `10.0.10.1/24` (interfaz `zonausuarios`)
 - servidores → `10.0.20.1/24` (interfaz `zonaservidores`)
+
+Las tres zonas dentro del mismo kernel:
+
+```mermaid
+flowchart LR
+    subgraph EQ["Tu equipo Linux (un solo kernel)"]
+        NC["Terminal 3:<br/>nc -s / ping -I<br/>(elige la zona de origen)"]
+        NFT["nftables<br/>table inet zonas<br/>hook input"]
+        DMZ["zonadmz 10.0.1.1<br/>http.server :443"]
+        USR["zonausuarios 10.0.10.1"]
+        SRV["zonaservidores 10.0.20.1<br/>http.server :5432"]
+    end
+    NC --> NFT
+    NFT --> DMZ
+    NFT --> USR
+    NFT --> SRV
+```
 
 Instalación:
 - Debian/Ubuntu: `sudo apt install nftables nmap netcat-openbsd`
@@ -350,6 +417,21 @@ Instalación:
    parque: la DMZ **no** puede llegar al resto de servidores ni a los usuarios, y servidores no
    puede "volver" hacia la DMZ por su cuenta. Eso es frenar el movimiento lateral.
 
+   Recorrido de un paquete por la cadena `interzona`:
+
+   ```mermaid
+   flowchart TD
+       P["Paquete entregado a una IP local"] --> E{"¿established<br/>o related?"}
+       E -->|"sí"| A["accept"]
+       E -->|"no"| F{"¿Origen o destino fuera<br/>de las tres subredes?"}
+       F -->|"sí"| A
+       F -->|"no"| R1{"¿usuarios a DMZ<br/>tcp 443?"}
+       R1 -->|"sí"| A
+       R1 -->|"no"| R2{"¿DMZ a servidores<br/>tcp 5432?"}
+       R2 -->|"sí"| A
+       R2 -->|"no"| D["drop: sin respuesta"]
+   ```
+
 3. Levanta un servicio reconocible en cada zona de destino. Usa una terminal por servicio y
    déjalas abiertas.
 
@@ -391,6 +473,16 @@ Instalación:
 
    Lo permitido imprime `succeeded!`; lo bloqueado da `Connection timed out` tras los 2 segundos
    (el paquete se descartó, no hubo respuesta: igual que un `filtered`).
+
+   Resultado esperado de cada prueba:
+
+   ```mermaid
+   flowchart LR
+       USR["usuarios<br/>10.0.10.1"] -->|"443: succeeded"| DMZ["DMZ<br/>10.0.1.1"]
+       DMZ -->|"5432: succeeded"| SRV["servidores<br/>10.0.20.1"]
+       USR -.->|"5432: timed out"| SRV
+       DMZ -.->|"443: timed out"| USR
+   ```
 
 5. Confirma el bloqueo también con `ping`: la política no permite ICMP entre zonas, así que
    cualquier ping entre zonas debe fallar.
@@ -506,6 +598,14 @@ Un editor de texto. Otra persona para la prueba. 30 minutos.
 3. Cada duda es un defecto del runbook: una ruta que no estaba, una contraseña que no supo
    de dónde sacar, un comando ambiguo. Corrige el documento para cerrar esa duda y vuelve a
    probar con otra persona si puedes.
+
+   ```mermaid
+   flowchart LR
+       W["Escribir o corregir<br/>el runbook"] --> P["Otra persona lo sigue<br/>sin tu ayuda"]
+       P --> Q{"¿Dudó, preguntó<br/>o se detuvo?"}
+       Q -->|"sí: falta un paso<br/>o un requisito"| W
+       Q -->|"no"| OK["Runbook terminado"]
+   ```
 
 ### Resultado esperado
 

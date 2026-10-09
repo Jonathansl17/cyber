@@ -30,6 +30,18 @@ Las tres propiedades tiran en direcciones opuestas. Más cifrado y más pasos de
 
 El reverso de la tríada es DAD: Disclosure (divulgación, rompe C), Alteration (alteración, rompe I) y Destruction/Denial (destrucción o denegación, rompe A). Muchos modelos añaden dos propiedades más: autenticidad (el dato viene de quien dice venir) y no repudio (el autor no puede negar haberlo hecho).
 
+Cada propiedad y el ataque DAD que la rompe:
+
+```mermaid
+flowchart LR
+    D1["Disclosure<br/>filtración, sniffer"] -->|"rompe"| C["Confidentiality<br/>cifrado, control de acceso"]
+    D2["Alteration<br/>factura modificada"] -->|"rompe"| I["Integrity<br/>hash, firma"]
+    D3["Destruction / Denial<br/>DDoS, disco sin réplica"] -->|"rompe"| A["Availability<br/>redundancia, backups"]
+    R["Ransomware"] -->|"cifra los archivos"| I
+    R -->|"deja sin servicio"| A
+    R -.->|"si además exfiltra"| C
+```
+
 Ejemplo: comprobar la integridad de una ISO descargada comparando su hash con el publicado por el proyecto.
 
 ```
@@ -97,6 +109,17 @@ Por su tipo de implementación, un control es técnico (software o hardware), ad
 
 Ejemplo: un empleado abre un adjunto malicioso. Capa 1, el filtro de correo no lo detectó. Capa 2, el EDR del portátil bloquea el script cuando intenta abrir una shell inversa con `bash -i`. Si también hubiera fallado, capa 3: el portátil está en una VLAN de usuarios que no puede hablar con el servidor de base de datos, y capa 4: los datos están cifrados y respaldados fuera de línea. El atacante tendría que vencer cuatro barreras distintas.
 
+```mermaid
+flowchart TD
+    M["Adjunto malicioso"] --> L1{"Capa 1:<br/>filtro de correo"}
+    L1 -->|"no lo detecta"| L2{"Capa 2:<br/>EDR del portátil"}
+    L2 -->|"bloquea bash -i"| S["Ataque detenido"]
+    L2 -.->|"si fallara"| L3{"Capa 3:<br/>VLAN de usuarios"}
+    L3 -->|"no alcanza la base de datos"| S
+    L3 -.->|"si fallara"| L4{"Capa 4:<br/>datos cifrados y respaldados"}
+    L4 --> S2["Datos ilegibles para el atacante<br/>y recuperables desde backup"]
+```
+
 Sumar productos no es hacer defensa en profundidad: si todas las capas confían en lo mismo (por ejemplo, todas asumen que lo que está dentro de la red es legítimo), un solo engaño las atraviesa todas.
 
 ```
@@ -141,6 +164,24 @@ Cómo funciona por dentro (arquitectura de SP 800-207):
 ```
 
 El PEP (punto de aplicación de política) es la puerta: un proxy, un gateway de acceso, un agente. Pregunta al PDP (punto de decisión, formado por el Policy Engine que decide y el Policy Administrator que abre o cierra la sesión). El motor evalúa la política con señales en tiempo real y puede revocar la sesión a mitad si el riesgo cambia.
+
+```mermaid
+sequenceDiagram
+    participant S as Sujeto (usuario + dispositivo)
+    participant PEP as PEP (la puerta)
+    participant PDP as PDP (Policy Engine + Policy Administrator)
+    participant R as Recurso
+    S->>PEP: pide acceso al recurso
+    PEP->>PDP: consulta: ¿se permite?
+    Note over PDP: evalúa señales: IdP, MDM/EDR, threat intel, SIEM
+    PDP-->>PEP: permitir, sesión limitada a este recurso
+    PEP->>R: abre la sesión
+    S->>PEP: usa el recurso
+    PEP->>R: reenvía las peticiones
+    Note over PDP: el riesgo cambia (dispositivo deja de ser conforme)
+    PDP-->>PEP: revocar
+    PEP--xR: corta la sesión
+```
 
 Ejemplo: una ingeniera intenta abrir el panel de facturación a las 3:00 desde un portátil sin el último parche. El motor ve tres señales malas (hora inusual, dispositivo no conforme, recurso fuera de su rol habitual) y responde con denegación o con MFA reforzado. Una petición directa sin identidad válida al recurso recibe:
 
@@ -216,6 +257,17 @@ ALE nuevo = 40 000 × 0,1 = 4 000 $ al año
 Valor del control = 20 000 − 4 000 − 5 000 = 11 000 $ al año  → se compra
 ```
 
+```mermaid
+flowchart LR
+    AV["AV = 100 000 $"] --> SLE["SLE = 40 000 $<br/>por incidente"]
+    EF["EF = 40 %"] --> SLE
+    SLE --> ALE["ALE = 20 000 $/año"]
+    ARO["ARO = 0,5"] --> ALE
+    ALE --> V["Valor del control<br/>20 000 − 4 000 − 5 000<br/>= 11 000 $/año"]
+    N["ALE después = 4 000 $/año<br/>(ARO baja a 0,1)"] --> V
+    CC["Coste del control<br/>5 000 $/año"] --> V
+```
+
 Si el control costara 18 000 dólares al año, el valor sería 20 000 − 4 000 − 18 000 = −2000: protegería, pero costaría más que el daño que evita, y la decisión racional sería otro control o aceptar el riesgo.
 
 Una vez medido el riesgo, hay cuatro respuestas:
@@ -226,6 +278,20 @@ Una vez medido el riesgo, hay cuatro respuestas:
 - Aceptar: asumirlo conscientemente y por escrito, cuando está dentro del apetito de riesgo (cuánto riesgo está dispuesta a tolerar la organización).
 
 El riesgo antes de aplicar controles es el riesgo inherente; el que queda después es el riesgo residual. Nunca llega a cero.
+
+```mermaid
+flowchart LR
+    AM["Amenaza"] --> RI["Riesgo inherente"]
+    VU["Vulnerabilidad"] --> RI
+    IM["Impacto"] --> RI
+    RI --> T{"Respuesta"}
+    T -->|"Mitigar"| RR["Riesgo residual"]
+    T -->|"Transferir"| RR
+    T -->|"Evitar"| RR
+    RR --> Q{"¿Dentro del<br/>apetito de riesgo?"}
+    Q -->|"sí"| AC["Aceptar por escrito"]
+    Q -->|"no"| T
+```
 
 ```
 Amenaza → quién o qué puede causar daño.
@@ -284,6 +350,13 @@ La regla 3-2-1:
 
 La variante moderna 3-2-1-1-0 añade 1 copia offline o inmutable (que el ransomware no puede cifrar porque no está montada o no admite cambios) y 0 errores al verificar la restauración.
 
+```mermaid
+flowchart LR
+    O["Datos originales<br/>(copia 1, disco del equipo)"] --> B1["Backup local o NAS<br/>(copia 2, restauración rápida)"]
+    O --> B2["Backup en nube o cinta<br/>(copia 3, otro soporte, fuera del sitio)"]
+    B2 -.->|"3-2-1-1-0"| B3["+1 copia offline o inmutable<br/>+0 errores al probar la restauración"]
+```
+
 Tipos de backup:
 
 - Completo (full): copia todo cada vez. Restaurar es lo más simple (un solo conjunto) pero ocupa más y tarda más.
@@ -296,6 +369,18 @@ Ejemplo con números: completo el domingo (100 GB) y 5 GB de cambios diarios. Pa
 ```
 Incremental: domingo + lun + mar + mié + jue → 5 conjuntos: el completo de 100 GB + 4 incrementales de 5 GB
 Diferencial: domingo + jueves              → 2 conjuntos: el completo de 100 GB + el diferencial del jueves (~20 GB)
+```
+
+Qué hace falta para restaurar el jueves en cada caso:
+
+```mermaid
+flowchart LR
+    subgraph INC["Incremental"]
+        F1["Completo<br/>domingo 100 GB"] --> L["Lun 5 GB"] --> M["Mar 5 GB"] --> X["Mié 5 GB"] --> J["Jue 5 GB"]
+    end
+    subgraph DIF["Diferencial"]
+        F2["Completo<br/>domingo 100 GB"] --> D["Diferencial del jueves<br/>~20 GB (cambios lun a jue)"]
+    end
 ```
 
 Dos métricas fijan cuánto se puede perder:
@@ -380,6 +465,25 @@ DMZ      -> red interna  resto            DENEGAR
 VLAN 10  -> VLAN 30      cualquiera       DENEGAR (los usuarios no tocan la gestión)
 ```
 
+Las mismas reglas como flujos que el firewall deja pasar (línea continua) o bloquea (punteada):
+
+```mermaid
+flowchart LR
+    INET["Internet"]
+    subgraph DMZ["DMZ"]
+        WEB["web :443"]
+    end
+    subgraph LAN["Red interna"]
+        V10["VLAN 10 usuarios"]
+        V20["VLAN 20 servidores (BD)"]
+        V30["VLAN 30 gestión"]
+    end
+    INET -->|"tcp/443 permitir"| WEB
+    INET -.->|"denegar"| LAN
+    WEB -->|"tcp/5432 permitir"| V20
+    V10 -.->|"denegar"| V30
+```
+
 Tipos de segmentación, de más gruesa a más fina:
 
 - Física: redes y switches separados (air gap en el extremo).
@@ -416,6 +520,16 @@ Analogía: un equipo de fútbol. El blue team es la defensa del partido real; el
 Red team y pentest no son lo mismo. Un pentest (prueba de penetración) busca el mayor número de vulnerabilidades en un alcance acotado, en días, sin necesidad de sigilo. Un red team busca un objetivo con sigilo para medir detección y respuesta, no para listar fallos.
 
 Ejemplo: en un ejercicio purple de una tarde, el red team ejecuta en un laboratorio la técnica T1003.008 (volcado de credenciales leyendo `/etc/shadow`). El SIEM no alerta. El blue team añade una regla de auditd que vigila las lecturas de ese archivo (`-w /etc/shadow -p r -k lectura_shadow`) y la envía al SIEM, el red team repite y esta vez salta la alerta en 30 segundos. Resultado: una técnica más detectada, documentada en la matriz ATT&CK del equipo.
+
+Ciclo de un ejercicio purple:
+
+```mermaid
+flowchart LR
+    R["Red team ejecuta<br/>una técnica (T1003.008)"] --> Q{"¿Saltó alerta<br/>en el SIEM?"}
+    Q -->|"no"| B["Blue team ajusta<br/>o crea la regla"]
+    B -->|"repetir"| R
+    Q -->|"sí"| D["Técnica documentada<br/>como detectada"]
+```
 
 ```
 Blue team → defiende: monitoriza, detecta, responde.
@@ -458,6 +572,12 @@ $ find / -perm -4000 -type f 2>/dev/null
 ```
 
 La regla de sudo que permite `vim` como root equivale a dar root: el editor puede lanzar comandos. La corrección es dar permiso solo al comando exacto que la tarea necesita.
+
+```mermaid
+flowchart LR
+    A["Acceso inicial<br/>(ana, www-data)"] -->|"vertical: sudo vim, SUID,<br/>kernel sin parchear"| R["root / administrador"]
+    A -->|"horizontal: ?id=1001 a ?id=1002"| O["Datos de otro usuario<br/>(mismo nivel de privilegio)"]
+```
 
 Defensas:
 
@@ -568,6 +688,20 @@ Precisión                 91 %                        8 %
 
 Las dos primeras filas son idénticas y la última cambia de 91 % a 8 %: el detector es el mismo, lo que cambió es lo raro que es el ataque. En la realidad los ataques son la segunda columna: de cada 12 alertas, 11 son falsas.
 
+El caso de la segunda columna, evento por evento:
+
+```mermaid
+flowchart TD
+    E["10 000 eventos al día"] --> AT["10 ataques"]
+    E --> LG["9 990 legítimos"]
+    AT -->|"recall 90 %"| TP["9 TP"]
+    AT --> FN["1 FN"]
+    LG -->|"tasa FP 1 %"| FP["~100 FP"]
+    LG --> TN["~9 890 TN"]
+    TP --> AL["~109 alertas<br/>precisión ≈ 8 %"]
+    FP --> AL
+```
+
 Ejemplo cotidiano: una prueba médica con 99 % de acierto para una enfermedad que tiene 1 de cada 10 000 personas da, al hacérsela a toda una ciudad, cien positivos falsos por cada enfermo real.
 
 Límite: no significa que la detección no sirva, sino que hay que medir y ajustar la precisión (correlación de varias señales, listas de exclusión bien hechas, contexto del activo) y no solo comprobar que "salta con el ataque de prueba".
@@ -604,6 +738,14 @@ Rollback:      quitar aislamiento solo tras reimagen aprobada.
 Un buen runbook tiene un disparador claro, pasos atómicos (una acción por paso), un criterio de verificación tras cada paso, puntos de escalado y se revisa después de cada uso. Las fases de respuesta a incidentes en las que se encajan están en [`15-respuesta-a-incidentes-y-forense`](../15-respuesta-a-incidentes-y-forense/).
 
 Ejemplo de jerarquía: el playbook "Phishing" define las fases (triage, contención, erradicación, comunicación) y llama a los runbooks "Bloquear remitente en la pasarela de correo", "Buscar y borrar el correo en todos los buzones" y "Restablecer credenciales del usuario".
+
+```mermaid
+flowchart TD
+    PB["Playbook: Phishing<br/>fases: triage, contención,<br/>erradicación, comunicación"]
+    PB --> R1["Runbook: bloquear remitente<br/>en la pasarela de correo"]
+    PB --> R2["Runbook: buscar y borrar<br/>el correo en todos los buzones"]
+    PB --> R3["Runbook: restablecer<br/>credenciales del usuario"]
+```
 
 ```
 Playbook → estrategia para un tipo de incidente: fases, roles, decisiones.
