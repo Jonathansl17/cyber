@@ -389,12 +389,8 @@ Dos métricas fijan cuánto se puede perder:
 - RTO (Recovery Time Objective): cuánto tiempo puede estar caído el servicio hasta volver a funcionar. Un RTO de 1 hora obliga a poder restaurar en menos de 1 hora.
 - MTD (Maximum Tolerable Downtime): el límite de caída tras el cual el daño al negocio es inaceptable; el RTO debe quedar por debajo.
 
-```
-  último backup          desastre                  servicio restaurado
-       |---------------------|-----------------------------|
-       <------- RPO -------->|<----------- RTO ------------>
-       (datos que se pierden)   (tiempo sin servicio)
-```
+![Línea de tiempo con el incidente en el centro: a la izquierda el RPO y la pérdida real de datos desde el último punto de respaldo, a la derecha el RTO y el periodo real de recuperación](img/rpo-rto-linea-de-tiempo.png)
+*Imagen: [RTO y RPO - Tiempos de recuperación y respaldo en sistemas de computación.png](https://commons.wikimedia.org/wiki/File:RTO_y_RPO_-_Tiempos_de_recuperaci%C3%B3n_y_respaldo_en_sistemas_de_computaci%C3%B3n.png), Gpanter, CC BY-SA 4.0.*
 
 Ejemplo: una tienda en línea con backup cada noche a las 00:00 sufre un fallo a las 18:00. Pierde 18 horas de pedidos; si su RPO era 4 horas, el plan de backups no cumple y hay que pasar a replicación o backups cada hora.
 

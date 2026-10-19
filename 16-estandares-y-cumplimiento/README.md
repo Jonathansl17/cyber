@@ -82,11 +82,8 @@ Los siete pasos, en orden:
 6. Authorize (autorizar): el AO (Authorizing Official, funcionario responsable) revisa el riesgo residual y emite o niega la ATO (Authority to Operate, autorización para operar).
 7. Monitor (monitorear): vigilar de forma continua los controles y los cambios, y reevaluar cuando algo cambia.
 
-```
-Prepare -> Categorize -> Select -> Implement -> Assess -> Authorize -> Monitor
-                ^                                                       |
-                +-------------------- cambios significativos -----------+
-```
+![Ciclo de siete pasos del NIST RMF Rev. 2: Prepare en el centro y Categorize, Select, Implement, Assess, Authorize y Monitor en círculo](img/ciclo-rmf-nist.png)
+*Imagen: [Risk Management Framework RMF Rev. 2.png](https://commons.wikimedia.org/wiki/File:Risk_Management_Framework_RMF_Rev._2.png), Mulenga Charles Tembo, CC BY-SA 4.0.*
 
 Ejemplo: una agencia lanza un portal de citas que guarda nombres y teléfonos. Confidencialidad moderada, integridad moderada, disponibilidad baja: el sistema es "moderado". Se parte de la línea base moderada de 800-53, se implantan los controles, un evaluador encuentra 4 debilidades, se registran en un plan de acción (POA&M) con fechas, el AO acepta el riesgo residual y firma una ATO.
 

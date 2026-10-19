@@ -18,18 +18,8 @@ La **virtualización** es una técnica que permite que una sola computadora fís
 
 Analogía: un edificio de apartamentos. El terreno y los cimientos (el hardware) son uno solo, pero dentro hay diez apartamentos con su propia puerta, su propia cocina y su propia llave. El administrador del edificio (el hypervisor) reparte agua y electricidad y se asegura de que nadie entre al apartamento del vecino.
 
-```
-        +-----------+  +-----------+  +-----------+
-        |   App     |  |   App     |  |   App     |
-        | Guest OS  |  | Guest OS  |  | Guest OS  |
-        |  (VM 1)   |  |  (VM 2)   |  |  (VM 3)   |
-        +-----------+  +-----------+  +-----------+
-        +-------------------------------------------+
-        |               Hypervisor                  |
-        +-------------------------------------------+
-        |     Hardware físico (CPU, RAM, disco)     |
-        +-------------------------------------------+
-```
+![Varias máquinas virtuales, cada una con sus aplicaciones, su sistema operativo y su hardware virtual, sobre un hipervisor que corre sobre el hardware real](img/hipervisor-maquinas-virtuales.svg)
+*Imagen: [Hipervisor - Primer nivel.svg](https://commons.wikimedia.org/wiki/File:Hipervisor_-_Primer_nivel.svg), Arosiqueh, CC BY-SA 4.0.*
 
 ### Hypervisor
 

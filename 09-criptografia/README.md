@@ -642,19 +642,8 @@ Las piezas:
 
 Modos:
 
-```
-Paquete original:      [ IP orig | TCP | datos ]
-
-Modo transporte (ESP): [ IP orig | ESP | TCP | datos | ESP trailer | ICV ]
-                                        \_____ cifrado _____/
-  -> se cifra la carga; la cabecera IP original queda visible.
-  -> uso: host a host (dos servidores que hablan directo).
-
-Modo túnel (ESP):      [ IP nueva | ESP | IP orig | TCP | datos | trailer | ICV ]
-                                         \________ cifrado __________/
-  -> se cifra el paquete entero y se envuelve en uno nuevo.
-  -> uso: gateway a gateway (VPN sitio a sitio); oculta las IPs internas.
-```
+![Estructura de un paquete ESP en modo transporte y en modo túnel, con las partes cifradas y autenticadas](img/ipsec-esp-modo-transporte-y-tunel.svg)
+*Imagen: [Ipsec-esp-tunnel-and-transport.svg](https://commons.wikimedia.org/wiki/File:Ipsec-esp-tunnel-and-transport.svg), Mpk1024, CC BY-SA 4.0.*
 
 Ejemplo: la oficina de San José (10.1.0.0/16) y la de Liberia (10.2.0.0/16) se unen con dos firewalls. Un PC de San José envía a 10.2.0.50; su firewall mete el paquete entero dentro de un ESP en modo túnel dirigido a la IP pública del firewall de Liberia. Quien mira internet solo ve tráfico ESP entre dos IPs públicas, sin saber qué equipos internos hablan.
 

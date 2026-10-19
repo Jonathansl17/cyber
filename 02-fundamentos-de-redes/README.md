@@ -86,21 +86,8 @@ Existe porque OSI se diseñó en comité y llegó tarde: cuando se publicó, TCP
 
 Analogía: OSI es el plano detallado de una casa con cada habitación separada; TCP/IP es la casa construida, donde la cocina, el comedor y la sala resultaron ser un solo ambiente abierto.
 
-```
-        OSI (7)                 TCP/IP (4, RFC 1122)        Protocolos típicos
-  +------------------+     +-----------------------+
-  | 7 Application    |     |                       |
-  | 6 Presentation   | --> |  Application          |    HTTP, DNS, TLS, SSH, SMTP
-  | 5 Session        |     |                       |
-  +------------------+     +-----------------------+
-  | 4 Transport      | --> |  Transport            |    TCP, UDP
-  +------------------+     +-----------------------+
-  | 3 Network        | --> |  Internet             |    IP, ICMP
-  +------------------+     +-----------------------+
-  | 2 Data Link      | --> |  Link                 |    Ethernet, Wi-Fi, ARP
-  | 1 Physical       |     |  (Network Access)     |
-  +------------------+     +-----------------------+
-```
+![Correspondencia entre las 7 capas del modelo OSI y las 4 capas del modelo TCP/IP: Application, Presentation y Session pasan a Application; Transport a Transport; Network a Internet; Data Link y Physical a Network Access](img/modelo-osi-tcpip.png)
+*Imagen: [OSI vs TCP models.svg](https://commons.wikimedia.org/wiki/File:OSI_vs_TCP_models.svg), Jm3, CC0.*
 
 Algunos libros (Cisco, Tanenbaum) usan un modelo híbrido de cinco capas que separa Link en Data Link y Physical. Las tres versiones dicen lo mismo; solo cambia cuánto se agrupa.
 
